@@ -39,6 +39,7 @@ struct HomeView: View {
                         } label: {
                             Image(systemName: "gearshape")
                                 .font(.headline.weight(.semibold))
+                                .symbolRenderingMode(.monochrome)
                                 .foregroundStyle(.primary)
                                 .padding(10)
                                 .background(
@@ -52,6 +53,7 @@ struct HomeView: View {
                         }
                     }
                     .padding(.top, 6)
+                    .tint(.primary)
 
                     // Calendar card: adjust `cardCornerRadius`/`cardShadowRadius`; animations rely on `AppMotion.primary`.
                     GlassCard(cornerRadius: cardCornerRadius, shadowRadius: cardShadowRadius) {
@@ -135,6 +137,7 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(backgroundGradient)
+        .tint(.primary)
         .onAppear {
             withAnimation(AppMotion.primary) {
                 showCalendarCard = true
