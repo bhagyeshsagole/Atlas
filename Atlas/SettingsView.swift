@@ -11,7 +11,6 @@ struct SettingsView: View {
     let onDismiss: () -> Void
     @AppStorage("appearanceMode") private var appearanceMode = "system"
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
-    @State private var activePicker: PickerType?
     @Environment(\.colorScheme) private var colorScheme
 
     /// Builds the full-screen settings page with monochrome appearance controls.
@@ -28,20 +27,37 @@ struct SettingsView: View {
                     // Appearance selector via shared picker sheet.
                     SettingsSectionLabel(text: "APPEARANCE")
                     SettingsGroupCard {
-                        SettingsPickerRow(
+                        SettingsMenuRow(
                             title: "Appearance",
                             value: appearanceLabel,
-                            onTap: { activePicker = .appearance }
+                            options: [
+                                MenuOption(id: "system", title: "System"),
+                                MenuOption(id: "light", title: "Light"),
+                                MenuOption(id: "dark", title: "Dark")
+                            ],
+                            onSelect: { id in
+                                withAnimation(AppMotion.primary) {
+                                    appearanceMode = id
+                                }
+                            }
                         )
                     }
 
                     // Weight units selector via shared picker sheet.
                     SettingsSectionLabel(text: "WEIGHT UNITS")
                     SettingsGroupCard {
-                        SettingsPickerRow(
+                        SettingsMenuRow(
                             title: "Weight Units",
                             value: weightUnitDisplay,
-                            onTap: { activePicker = .weight }
+                            options: [
+                                MenuOption(id: "lb", title: "Pounds (lb)"),
+                                MenuOption(id: "kg", title: "Kilograms (kg)")
+                            ],
+                            onSelect: { id in
+                                withAnimation(AppMotion.primary) {
+                                    weightUnit = id
+                                }
+                            }
                         )
                     }
 
@@ -64,20 +80,6 @@ struct SettingsView: View {
             }
         }
         .tint(.primary)
-        .sheet(item: $activePicker) { picker in
-            PickerSheet(
-                title: picker.title,
-                options: picker.options,
-                selectedID: pickerSelectionID(picker),
-                onSelect: { id in
-                    applySelection(for: picker, id: id)
-                    activePicker = nil
-                },
-                onDismiss: { activePicker = nil }
-            )
-            .presentationDetents([.fraction(0.32)])
-            .presentationDragIndicator(.visible)
-        }
     }
 
     /// Computes the display label for the stored appearance.
@@ -109,29 +111,6 @@ struct SettingsView: View {
         }
     }
 
-    /// Returns the currently selected option id for the active picker.
-    /// Change impact: Altering mapping changes which option shows as checked.
-    private func pickerSelectionID(_ picker: PickerType) -> String {
-        switch picker {
-        case .appearance:
-            return appearanceMode
-        case .weight:
-            return weightUnit
-        }
-    }
-
-    /// Applies the chosen option to the appropriate setting.
-    /// Change impact: Updating stored value changes app appearance or unit globally.
-    private func applySelection(for picker: PickerType, id: String) {
-        withAnimation(AppMotion.primary) {
-            switch picker {
-            case .appearance:
-                appearanceMode = id
-            case .weight:
-                weightUnit = id
-            }
-        }
-    }
 }
 
 struct SettingsHeaderBar: View {
@@ -260,129 +239,44 @@ struct SettingsPickerRow: View {
     }
 }
 
-struct PickerSheet: View {
+struct SettingsMenuRow: View {
     let title: String
-    let options: [PickerOption]
-    let selectedID: String
+    let value: String
+    let options: [MenuOption]
     let onSelect: (String) -> Void
-    let onDismiss: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
 
-    /// Builds a monochrome bottom sheet with selectable options and checkmarks.
-    /// Change impact: Adjusting corner radius or fills alters perceived depth and calmness of the picker.
+    /// Provides a stable row that triggers a consistent dropdown menu without hiding label/value.
+    /// Change impact: Adjusting fonts or padding changes the touch target feel for all dropdowns.
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
+        Menu {
+            ForEach(options) { option in
+                Button(option.title) {
+                    onSelect(option.id)
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
                 Text(title)
-                    .font(.custom("Helvetica Neue", size: 18).weight(.semibold))
+                    .font(.custom("Helvetica Neue", size: 16))
                     .foregroundStyle(.primary)
                 Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.custom("Helvetica Neue", size: 14).weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(8)
-                        .background(
-                            Circle()
-                                .fill(Color.white.opacity(0.08))
-                        )
-                }
+                Text(value)
+                    .font(.custom("Helvetica Neue", size: 15))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.down")
+                    .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-
-            VStack(spacing: 10) {
-                ForEach(options) { option in
-                    Button {
-                        onSelect(option.id)
-                    } label: {
-                        HStack {
-                            Text(option.title)
-                                .font(.custom("Helvetica Neue", size: 16))
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if option.id == selectedID {
-                                Image(systemName: "checkmark")
-                                    .font(.custom("Helvetica Neue", size: 14).weight(.semibold))
-                                    .foregroundStyle(.primary)
-                            }
-                        }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(sheetBackground)
-        )
-        .presentationBackground(.clear)
-        .tint(.primary)
-    }
-
-    /// Resolves the sheet background to align with appearance.
-    /// Change impact: Adjusting this shifts contrast and perceived depth of the picker sheet.
-    private var sheetBackground: Color {
-        switch colorScheme {
-        case .dark:
-            return Color.black.opacity(0.92)
-        default:
-            return Color.white.opacity(0.94)
-        }
+        .buttonStyle(.plain)
     }
 }
 
-struct PickerOption: Identifiable {
+struct MenuOption: Identifiable {
     let id: String
     let title: String
-}
-
-enum PickerType: Identifiable {
-    case appearance
-    case weight
-
-    var id: String {
-        switch self {
-        case .appearance: return "appearance"
-        case .weight: return "weight"
-        }
-    }
-
-    /// Supplies a title for the picker sheet.
-    /// Change impact: Editing text changes how users interpret the selection context.
-    var title: String {
-        switch self {
-        case .appearance: return "Appearance"
-        case .weight: return "Weight Units"
-        }
-    }
-
-    /// Supplies the available options for the picker.
-    /// Change impact: Editing options changes what users can select for appearance or units.
-    var options: [PickerOption] {
-        switch self {
-        case .appearance:
-            return [
-                PickerOption(id: "system", title: "System"),
-                PickerOption(id: "light", title: "Light"),
-                PickerOption(id: "dark", title: "Dark")
-            ]
-        case .weight:
-            return [
-                PickerOption(id: "lb", title: "Pounds (lb)"),
-                PickerOption(id: "kg", title: "Kilograms (kg)")
-            ]
-        }
-    }
 }
 
 #Preview {
