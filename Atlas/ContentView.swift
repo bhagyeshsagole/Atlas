@@ -11,10 +11,10 @@ import SwiftData
 struct ContentView: View {
     @State private var path: [Route] = []
     @AppStorage("isDarkMode") private var isDarkMode = false
+    @State private var showSettings = false
 
     private enum Route: Hashable {
         case workout
-        case settings
     }
 
     /// Builds the root navigation stack for Home and Workout flows.
@@ -24,18 +24,21 @@ struct ContentView: View {
             HomeView(
                 isDarkMode: $isDarkMode,
                 startWorkout: { path.append(.workout) },
-                openSettings: { path.append(.settings) }
+                openSettings: { showSettings = true }
             )
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .workout:
                     WorkoutView()
-                case .settings:
-                    SettingsView(isDarkMode: $isDarkMode)
                 }
             }
         }
         .preferredColorScheme(isDarkMode ? .dark : .light)
+        .fullScreenCover(isPresented: $showSettings) {
+            SettingsView(isDarkMode: $isDarkMode) {
+                showSettings = false
+            }
+        }
     }
 }
 
