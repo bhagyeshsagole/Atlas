@@ -9,7 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @AppStorage("appearanceMode") private var appearanceMode = "light"
     @Environment(\.colorScheme) private var colorScheme
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     private let calendar = Calendar.current
@@ -196,7 +196,7 @@ struct HomeView: View {
     /// Builds the adaptive background gradient for light/dark.
     /// Change impact: Tweaking colors here shifts the overall page mood in both themes.
     private var backgroundGradient: LinearGradient {
-        if isDarkAppearance {
+        if appearanceMode == "dark" {
             return LinearGradient(
                 colors: [
                     Color.black.opacity(0.92),
@@ -246,14 +246,7 @@ struct HomeView: View {
     /// Resolves whether the appearance should be dark based on stored mode and system fallback.
     /// Change impact: Adjusting logic here affects gradients and button fills on Home.
     private var isDarkAppearance: Bool {
-        switch appearanceMode {
-        case "dark":
-            return true
-        case "light":
-            return false
-        default:
-            return colorScheme == .dark
-        }
+        appearanceMode == "dark"
     }
 }
 

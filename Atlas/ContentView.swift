@@ -11,7 +11,7 @@ import SwiftData
 struct ContentView: View {
     @State private var path: [Route] = []
     @State private var showSettings = false
-    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @AppStorage("appearanceMode") private var appearanceMode = "light"
 
     private enum Route: Hashable {
         case workout
@@ -42,12 +42,8 @@ struct ContentView: View {
     /// Change impact: Tweaking mapping changes how the entire UI responds to appearance selection.
     private var resolvedColorScheme: ColorScheme? {
         switch appearanceMode {
-        case "light":
-            return .light
-        case "dark":
-            return .dark
-        default:
-            return nil
+        case "dark": return .dark
+        default: return .light
         }
     }
 }
