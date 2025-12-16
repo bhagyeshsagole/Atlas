@@ -247,12 +247,17 @@ struct SettingsDropdownRow: View {
                         .font(.custom("Helvetica Neue", size: 16))
                         .foregroundStyle(.primary)
                     Spacer()
-                    Text(value)
-                        .font(.custom("Helvetica Neue", size: 15))
-                        .foregroundStyle(.secondary.opacity(isOpen ? 0.85 : 1.0))
-                    Image(systemName: isOpen ? "chevron.up" : "chevron.down")
-                        .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(value)
+                            .font(.custom("Helvetica Neue", size: 15))
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.down")
+                            .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .opacity(isOpen ? 0 : 1)
+                    .allowsHitTesting(!isOpen)
+                    .animation(.easeInOut(duration: 0.15), value: isOpen)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
