@@ -18,6 +18,7 @@ struct HomeView: View {
     private let headerSpacing: CGFloat = 8
 
     let startWorkout: () -> Void
+    let openSettings: () -> Void
 
     @State private var showCalendarCard = false
     @State private var showStartButton = false
@@ -28,27 +29,26 @@ struct HomeView: View {
         ZStack(alignment: .bottom) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Top bar: settings toggle for light/dark appearance.
+                    // Top bar: settings button aligned to the trailing edge.
                     HStack {
+                        Spacer()
                         Button {
-                            withAnimation(AppMotion.primary) {
-                                isDarkMode.toggle()
-                            }
+                            Haptics.playLightTap()
+                            openSettings()
                         } label: {
-                            Image(systemName: isDarkMode ? "moon.stars.fill" : "sun.max.fill")
+                            Image(systemName: "gearshape")
                                 .font(.headline.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 14)
-                                        .fill(.ultraThinMaterial.opacity(isDarkMode ? 0.3 : 0.24))
+                                        .fill(.white.opacity(isDarkMode ? 0.12 : 0.16))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14)
                                         .stroke(.white.opacity(0.2), lineWidth: 1)
                                 )
                         }
-                        Spacer()
                     }
                     .padding(.top, 6)
 
@@ -287,6 +287,6 @@ struct DayCell: View {
 }
 
 #Preview {
-    HomeView(isDarkMode: .constant(false), startWorkout: {})
+    HomeView(isDarkMode: .constant(false), startWorkout: {}, openSettings: {})
         .modelContainer(for: Workout.self, inMemory: true)
 }
