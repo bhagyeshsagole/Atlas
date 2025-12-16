@@ -32,6 +32,7 @@ struct SettingsView: View {
                         SettingsDropdownRow(
                             title: "Appearance",
                             value: appearanceLabel,
+                            selectedID: appearanceMode,
                             isOpen: activeDropdown == .appearance,
                             options: [
                                 MenuOption(id: "light", title: "Light"),
@@ -59,6 +60,7 @@ struct SettingsView: View {
                         SettingsDropdownRow(
                             title: "Weight Units",
                             value: weightUnitDisplay,
+                            selectedID: weightUnit,
                             isOpen: activeDropdown == .weight,
                             options: [
                                 MenuOption(id: "lb", title: "Pounds (lb)"),
@@ -228,10 +230,12 @@ struct SettingsRow: View {
 struct SettingsDropdownRow: View {
     let title: String
     let value: String
+    let selectedID: String
     let isOpen: Bool
     let options: [MenuOption]
     let onTap: () -> Void
     let onSelect: (String) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Provides a stable row that triggers a trailing dropdown without hiding label/value.
     /// Change impact: Adjusting fonts or padding changes the touch target feel for all dropdowns.
@@ -245,7 +249,7 @@ struct SettingsDropdownRow: View {
                     Spacer()
                     Text(value)
                         .font(.custom("Helvetica Neue", size: 15))
-                        .foregroundStyle(.secondary.opacity(isOpen ? 0.8 : 1.0))
+                        .foregroundStyle(.secondary.opacity(isOpen ? 0.85 : 1.0))
                     Image(systemName: isOpen ? "chevron.up" : "chevron.down")
                         .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -256,9 +260,12 @@ struct SettingsDropdownRow: View {
             .buttonStyle(.plain)
 
             if isOpen {
-                DropdownMenuView(options: options, onSelect: onSelect)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                    .animation(AppMotion.primary, value: isOpen)
+                DropdownMenuView(options: options, selectedID: selectedID, onSelect: onSelect)
+                    .frame(maxWidth: 170, alignment: .trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.trailing, 4)
+                    .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+                    .animation(reduceMotion ? .easeOut(duration: 0.15) : AppMotion.primary, value: isOpen)
             }
         }
     }
@@ -266,26 +273,35 @@ struct SettingsDropdownRow: View {
 
 struct DropdownMenuView: View {
     let options: [MenuOption]
+    let selectedID: String
     let onSelect: (String) -> Void
 
     /// Renders the compact trailing dropdown menu with glass styling.
     /// Change impact: Adjusting corner radius or opacity changes perceived depth for all dropdowns.
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(options) { option in
                 Button {
                     onSelect(option.id)
                 } label: {
-                    Text(option.title)
-                        .font(.custom("Helvetica Neue", size: 15))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.1))
-                        )
+                    HStack {
+                        Text(option.title)
+                            .font(.custom("Helvetica Neue", size: 15))
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if option.id == selectedID {
+                            Image(systemName: "checkmark")
+                                .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.1))
+                    )
                 }
                 .buttonStyle(.plain)
             }
