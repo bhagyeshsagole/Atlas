@@ -9,7 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @Binding var isDarkMode: Bool
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @Environment(\.colorScheme) private var colorScheme
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     private let calendar = Calendar.current
     private let cardCornerRadius: CGFloat = 26
@@ -42,7 +43,7 @@ struct HomeView: View {
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 14)
-                                        .fill(.white.opacity(isDarkMode ? 0.12 : 0.16))
+                                        .fill(.white.opacity(isDarkAppearance ? 0.12 : 0.16))
                                 )
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14)
@@ -195,7 +196,7 @@ struct HomeView: View {
     /// Builds the adaptive background gradient for light/dark.
     /// Change impact: Tweaking colors here shifts the overall page mood in both themes.
     private var backgroundGradient: LinearGradient {
-        if isDarkMode {
+        if isDarkAppearance {
             return LinearGradient(
                 colors: [
                     Color.black.opacity(0.92),
@@ -240,6 +241,19 @@ struct HomeView: View {
     private func isToday(_ date: Date?) -> Bool {
         guard let date else { return false }
         return calendar.isDateInToday(date)
+    }
+
+    /// Resolves whether the appearance should be dark based on stored mode and system fallback.
+    /// Change impact: Adjusting logic here affects gradients and button fills on Home.
+    private var isDarkAppearance: Bool {
+        switch appearanceMode {
+        case "dark":
+            return true
+        case "light":
+            return false
+        default:
+            return colorScheme == .dark
+        }
     }
 }
 
@@ -287,6 +301,9 @@ struct DayCell: View {
 }
 
 #Preview {
-    HomeView(isDarkMode: .constant(false), startWorkout: {}, openSettings: {})
-        .modelContainer(for: Workout.self, inMemory: true)
+    HomeView(
+        startWorkout: {},
+        openSettings: {}
+    )
+    .modelContainer(for: Workout.self, inMemory: true)
 }

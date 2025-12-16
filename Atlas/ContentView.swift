@@ -10,8 +10,8 @@ import SwiftData
 
 struct ContentView: View {
     @State private var path: [Route] = []
-    @AppStorage("isDarkMode") private var isDarkMode = false
     @State private var showSettings = false
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
 
     private enum Route: Hashable {
         case workout
@@ -22,7 +22,6 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $path) {
             HomeView(
-                isDarkMode: $isDarkMode,
                 startWorkout: { path.append(.workout) },
                 openSettings: { showSettings = true }
             )
@@ -33,11 +32,22 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(isDarkMode ? .dark : .light)
+        .preferredColorScheme(resolvedColorScheme)
         .fullScreenCover(isPresented: $showSettings) {
-            SettingsView(isDarkMode: $isDarkMode) {
-                showSettings = false
-            }
+            SettingsView(onDismiss: { showSettings = false })
+        }
+    }
+
+    /// Resolves the app-wide color scheme based on stored appearance.
+    /// Change impact: Tweaking mapping changes how the entire UI responds to appearance selection.
+    private var resolvedColorScheme: ColorScheme? {
+        switch appearanceMode {
+        case "light":
+            return .light
+        case "dark":
+            return .dark
+        default:
+            return nil
         }
     }
 }
