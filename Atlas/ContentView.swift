@@ -10,6 +10,7 @@ import SwiftData
 
 struct ContentView: View {
     @State private var path: [Route] = []
+    @AppStorage("isDarkMode") private var isDarkMode = false
 
     private enum Route: Hashable {
         case workout
@@ -19,7 +20,7 @@ struct ContentView: View {
     /// Change impact: Altering destinations or path management changes how users transition between screens.
     var body: some View {
         NavigationStack(path: $path) {
-            HomeView {
+            HomeView(isDarkMode: $isDarkMode) {
                 path.append(.workout)
             }
             .navigationDestination(for: Route.self) { route in
@@ -29,6 +30,7 @@ struct ContentView: View {
                 }
             }
         }
+        .preferredColorScheme(isDarkMode ? .dark : .light)
     }
 }
 

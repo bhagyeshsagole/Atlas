@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
+    @Binding var isDarkMode: Bool
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     private let calendar = Calendar.current
     private let cardCornerRadius: CGFloat = 26
@@ -21,66 +22,97 @@ struct HomeView: View {
     @State private var showCalendarCard = false
     @State private var showStartButton = false
 
-    /// Builds the Home screen with the glass calendar and Start Workout pill.
+    /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
     /// Change impact: Tweaking layout constants or reveal state timing shifts the feel of the entrance and spacing.
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            // Calendar card: adjust `cardCornerRadius`/`cardShadowRadius`; animations rely on `AppMotion.primary`.
-            GlassCard(cornerRadius: cardCornerRadius, shadowRadius: cardShadowRadius) {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Month header row: `headerSpacing` controls spacing between labels and badges.
-                    HStack(spacing: headerSpacing) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(currentMonthTitle)
-                                .font(.title2.weight(.semibold))
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Top bar: settings toggle for light/dark appearance.
+                    HStack {
+                        Button {
+                            withAnimation(AppMotion.primary) {
+                                isDarkMode.toggle()
+                            }
+                        } label: {
+                            Image(systemName: isDarkMode ? "moon.stars.fill" : "sun.max.fill")
+                                .font(.headline.weight(.semibold))
                                 .foregroundStyle(.primary)
-                            Text("Today's focus")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .padding(10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(.ultraThinMaterial.opacity(isDarkMode ? 0.3 : 0.24))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                                )
                         }
                         Spacer()
-                        Text(todayString)
-                            .font(.subheadline.weight(.medium))
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(.white.opacity(0.12))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(.white.opacity(0.2), lineWidth: 1)
-                            )
                     }
+                    .padding(.top, 6)
 
-                    // Weekday labels row.
-                    HStack {
-                        ForEach(shortWeekdays, id: \.self) { symbol in
-                            Text(symbol)
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity)
+                    // Calendar card: adjust `cardCornerRadius`/`cardShadowRadius`; animations rely on `AppMotion.primary`.
+                    GlassCard(cornerRadius: cardCornerRadius, shadowRadius: cardShadowRadius) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Month header row: `headerSpacing` controls spacing between labels and badges.
+                            HStack(spacing: headerSpacing) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(currentMonthTitle)
+                                        .font(.title2.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                }
+                                Spacer()
+                                Text(todayString)
+                                    .font(.subheadline.weight(.medium))
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(.white.opacity(0.12))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(.white.opacity(0.2), lineWidth: 1)
+                                    )
+                            }
+
+                            // Weekday labels row.
+                            HStack {
+                                ForEach(shortWeekdays, id: \.self) { symbol in
+                                    Text(symbol)
+                                        .font(.footnote.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+
+                            // Month grid: adjust `gridSpacing` to change vertical/horizontal padding between days.
+                            LazyVGrid(columns: gridColumns, spacing: gridSpacing) {
+                                ForEach(Array(monthGrid.enumerated()), id: \.offset) { _, date in
+                                    DayCell(
+                                        date: date,
+                                        calendar: calendar,
+                                        isToday: isToday(date),
+                                        hasWorkout: hasWorkout(on: date)
+                                    )
+                                }
+                            }
                         }
                     }
+                    .opacity(showCalendarCard ? 1 : 0)
+                    .offset(y: showCalendarCard ? 0 : 8)
+                    .padding(.top, 12)
+                    .animation(AppMotion.primary, value: showCalendarCard)
 
-                    // Month grid: adjust `gridSpacing` to change vertical/horizontal padding between days.
-                    LazyVGrid(columns: gridColumns, spacing: gridSpacing) {
-                        ForEach(Array(monthGrid.enumerated()), id: \.offset) { _, date in
-                            DayCell(
-                                date: date,
-                                calendar: calendar,
-                                isToday: isToday(date),
-                                hasWorkout: hasWorkout(on: date)
-                            )
-                        }
-                    }
+                    Spacer(minLength: 120)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 160)
             }
-            .opacity(showCalendarCard ? 1 : 0)
-            .offset(y: showCalendarCard ? 0 : 8)
-            .animation(AppMotion.primary, value: showCalendarCard)
 
-            // Start Workout pill: press feel driven by `PressableGlassButtonStyle` constants.
+            // Start Workout pill pinned near bottom: press feel driven by `PressableGlassButtonStyle` constants.
             Button {
                 Haptics.playLightTap()
                 startWorkout()
@@ -94,23 +126,14 @@ struct HomeView: View {
                 .foregroundStyle(.primary)
             }
             .buttonStyle(PressableGlassButtonStyle())
+            .padding(.horizontal, 20)
+            .padding(.bottom, 22)
             .opacity(showStartButton ? 1 : 0)
             .offset(y: showStartButton ? 0 : 10)
             .animation(AppMotion.primary.delay(0.06), value: showStartButton)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.96),
-                    Color.white.opacity(0.9)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(backgroundGradient)
         .onAppear {
             withAnimation(AppMotion.primary) {
                 showCalendarCard = true
@@ -167,6 +190,30 @@ struct HomeView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE, MMM d"
         return formatter.string(from: Date())
+    }
+
+    /// Builds the adaptive background gradient for light/dark.
+    /// Change impact: Tweaking colors here shifts the overall page mood in both themes.
+    private var backgroundGradient: LinearGradient {
+        if isDarkMode {
+            return LinearGradient(
+                colors: [
+                    Color.black.opacity(0.92),
+                    Color.black.opacity(0.86)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        } else {
+            return LinearGradient(
+                colors: [
+                    Color.white.opacity(0.96),
+                    Color.white.opacity(0.9)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
     }
 
     /// Builds weekday symbols aligned to the system calendar.
@@ -240,6 +287,6 @@ struct DayCell: View {
 }
 
 #Preview {
-    HomeView(startWorkout: {})
+    HomeView(isDarkMode: .constant(false), startWorkout: {})
         .modelContainer(for: Workout.self, inMemory: true)
 }
