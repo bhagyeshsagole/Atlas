@@ -17,6 +17,11 @@ struct RoutineParseWorkout: Codable {
     let repsText: String
 }
 
+struct WorkoutListResponse: Codable {
+    let workoutList: String
+    let notes: String?
+}
+
 struct OpenAIError: Error {
     let statusCode: Int?
     let message: String
@@ -56,27 +61,45 @@ struct OpenAIChatClient {
 
     /// Generates a workout list string via OpenAI with the configured prompt and temperature.
     /// Change impact: Modify to tune creativity, prompt wording, or formatting expectations.
-    static func generateWorkoutListString(requestText: String, routineTitleHint: String?, correctiveNote: String? = nil) async throws -> String {
-        var userContent = requestText
-        if let routineTitleHint, !routineTitleHint.isEmpty {
-            userContent += "\nTitle: \(routineTitleHint)"
-        }
+    static func generateWorkoutListString(
+        requestText: String,
+        routineTitleHint: String?,
+        constraints: RoutineAIService.RoutineConstraints,
+        correctiveNote: String? = nil,
+        forceExactFormatReminder: Bool = false
+    ) async throws -> WorkoutListResponse {
+        var userContent = "Request: \(requestText)"
+        userContent += "\nRoutineTitleHint: \(routineTitleHint ?? "")"
+        userContent += "\nConstraints: atHome=\(constraints.atHome), noGym=\(constraints.noGym), noDumbbells=\(constraints.noDumbbells), noMachines=\(constraints.noMachines), bodyweightOnly=\(constraints.bodyweightOnly), preferredSplit=\(constraints.preferredSplit?.rawValue ?? "nil")"
         if let correctiveNote {
             userContent += "\nCorrection: \(correctiveNote)"
+        }
+        if forceExactFormatReminder {
+            userContent += "\nReturn JSON with workoutList in EXACT format. No bullets. No commas."
         }
 
         let messages: [ChatMessage] = [
             .init(role: "developer", content: generatorPrompt),
             .init(role: "user", content: userContent)
         ]
-        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: nil)
+        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
         let (data, _) = try await perform(request: request)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
         guard let content = chatResponse.choices.first?.message.content else {
             throw OpenAIError(statusCode: nil, message: "No content returned from OpenAI.")
         }
-        return stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let jsonData = cleaned.data(using: .utf8) else {
+            throw OpenAIError(statusCode: nil, message: "Unable to encode model response.")
+        }
+
+        do {
+            return try JSONDecoder().decode(WorkoutListResponse.self, from: jsonData)
+        } catch {
+            throw OpenAIError(statusCode: nil, message: "Failed to decode workout list JSON: \(error.localizedDescription)")
+        }
     }
 
     /// VISUAL TWEAK: Adjust fence stripping here to tolerate different model formatting.
@@ -118,32 +141,29 @@ User text will be provided in the user message.
 
     private static let generatorPrompt = """
 You are a strength training routine generator.
-Return ONLY a single-line workout list string, no bullets, no numbering, no quotes, no JSON, no explanations.
+You MUST output valid JSON only (no markdown, no extra text).
 
-Format rules:
-- Use exactly: "<Exercise Name> x <sets> <reps> and <Exercise Name> x <sets> <reps> and ..."
-- Sets are integers like 3 or 4 (default 3–4 sets).
-- Reps are science-based ranges: compounds 6-10 or 6-12, accessories 8-12 or 10-15, isolations/rear delt/lateral raise 12-20.
-- Use Title Case exercise names.
-- Do NOT include warmups or extra wording.
+Constraints rules:
+- If `bodyweightOnly=true`: use ONLY bodyweight exercises (no equipment at all).
+- If `noGym=true` or `atHome=true`: do NOT use gym machines/cables.
+- If `noDumbbells=true`: do NOT use dumbbells. (Bodyweight, bands, pull-up bar, backpack, chair are allowed unless bodyweightOnly=true.)
+- Choose exercises appropriate to the requested day (push/pull/legs).
+- 6–8 exercises.
 
-Programming rules (complete routine, no templates):
-- Prioritize big compounds first, then accessories, then isolations.
-- Balance movement patterns: Back needs vertical pull + horizontal row + rear delt (optional lower trap/lat iso); Chest needs horizontal press + incline press + fly/pec iso; Shoulders need overhead press + lateral raise + rear delt; Legs need squat pattern + hinge pattern + quad isolation + hamstring isolation + calves (optional core).
-- Minimums by request:
-  - Shoulders/delts: >= 3 shoulder movements (overhead press + lateral raise + rear delt pattern).
-  - Chest/pecs: >= 3 chest movements (horizontal press + incline press + fly/pec isolation).
-  - Back/lats: >= 4 back movements (vertical pull + horizontal row + rear delt + optional lower trap/lat iso).
-  - Legs/quads/hams/glutes: >= 5 leg movements (squat + hinge + quad iso + hamstring iso + calves/core finisher).
-  - Biceps-only: >= 3 biceps movements.
-  - Triceps-only: >= 3 triceps movements.
-  - Pull day (back + biceps + rear delts): 6–8 total, Back >= 4, Biceps >= 2, include rear delt.
-  - Push day (chest + shoulders + triceps): 6–8 total, Chest >= 3, Shoulders >= 2, Triceps 1–2.
-  - Full body: 7–10 total covering squat + hinge + push + pull + core.
-  - Arms day (if unspecified): 6–8 total with a balance of biceps and triceps.
-- Always output a complete routine that satisfies the matching minimums.
+Output schema (EXACT):
+{
+  "workoutList": "<Exercise Name> x <sets> <reps> and <Exercise Name> x <sets> <reps> and ...",
+  "notes": "short string, optional"
+}
 
-User text will be provided in the user message.
+Formatting rules for workoutList:
+- Single line string.
+- Use exactly “ x ” between exercise and sets (example: “Push-Up x 3 8-12”).
+- Use “ and ” between exercises (not commas/bullets).
+- Sets are integers (3 or 4).
+- Reps are ranges like “8-12”, “10-12”, “12-15”.
+- Title Case exercise names.
+- No warmups, no explanations.
 """
 }
 

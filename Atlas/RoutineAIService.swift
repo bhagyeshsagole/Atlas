@@ -27,6 +27,19 @@ struct RoutineAIService {
         case openAIRequestFailed(status: Int?, message: String)
     }
 
+    struct RoutineConstraints {
+        enum PreferredSplit: String {
+            case push, pull, legs
+        }
+
+        var atHome: Bool
+        var noGym: Bool
+        var noDumbbells: Bool
+        var noMachines: Bool
+        var bodyweightOnly: Bool
+        var preferredSplit: PreferredSplit?
+    }
+
     /// Parses raw workout input using OpenAI for requests or local heuristics for explicit lists.
     /// Change impact: Adjust to tweak when the app relies on AI versus deterministic parsing.
     static func parseWorkouts(from rawText: String, routineTitleHint: String? = nil) async throws -> [ParsedWorkout] {
@@ -46,9 +59,9 @@ struct RoutineAIService {
                 #if DEBUG
                 print("[AI] Generated workout list string: \(generatedList)")
                 #endif
-                let workouts = fallbackParse(rawText: generatedList)
+                let workouts = fallbackParse(rawText: generatedList, allowFallbackPlaceholder: false)
                 guard !workouts.isEmpty else {
-                    throw RoutineAIError.openAIRequestFailed(status: nil, message: "Empty OpenAI response.")
+                    throw RoutineAIError.openAIRequestFailed(status: nil, message: "AI returned an invalid format. Try rephrasing or specify equipment limits.")
                 }
                 logParsed(workouts)
                 return workouts
@@ -68,7 +81,7 @@ struct RoutineAIService {
     }
 
     /// VISUAL TWEAK: Change splitting/regex rules here to reshape fallback parsing when AI is unavailable.
-    private static func fallbackParse(rawText: String) -> [ParsedWorkout] {
+    private static func fallbackParse(rawText: String, allowFallbackPlaceholder: Bool = true) -> [ParsedWorkout] {
         let separators = CharacterSet(charactersIn: ",;\n")
         let normalized = rawText
             .replacingOccurrences(of: "(?i)\\band\\b", with: "|", options: .regularExpression)
@@ -102,7 +115,7 @@ struct RoutineAIService {
             )
         }
 
-        if workouts.isEmpty {
+        if workouts.isEmpty && allowFallbackPlaceholder {
             workouts = [
                 ParsedWorkout(
                     name: titleCased(rawText),
@@ -148,10 +161,13 @@ struct RoutineAIService {
             throw RoutineAIError.missingAPIKey
         }
 
-        let focus = detectFocus(in: request)
+        let constraints = extractConstraints(from: request)
+        let focus = detectFocus(in: request, preferredSplit: constraints.preferredSplit)
         let ruleSummary = minimumRuleSummary(for: focus)
         var attempt = 0
         var lastError: String?
+        var requireExactFormatReminder = false
+        var lastFailureWasFormat = false
 
         while attempt < 2 {
             do {
@@ -159,10 +175,23 @@ struct RoutineAIService {
                 print("[AI] Using OpenAI model: \(OpenAIConfig.model)")
                 #endif
                 let correctiveNote = lastError.map { "Your last output did not meet the minimums. Regenerate meeting: \($0)" }
-                let generated = try await OpenAIChatClient.generateWorkoutListString(requestText: request, routineTitleHint: routineTitleHint, correctiveNote: correctiveNote)
-                let exercises = parseExercises(from: generated)
-                if validate(exercises: exercises, for: focus) {
-                    return generated
+                let response = try await OpenAIChatClient.generateWorkoutListString(
+                    requestText: request,
+                    routineTitleHint: routineTitleHint,
+                    constraints: constraints,
+                    correctiveNote: correctiveNote,
+                    forceExactFormatReminder: requireExactFormatReminder
+                )
+                let normalizedList = normalizeWorkoutList(response.workoutList)
+                let exercises = parseExercises(from: normalizedList)
+                if !exercises.isEmpty && validate(exercises: exercises, for: focus) {
+                    return normalizedList
+                }
+
+                lastFailureWasFormat = exercises.isEmpty
+                if exercises.isEmpty {
+                    lastError = "Return JSON with workoutList in EXACT format. No bullets. No commas."
+                    requireExactFormatReminder = true
                 } else {
                     lastError = ruleSummary
                 }
@@ -174,13 +203,53 @@ struct RoutineAIService {
             attempt += 1
         }
 
-        throw RoutineAIError.openAIRequestFailed(status: nil, message: "AI output didn’t meet routine requirements. Try again.")
+        if lastFailureWasFormat {
+            throw RoutineAIError.openAIRequestFailed(status: nil, message: "AI returned an invalid format. Try rephrasing or specify equipment limits.")
+        } else {
+            throw RoutineAIError.openAIRequestFailed(status: nil, message: "AI output didn’t meet routine requirements. Try again.")
+        }
     }
 
-    private static func detectFocus(in request: String) -> Focus {
+    /// VISUAL TWEAK: Add/remove keywords in `extractConstraints` to match how you naturally type.
+    static func extractConstraints(from text: String) -> RoutineConstraints {
+        let lower = text.lowercased()
+        func containsAny(_ keywords: [String]) -> Bool {
+            keywords.contains { lower.contains($0) }
+        }
+
+        let atHome = containsAny(["home", "at home", "home workout", "home-based", "home based", "home gym"])
+        let noGym = containsAny(["no gym", "without gym"])
+        let noDumbbells = containsAny(["no dumbbell", "no dumbbells"])
+        let noMachines = containsAny(["no machine", "no machines", "no cables", "no cable"])
+        let bodyweightOnly = containsAny(["no equipment", "bodyweight only", "body weight only"])
+
+        var preferredSplit: RoutineConstraints.PreferredSplit?
+        if containsAny(["push"]) { preferredSplit = .push }
+        else if containsAny(["pull"]) { preferredSplit = .pull }
+        else if containsAny(["leg", "legs"]) { preferredSplit = .legs }
+
+        return RoutineConstraints(
+            atHome: atHome,
+            noGym: noGym,
+            noDumbbells: noDumbbells,
+            noMachines: noMachines,
+            bodyweightOnly: bodyweightOnly,
+            preferredSplit: preferredSplit
+        )
+    }
+
+    private static func detectFocus(in request: String, preferredSplit: RoutineConstraints.PreferredSplit? = nil) -> Focus {
         let text = request.lowercased()
         func containsAny(_ keywords: [String]) -> Bool {
             keywords.contains { text.contains($0) }
+        }
+
+        if let preferredSplit {
+            switch preferredSplit {
+            case .push: return .push
+            case .pull: return .pull
+            case .legs: return .legs
+            }
         }
 
         if containsAny(["pull"]) { return .pull }
@@ -221,6 +290,28 @@ struct RoutineAIService {
             .components(separatedBy: " and ")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    private static func normalizeWorkoutList(_ text: String) -> String {
+        var normalized = text.replacingOccurrences(of: "&", with: "and")
+
+        let separators = CharacterSet(charactersIn: ",;\n")
+        normalized = normalized
+            .components(separatedBy: separators)
+            .joined(separator: " and ")
+
+        normalized = normalized.replacingOccurrences(of: #"(\d+)\s*x\s*(\d+)"#, with: "$1 x $2", options: .regularExpression)
+        normalized = normalized.replacingOccurrences(of: #"x\s*(\d+)"#, with: " x $1 ", options: .regularExpression)
+        normalized = normalized.replacingOccurrences(of: #"(\d+)x"#, with: "$1 x ", options: .regularExpression)
+
+        while normalized.contains("  ") {
+            normalized = normalized.replacingOccurrences(of: "  ", with: " ")
+        }
+        while normalized.contains(" and  and ") {
+            normalized = normalized.replacingOccurrences(of: " and  and ", with: " and ")
+        }
+
+        return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func validate(exercises: [String], for focus: Focus) -> Bool {

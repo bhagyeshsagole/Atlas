@@ -6,17 +6,16 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct RoutineListView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var routineStore: RoutineStore
     @State private var routineToEdit: Routine?
-    @State private var routineToDelete: Routine?
+    @State private var routineMenuTarget: Routine?
 
     let onAddRoutine: () -> Void
-
-    private let plusButtonSize: CGFloat = 36 // VISUAL TWEAK: Change `plusButtonSize` to adjust the tap target without changing style.
-    private let plusIconSize: CGFloat = 16 // VISUAL TWEAK: Change `plusIconSize` to make the + feel lighter/heavier.
 
     var body: some View {
         ScrollView {
@@ -45,17 +44,9 @@ struct RoutineListView: View {
                                     }
                                 }
                             }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) { // VISUAL TWEAK: Set `allowsFullSwipe` true/false to control “Mail-like” full swipe.
-                            Button("Edit") {
-                                routineToEdit = routine
-                            }
-                            .tint(.gray)
-
-                            Button(role: .destructive) {
-                                routineToDelete = routine
-                            } label: {
-                                Text("Delete")
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                onRoutineTap(routine)
                             }
                         }
                     }
@@ -69,43 +60,51 @@ struct RoutineListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: onAddRoutine) {
-                    Image(systemName: "plus")
-                        .symbolRenderingMode(.monochrome)
-                        .font(.system(size: plusIconSize, weight: .semibold))
-                        .frame(width: plusButtonSize, height: plusButtonSize, alignment: .center)
-                        .padding(2)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
-                                .fill(.white.opacity(colorScheme == .dark ? AppStyle.headerButtonFillOpacityDark : AppStyle.headerButtonFillOpacityLight))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
-                                .stroke(.white.opacity(AppStyle.headerButtonStrokeOpacity), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .tint(.primary)
+                AddButton(action: onAddRoutine)
             }
         }
         .tint(.primary)
-        .confirmationDialog("Delete routine?", isPresented: Binding(get: { routineToDelete != nil }, set: { isPresented in
-            if !isPresented { routineToDelete = nil }
-        }), titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                if let routineToDelete {
-                    routineStore.deleteRoutine(id: routineToDelete.id)
-                    self.routineToDelete = nil
+        .confirmationDialog("Routine options", isPresented: Binding(get: { routineMenuTarget != nil }, set: { isPresented in
+            if !isPresented { routineMenuTarget = nil }
+        }), titleVisibility: .visible) { // VISUAL TWEAK: Change pop-up width/padding to make it tighter/looser.
+            if let routine = routineMenuTarget {
+                Button("Edit") {
+                    #if DEBUG
+                    print("[ROUTINE] Edit selected: \(routine.name)")
+                    #endif
+                    routineToEdit = routine
+                    routineMenuTarget = nil
+                }
+
+                Button("Delete", role: .destructive) {
+                    #if DEBUG
+                    print("[ROUTINE] Delete selected: \(routine.name)")
+                    #endif
+                    routineStore.deleteRoutine(id: routine.id)
+                    #if DEBUG
+                    print("[ROUTINE] Total routines now: \(routineStore.routines.count)")
+                    #endif
+                    routineMenuTarget = nil
                 }
             }
             Button("Cancel", role: .cancel) {
-                routineToDelete = nil
+                routineMenuTarget = nil
             }
         }
         .navigationDestination(item: $routineToEdit) { routine in
             EditRoutineView(routine: routine) { updated in
                 routineStore.updateRoutine(updated)
+                #if DEBUG
+                print("[ROUTINE] Total routines now: \(routineStore.routines.count)")
+                #endif
             }
         }
+    }
+
+    private func onRoutineTap(_ routine: Routine) {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred() // VISUAL TWEAK: Change haptic type in `onRoutineTap()` to adjust feedback.
+        #endif
+        routineMenuTarget = routine
     }
 }

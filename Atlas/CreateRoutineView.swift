@@ -79,6 +79,7 @@ struct CreateRoutineView: View {
         guard !isParsing else { return }
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Routine" : title.trimmingCharacters(in: .whitespacesAndNewlines)
         let input = rawWorkouts.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isRequestMode = RoutineAIService.isLikelyWorkoutRequest(input)
         isParsing = true
         Task {
             do {
@@ -86,7 +87,11 @@ struct CreateRoutineView: View {
                 await MainActor.run {
                     isParsing = false
                     guard !workouts.isEmpty else {
-                        alertMessage = "No workouts found. Please describe at least one exercise."
+                        if isRequestMode {
+                            alertMessage = "AI returned an invalid format. Try rephrasing or specify equipment limits."
+                        } else {
+                            alertMessage = "No workouts found. Please describe at least one exercise."
+                        }
                         return
                     }
                     onGenerate(name, workouts)
@@ -99,9 +104,9 @@ struct CreateRoutineView: View {
                         alertMessage = "Missing API key. Add it in LocalSecrets.openAIAPIKey."
                     case .openAIRequestFailed(let status, let message):
                         if let status {
-                            alertMessage = "OpenAI error (\(status)). Check key/quota/network. \(message)"
+                            alertMessage = "OpenAI error (\(status)). \(message)"
                         } else {
-                            alertMessage = "OpenAI error. Check key/quota/network. \(message)"
+                            alertMessage = message
                         }
                     }
                 }
