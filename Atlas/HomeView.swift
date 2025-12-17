@@ -20,7 +20,7 @@ struct HomeView: View {
     @State private var showStartButton = false
 
     /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
-    /// Change impact: Tweaking layout constants or reveal state timing shifts the feel of the entrance and spacing.
+    /// Change impact: Tweaking layout constants or reveal state timing shifts the feel of the entrance and spacingg.
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
