@@ -17,6 +17,7 @@ struct HomeView: View {
     private let cardShadowRadius: CGFloat = 18
     private let gridSpacing: CGFloat = 10
     private let headerSpacing: CGFloat = 8
+    private let atlasFontSize: CGFloat = 30
 
     let startWorkout: () -> Void
     let openSettings: () -> Void
@@ -33,10 +34,15 @@ struct HomeView: View {
                     // Top bar: brand label and settings button aligned to one row.
                     HStack {
                         Button {
-                            Haptics.playMediumTap()
+                            onAtlasTap()
                         } label: {
+                            /// VISUAL TWEAK: Change `atlasFontSize` to make "Atlas" bigger/smaller.
+                            /// VISUAL TWEAK: Remove `.italic()` if you don’t want italics.
+                            /// VISUAL TWEAK: Update `.foregroundStyle(.primary)` to change monochrome color rules.
+                            /// VISUAL TWEAK: Adjust `.padding` or HStack alignment to change header spacing.
+                            /// VISUAL TWEAK: Change haptic style in `onAtlasTap()`.
                             Text("Atlas")
-                                .font(.system(.title2, design: .rounded).weight(.bold))
+                                .font(.system(size: atlasFontSize, weight: .bold, design: .default).italic())
                                 .foregroundStyle(.primary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 10)
@@ -242,6 +248,11 @@ struct HomeView: View {
         formatter.dateFormat = "LLLL yyyy"
         return formatter
     }()
+
+    /// Change here to adjust haptic feel.
+    private func onAtlasTap() {
+        Haptics.playMediumTap()
+    }
 
     /// Resolves whether the appearance should be dark based on stored mode and system fallback.
     /// Change impact: Adjusting logic here affects gradients and button fills on Home.
