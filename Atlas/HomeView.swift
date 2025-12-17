@@ -11,6 +11,7 @@ import SwiftData
 struct HomeView: View {
     @AppStorage("appearanceMode") private var appearanceMode = "light"
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     private let calendar = Calendar.current
     private let cardCornerRadius: CGFloat = 26
@@ -23,6 +24,8 @@ struct HomeView: View {
 
     @State private var showCalendarCard = false
     @State private var showStartButton = false
+    @State private var isBrandPressed = false
+    @Namespace private var brandNamespace
 
     /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
     /// Change impact: Tweaking layout constants or reveal state timing shifts the feel of the entrance and spacing.
@@ -30,8 +33,30 @@ struct HomeView: View {
         ZStack(alignment: .bottom) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Top bar: settings button aligned to the trailing edge.
+                    // Top bar: brand label and settings button aligned to one row.
                     HStack {
+                        Button {
+                            triggerBrandPulse()
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.primary.opacity(0.08))
+                                    .frame(width: 44, height: 44)
+                                    .scaleEffect(isBrandPressed ? 1.0 : 0.001)
+                                    .opacity(isBrandPressed ? 1.0 : 0.0)
+                                    .animation(reduceMotion ? .easeOut(duration: 0.2) : AppMotion.primary, value: isBrandPressed)
+                                    .matchedGeometryEffect(id: "brandBadge", in: brandNamespace)
+
+                                Text("Atlas")
+                                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.primary)
+                                    .matchedGeometryEffect(id: "brandText", in: brandNamespace)
+                                    .padding(.horizontal, 4)
+                            }
+                            .frame(height: 44, alignment: .center)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                         Spacer()
                         Button {
                             assert(Thread.isMainThread, "openSettings should run on main thread")
@@ -52,6 +77,8 @@ struct HomeView: View {
                                         .stroke(.white.opacity(0.2), lineWidth: 1)
                                 )
                         }
+                        .buttonStyle(.plain)
+                        .tint(.primary)
                     }
                     .padding(.top, 6)
                     .tint(.primary)
@@ -66,19 +93,6 @@ struct HomeView: View {
                                         .font(.title2.weight(.semibold))
                                         .foregroundStyle(.primary)
                                 }
-                                Spacer()
-                                Text(todayString)
-                                    .font(.subheadline.weight(.medium))
-                                    .padding(.vertical, 6)
-                                    .padding(.horizontal, 10)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(.white.opacity(0.12))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(.white.opacity(0.2), lineWidth: 1)
-                                    )
                             }
 
                             // Weekday labels row.
@@ -187,12 +201,6 @@ struct HomeView: View {
         Self.monthFormatter.string(from: Date())
     }
 
-    /// Formats today's label shown in the header badge.
-    /// Change impact: Tweaking the format changes how the badge reads (e.g., includes weekday).
-    private var todayString: String {
-        Self.todayFormatter.string(from: Date())
-    }
-
     /// Builds the adaptive background gradient for light/dark.
     /// Change impact: Tweaking colors here shifts the overall page mood in both themes.
     private var backgroundGradient: LinearGradient {
@@ -249,15 +257,27 @@ struct HomeView: View {
         appearanceMode == "dark"
     }
 
+    /// Triggers the brand morph animation with haptic feedback.
+    /// Change impact: Adjusting timings changes how the brand pulse feels.
+    private func triggerBrandPulse() {
+        guard !isBrandPressed else { return }
+        assert(Thread.isMainThread, "Brand pulse should run on main thread")
+        Haptics.playMediumTap()
+        let animation = reduceMotion ? Animation.easeOut(duration: 0.2) : AppMotion.primary
+        withAnimation(animation) {
+            isBrandPressed = true
+        }
+        let delay = reduceMotion ? 0.2 : 0.5
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            withAnimation(animation) {
+                isBrandPressed = false
+            }
+        }
+    }
+
     private static let monthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "LLLL yyyy"
-        return formatter
-    }()
-
-    private static let todayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE, MMM d"
         return formatter
     }()
 }

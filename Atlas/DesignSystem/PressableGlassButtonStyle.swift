@@ -8,12 +8,9 @@
 import SwiftUI
 
 struct PressableGlassButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
     private let pressedScale: CGFloat = 0.97
     private let cornerRadius: CGFloat = 18
-    private let baseStrokeOpacity: Double = 0.32
-    private let pressedStrokeOpacity: Double = 0.55
-    private let baseMaterialOpacity: Double = 0.26
-    private let pressedMaterialOpacity: Double = 0.36
 
     /// Builds the pressable styling for glass buttons like Start Workout.
     /// Change impact: Tweaking `pressedScale`, stroke opacity, or material opacity instantly changes how the pill press feels everywhere.
@@ -24,12 +21,15 @@ struct PressableGlassButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.ultraThinMaterial)
-                    .opacity(configuration.isPressed ? pressedMaterialOpacity : baseMaterialOpacity)
+                    .fill(GlassStyle.background(for: colorScheme))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(.white.opacity(configuration.isPressed ? pressedStrokeOpacity : baseStrokeOpacity), lineWidth: 1)
+                    .stroke(GlassStyle.outerStroke(for: colorScheme).opacity(configuration.isPressed ? 1.0 : 0.9), lineWidth: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(GlassStyle.innerStroke(for: colorScheme).opacity(configuration.isPressed ? 1.0 : 0.9), lineWidth: 0.6)
             )
             .scaleEffect(configuration.isPressed ? pressedScale : 1.0)
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius))

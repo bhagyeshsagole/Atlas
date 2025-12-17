@@ -14,4 +14,11 @@ enum Haptics {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }
+
+    /// Triggers a medium tap feedback for brand or primary affordances.
+    /// Change impact: Adjusting this style changes how brand presses feel globally.
+    static func playMediumTap() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+    }
 }

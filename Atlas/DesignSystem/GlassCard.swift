@@ -33,40 +33,49 @@ struct GlassCard<Content: View>: View {
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.ultraThinMaterial)
+                    .fill(GlassStyle.background(for: colorScheme))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(strokeColor, lineWidth: 1)
+                    .stroke(GlassStyle.outerStroke(for: colorScheme), lineWidth: 1)
             )
-            .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: 12)
-            .shadow(color: ambientShadow, radius: 4, x: 0, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(GlassStyle.innerStroke(for: colorScheme), lineWidth: 0.6)
+            )
+            .shadow(color: GlassStyle.dropShadow(for: colorScheme), radius: shadowRadius, x: 0, y: 12)
+            .shadow(color: GlassStyle.ambientShadow(for: colorScheme), radius: 4, x: 0, y: 2)
+    }
+}
+
+enum GlassStyle {
+    /// Returns the glass background tuned per theme.
+    /// Change impact: Adjusting opacity alters translucency across all glass surfaces.
+    static func background(for colorScheme: ColorScheme) -> some ShapeStyle {
+        .ultraThinMaterial.opacity(colorScheme == .dark ? 1.0 : 0.98)
     }
 
-    private var strokeColor: Color {
-        switch colorScheme {
-        case .dark:
-            return .white.opacity(0.18)
-        default:
-            return .black.opacity(0.12)
-        }
+    /// Returns the outer stroke color for glass components.
+    /// Change impact: Changing opacity alters border visibility across calendar and pills.
+    static func outerStroke(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .white.opacity(0.2) : .black.opacity(0.16)
     }
 
-    private var shadowColor: Color {
-        switch colorScheme {
-        case .dark:
-            return .black.opacity(0.28)
-        default:
-            return .black.opacity(0.22)
-        }
+    /// Returns the inner highlight stroke for glass components.
+    /// Change impact: Tweaking opacity adjusts perceived edge softness across glass surfaces.
+    static func innerStroke(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .white.opacity(0.08) : .white.opacity(0.25)
     }
 
-    private var ambientShadow: Color {
-        switch colorScheme {
-        case .dark:
-            return .white.opacity(0.04)
-        default:
-            return .black.opacity(0.06)
-        }
+    /// Returns the main drop shadow for depth.
+    /// Change impact: Adjusting opacity or radius influences depth in light/dark modes.
+    static func dropShadow(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .black.opacity(0.28) : .black.opacity(0.26)
+    }
+
+    /// Returns an ambient secondary shadow for lift.
+    /// Change impact: Adjusting opacity tunes softness of glass lift.
+    static func ambientShadow(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .white.opacity(0.04) : .black.opacity(0.08)
     }
 }
