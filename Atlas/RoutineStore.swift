@@ -4,6 +4,7 @@
 //
 //  Created by Codex on 2/20/24.
 //
+//  Update: Hardening pass to support custom storage URLs for tests without changing runtime behavior.
 
 import Foundation
 import Combine
@@ -26,10 +27,18 @@ struct RoutineWorkout: Identifiable, Codable, Hashable {
 final class RoutineStore: ObservableObject {
     @Published var routines: [Routine] = []
     private let filename = "routines.json"
+    private let customStorageURL: URL?
+
+    init(storageURL: URL? = nil) {
+        self.customStorageURL = storageURL
+    }
 
     /// VISUAL TWEAK: Change the filename or directory here to affect which routine file the UI reads.
     /// VISUAL TWEAK: Change storage location here to adjust how routines persist.
     private var fileURL: URL {
+        if let customStorageURL {
+            return customStorageURL
+        }
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         return (documents ?? URL(fileURLWithPath: NSTemporaryDirectory())).appendingPathComponent(filename)
     }

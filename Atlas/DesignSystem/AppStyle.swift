@@ -4,6 +4,7 @@
 //
 //  Created by Codex on 2/12/24.
 //
+//  Update: Hardening pass to align typography scales, header hit areas, and popup sizing/animation.
 
 import SwiftUI
 
@@ -393,7 +394,14 @@ enum AppStyle {
 
     /// VISUAL TWEAK: Change `headerIconHitArea` to adjust hit target padding around header icons.
     /// VISUAL TWEAK: Increase for easier taps; decrease for tighter chips.
-    static let headerIconHitArea: CGFloat = 10
+    static let headerIconHitArea: CGFloat = 12
+
+    /// VISUAL TWEAK: Change `popupMaxWidth` to constrain small menus/alerts.
+    /// VISUAL TWEAK: Lower for tighter popups; raise for wider menus.
+    static let popupMaxWidth: CGFloat = 420
+
+    /// VISUAL TWEAK: Change `popupAnimation` to adjust popup show/hide motion globally.
+    static let popupAnimation: Animation = .smooth(duration: 0.24)
 
     private static let helveticaName = "Helvetica Neue"
 

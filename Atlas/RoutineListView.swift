@@ -4,6 +4,7 @@
 //
 //  Created by Codex on 2/20/24.
 //
+//  Update: Hardening pass to align header hit areas, popup sizing, haptics, and truncation.
 
 import SwiftUI
 #if canImport(UIKit)
@@ -82,6 +83,7 @@ struct RoutineListView: View {
                         .padding(.vertical, 12)
                         .padding(.horizontal, 16)
                     }
+                    .frame(maxWidth: AppStyle.popupMaxWidth)
                     Button("Cancel") {
                         dismissRoutineMenu()
                     }
@@ -102,7 +104,7 @@ struct RoutineListView: View {
                         .font(.system(size: 22, weight: .semibold)) // VISUAL TWEAK: Change `plusSize` to make it heavier/lighter.
                         .foregroundStyle(.primary)
                 }
-                .padding(12)
+                .padding(AppStyle.headerIconHitArea)
                 .contentShape(Rectangle())
             }
         }
@@ -115,6 +117,7 @@ struct RoutineListView: View {
                 #endif
             }
         }
+        .animation(AppStyle.popupAnimation, value: isMenuPresented)
     }
 
     private func presentRoutineMenu(for routine: Routine) {
@@ -122,14 +125,10 @@ struct RoutineListView: View {
             #if DEBUG
             print("[ROUTINE] Menu opened for: \(routine.name)")
             #endif
-            #if canImport(UIKit)
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred() // VISUAL TWEAK: Change haptic type in `presentRoutineMenu()` to adjust feedback.
-            #endif
+            Haptics.playLightTap() // VISUAL TWEAK: Change haptic type in `presentRoutineMenu()` to adjust feedback.
         }
         routineMenuTarget = routine
-        withAnimation {
-            isMenuPresented = true
-        }
+        withAnimation(AppStyle.popupAnimation) { isMenuPresented = true }
     }
 
     private func dismissRoutineMenu() {
@@ -138,14 +137,12 @@ struct RoutineListView: View {
             print("[ROUTINE] Menu dismissed")
             #endif
         }
-        withAnimation {
-            isMenuPresented = false
-        }
+        withAnimation(AppStyle.popupAnimation) { isMenuPresented = false }
         routineMenuTarget = nil
     }
 }
 
-private func routineOverviewText(_ routine: Routine) -> String {
+func routineOverviewText(_ routine: Routine) -> String {
     let count = routine.workouts.count
     let title = routine.name.lowercased()
     let descriptor: String
@@ -182,10 +179,14 @@ private struct RoutineCardView: View {
                     Text(routine.name)
                         .appFont(.title, weight: .semibold)
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Spacer()
                     Text(routineOverviewText(routine))
                         .appFont(.footnote, weight: .semibold)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 let tags = routineTags(routine)
                 if !tags.isEmpty {
