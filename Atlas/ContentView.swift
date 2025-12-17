@@ -14,7 +14,9 @@ struct ContentView: View {
     @AppStorage("appearanceMode") private var appearanceMode = "light"
 
     private enum Route: Hashable {
-        case workout
+        case routines
+        case createRoutine
+        case reviewRoutine(RoutineDraft)
     }
 
     /// Builds the root navigation stack for Home and Workout flows.
@@ -22,7 +24,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $path) {
             HomeView(
-                startWorkout: { path.append(.workout) },
+                startWorkout: { path.append(.routines) },
                 openSettings: {
                     if !showSettings {
                         showSettings = true
@@ -31,8 +33,21 @@ struct ContentView: View {
             )
             .navigationDestination(for: Route.self) { route in
                 switch route {
-                case .workout:
-                    WorkoutView()
+                case .routines:
+                    RoutineListView {
+                        path.append(.createRoutine)
+                    }
+                case .createRoutine:
+                    CreateRoutineView { name, workouts in
+                        path.append(.reviewRoutine(RoutineDraft(name: name, workouts: workouts)))
+                    }
+                case .reviewRoutine(let draft):
+                    ReviewRoutineView(
+                        routineName: draft.name,
+                        workouts: draft.workouts
+                    ) {
+                        path = [.routines]
+                    }
                 }
             }
         }
@@ -52,7 +67,13 @@ struct ContentView: View {
     }
 }
 
+struct RoutineDraft: Hashable {
+    let name: String
+    let workouts: [ParsedWorkout]
+}
+
 #Preview {
     ContentView()
         .modelContainer(for: Workout.self, inMemory: true)
+        .environmentObject(RoutineStore())
 }

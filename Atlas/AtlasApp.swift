@@ -10,6 +10,7 @@ import SwiftData
 
 @main
 struct AtlasApp: App {
+    @StateObject private var routineStore = RoutineStore()
     /// Builds the shared SwiftData container with all app models.
     /// Change impact: Adding or removing models here changes which data persists across launches.
     let sharedModelContainer: ModelContainer = {
@@ -25,6 +26,10 @@ struct AtlasApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(routineStore)
+                .task {
+                    routineStore.load()
+                }
         }
         .modelContainer(sharedModelContainer)
     }

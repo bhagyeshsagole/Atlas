@@ -115,19 +115,16 @@ struct HomeView: View {
                 .padding(.top, AppStyle.screenTopPadding)
                 .padding(.bottom, AppStyle.homeBottomInset)
             }
+            .scrollIndicators(.hidden)
 
             // Start Workout pill pinned near bottom: press feel driven by `PressableGlassButtonStyle` constants.
             Button {
                 Haptics.playLightTap()
                 startWorkout()
             } label: {
-                HStack(spacing: AppStyle.pillContentSpacing) {
-                    Image(systemName: "figure.run")
-                        .appFont(.pill, weight: .semibold)
-                    Text("Start Workout")
-                        .appFont(.pill, weight: .semibold)
-                }
-                .foregroundStyle(.primary)
+                Text("Start Workout")
+                    .appFont(.pill, weight: .semibold)
+                    .foregroundStyle(.primary)
             }
             .buttonStyle(PressableGlassButtonStyle())
             .padding(.horizontal, AppStyle.screenHorizontalPadding)

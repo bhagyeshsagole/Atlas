@@ -1,0 +1,201 @@
+//
+//  RoutineAIService.swift
+//  Atlas
+//
+//  Created by Codex on 2/20/24.
+//
+
+import Foundation
+
+struct ParsedWorkout: Identifiable, Codable, Hashable {
+    let id: UUID
+    let name: String
+    var wtsText: String
+    var repsText: String
+
+    init(id: UUID = UUID(), name: String, wtsText: String = "wts", repsText: String = "reps") {
+        self.id = id
+        self.name = name
+        self.wtsText = wtsText
+        self.repsText = repsText
+    }
+}
+
+struct RoutineAIService {
+    /// VISUAL TWEAK: Change `OpenAIConfig.model` to switch models.
+    /// VISUAL TWEAK: Change prompt text to adjust parsing strictness.
+    static func parseWorkouts(from rawText: String, routineTitleHint: String? = nil) async -> [ParsedWorkout] {
+        let trimmedInput = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if DEBUG
+        print("[AI] Input: \(trimmedInput)")
+        #endif
+
+        guard !trimmedInput.isEmpty else { return [] }
+
+        if isLikelyWorkoutRequest(trimmedInput) {
+            #if DEBUG
+            print("[AI] Request mode detected")
+            #endif
+            let generatedList = await generateWorkoutListString(fromRequest: trimmedInput, routineTitleHint: routineTitleHint)
+            #if DEBUG
+            print("[AI] Generated workout list string: \(generatedList)")
+            #endif
+            let workouts = fallbackParse(rawText: generatedList)
+            logParsed(workouts)
+            return workouts
+        } else {
+            #if DEBUG
+            print("[AI] Explicit list mode detected")
+            #endif
+        }
+
+        guard !OpenAIConfig.apiKey.isEmpty else {
+            #if DEBUG
+            print("[AI] Using fallback parser (reason: missing key)")
+            #endif
+            let workouts = fallbackParse(rawText: trimmedInput)
+            logParsed(workouts)
+            return workouts
+        }
+
+        do {
+            #if DEBUG
+            print("[AI] Using OpenAI model: \(OpenAIConfig.model)")
+            #endif
+            let output = try await OpenAIChatClient.parseRoutineWorkouts(rawText: trimmedInput)
+            let mapped = output.workouts.map { workout in
+                ParsedWorkout(
+                    name: workout.name,
+                    wtsText: workout.wtsText,
+                    repsText: workout.repsText
+                )
+            }
+            if mapped.isEmpty {
+                #if DEBUG
+                print("[AI] Using fallback parser (reason: empty OpenAI parse)")
+                #endif
+                let fallback = fallbackParse(rawText: trimmedInput)
+                logParsed(fallback)
+                return fallback
+            }
+            logParsed(mapped)
+            return mapped
+        } catch {
+            #if DEBUG
+            print("[AI] Using fallback parser (reason: \(error))")
+            #endif
+            let fallback = fallbackParse(rawText: trimmedInput)
+            logParsed(fallback)
+            return fallback
+        }
+    }
+
+    /// VISUAL TWEAK: Change splitting/regex rules here to reshape fallback parsing when AI is unavailable.
+    private static func fallbackParse(rawText: String) -> [ParsedWorkout] {
+        let separators = CharacterSet(charactersIn: ",;\n")
+        let normalized = rawText
+            .replacingOccurrences(of: "(?i)\\band\\b", with: "|", options: .regularExpression)
+            .components(separatedBy: separators)
+            .joined(separator: "|")
+
+        let pieces = normalized
+            .components(separatedBy: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var workouts: [ParsedWorkout] = pieces.map { piece in
+            let repsMatch = piece.range(of: #"\d+\s*-\s*\d+"#, options: .regularExpression)
+            let repsText = repsMatch.map { String(piece[$0]).replacingOccurrences(of: " ", with: "") } ?? "reps"
+
+            var namePart = piece
+            if let repsMatch {
+                namePart.removeSubrange(repsMatch)
+            }
+            namePart = namePart.replacingOccurrences(of: #"x\s*\d+"#, with: "", options: .regularExpression)
+            namePart = namePart.replacingOccurrences(of: #"(?i)sets?"#, with: "", options: .regularExpression)
+            namePart = namePart.replacingOccurrences(of: #"(?i)reps?"#, with: "", options: .regularExpression)
+            namePart = namePart.replacingOccurrences(of: #"(?i)and"#, with: "", options: .regularExpression)
+
+            let cleanedName = titleCased(namePart.trimmingCharacters(in: .whitespacesAndNewlines))
+
+            return ParsedWorkout(
+                name: cleanedName.isEmpty ? "Workout" : cleanedName,
+                wtsText: "wts",
+                repsText: repsText
+            )
+        }
+
+        if workouts.isEmpty {
+            workouts = [
+                ParsedWorkout(
+                    name: titleCased(rawText),
+                    wtsText: "wts",
+                    repsText: "reps"
+                )
+            ]
+        }
+        return workouts
+    }
+
+    private static func titleCased(_ text: String) -> String {
+        text
+            .split(separator: " ")
+            .map { word in
+                word.lowercased().prefix(1).uppercased() + word.lowercased().dropFirst()
+            }
+            .joined(separator: " ")
+    }
+
+    private static func logParsed(_ workouts: [ParsedWorkout]) {
+        #if DEBUG
+        let names = workouts.map(\.name).joined(separator: ", ")
+        print("[AI] Parsed \(workouts.count) workouts: \(names)")
+        #endif
+    }
+
+    /// VISUAL TWEAK: Change the heuristic keywords to be stricter/looser in recognizing requests.
+    static func isLikelyWorkoutRequest(_ rawText: String) -> Bool {
+        let text = rawText.lowercased()
+        let hasDigits = rawText.rangeOfCharacter(from: .decimalDigits) != nil
+        let hasSetsMarker = text.contains("x") || text.contains("×")
+        let keywords = ["perfect", "best", "build", "routine", "day", "workout", "pull", "push", "legs"]
+        let containsKeyword = keywords.contains { text.contains($0) }
+        return !hasDigits || !hasSetsMarker || containsKeyword
+    }
+
+    /// VISUAL TWEAK: Change the number of exercises (6–8) and default rep ranges for different training styles.
+    static func generateWorkoutListString(fromRequest request: String, routineTitleHint: String?) async -> String {
+        guard !OpenAIConfig.apiKey.isEmpty else {
+            #if DEBUG
+            print("[AI] Using fallback generator (reason: missing key)")
+            #endif
+            return fallbackGeneratedList(for: request)
+        }
+
+        do {
+            #if DEBUG
+            print("[AI] Using OpenAI model: \(OpenAIConfig.model)")
+            #endif
+            return try await OpenAIChatClient.generateWorkoutListString(requestText: request, routineTitleHint: routineTitleHint)
+        } catch {
+            #if DEBUG
+            print("[AI] Using fallback generator (reason: \(error))")
+            #endif
+            return fallbackGeneratedList(for: request)
+        }
+    }
+
+    /// VISUAL TWEAK: Edit the fallback templates to match your preferred exercise selection.
+    private static func fallbackGeneratedList(for request: String) -> String {
+        let text = request.lowercased()
+        if text.contains("pull") {
+            return "Lat Pulldown x 3 10-12 and Seated Cable Row x 3 10-12 and Chest Supported Row x 3 10-12 and Face Pull x 3 12-15 and Reverse Fly x 3 12-15 and Dumbbell Curl x 3 10-12 and Hammer Curl x 3 10-12"
+        } else if text.contains("push") {
+            return "Incline Dumbbell Press x 3 8-12 and Flat Bench Press x 3 8-12 and Seated Shoulder Press x 3 10-12 and Lateral Raise x 3 12-15 and Cable Fly x 3 12-15 and Triceps Rope Pushdown x 3 10-12 and Overhead Triceps Extension x 3 10-12"
+        } else if text.contains("legs") {
+            return "Back Squat x 4 8-10 and Romanian Deadlift x 3 8-12 and Leg Press x 3 12-15 and Walking Lunge x 3 12-15 and Leg Curl x 3 12-15 and Leg Extension x 3 12-15 and Calf Raise x 4 12-15"
+        } else {
+            return "Pull Up x 3 8-12 and Dumbbell Bench Press x 3 8-12 and Bent Over Row x 3 10-12 and Shoulder Press x 3 10-12 and Lateral Raise x 3 12-15 and Barbell Curl x 3 10-12 and Triceps Pushdown x 3 10-12"
+        }
+    }
+}
