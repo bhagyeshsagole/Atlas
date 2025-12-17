@@ -1,0 +1,25 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1024" height="1024" rx="180" fill="white"/>
+<foreignObject x="92" y="92" width="840" height="840"><div xmlns="http://www.w3.org/1999/xhtml" style="backdrop-filter:blur(20px);clip-path:url(#bgblur_0_1_844_clip_path);height:100%;width:100%"></div></foreignObject><g filter="url(#filter0_di_1_844)" data-figma-bg-blur-radius="40">
+<path d="M512 132C721.868 132 892 302.132 892 512C892 721.868 721.868 892 512 892C302.132 892 132 721.868 132 512C132 302.132 302.132 132 512 132ZM512 232C357.36 232 232 357.36 232 512C232 666.64 357.36 792 512 792C666.64 792 792 666.64 792 512C792 357.36 666.64 232 512 232Z" fill="#1D1D1D"/>
+</g>
+<defs>
+<filter id="filter0_di_1_844" x="92" y="92" width="840" height="840" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="5"/>
+<feGaussianBlur stdDeviation="9"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.15 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_844"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_844" result="shape"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="-1"/>
+<feGaussianBlur stdDeviation="3"/>
+<feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1"/>
+<feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.3 0"/>
+<feBlend mode="normal" in2="shape" result="effect2_innerShadow_1_844"/>
+</filter>
+<clipPath id="bgblur_0_1_844_clip_path" transform="translate(-92 -92)"><path d="M512 132C721.868 132 892 302.132 892 512C892 721.868 721.868 892 512 892C302.132 892 132 721.868 132 512C132 302.132 302.132 132 512 132ZM512 232C357.36 232 232 357.36 232 512C232 666.64 357.36 792 512 792C666.64 792 792 666.64 792 512C792 357.36 666.64 232 512 232Z"/>
+</clipPath></defs>
+</svg>

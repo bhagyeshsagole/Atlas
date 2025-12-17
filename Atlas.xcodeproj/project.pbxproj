@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		62F3DD922EF2536C00C9DAFF /* Atlas.icon in Resources */ = {isa = PBXBuildFile; fileRef = 62F3DD912EF2536C00C9DAFF /* Atlas.icon */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		62F3DD0B2EF205FB00C9DAFF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,7 @@
 		62F3DCF92EF205F900C9DAFF /* Atlas.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Atlas.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		62F3DD0A2EF205FB00C9DAFF /* AtlasTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AtlasTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		62F3DD142EF205FB00C9DAFF /* AtlasUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AtlasUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		62F3DD912EF2536C00C9DAFF /* Atlas.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Atlas.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -92,6 +97,7 @@
 				62F3DD0D2EF205FB00C9DAFF /* AtlasTests */,
 				62F3DD172EF205FB00C9DAFF /* AtlasUITests */,
 				62F3DCFA2EF205F900C9DAFF /* Products */,
+				62F3DD912EF2536C00C9DAFF /* Atlas.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -225,6 +231,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				62F3DD922EF2536C00C9DAFF /* Atlas.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -285,8 +292,10 @@
 		62F3DD1E2EF205FB00C9DAFF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Atlas;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphoneos*]" = Atlas;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -319,8 +328,10 @@
 		62F3DD1F2EF205FB00C9DAFF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Atlas;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphoneos*]" = Atlas;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
