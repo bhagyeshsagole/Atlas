@@ -56,10 +56,13 @@ struct OpenAIChatClient {
 
     /// Generates a workout list string via OpenAI with the configured prompt and temperature.
     /// Change impact: Modify to tune creativity, prompt wording, or formatting expectations.
-    static func generateWorkoutListString(requestText: String, routineTitleHint: String?) async throws -> String {
+    static func generateWorkoutListString(requestText: String, routineTitleHint: String?, correctiveNote: String? = nil) async throws -> String {
         var userContent = requestText
         if let routineTitleHint, !routineTitleHint.isEmpty {
             userContent += "\nTitle: \(routineTitleHint)"
+        }
+        if let correctiveNote {
+            userContent += "\nCorrection: \(correctiveNote)"
         }
 
         let messages: [ChatMessage] = [
@@ -115,16 +118,30 @@ User text will be provided in the user message.
 
     private static let generatorPrompt = """
 You are a strength training routine generator.
-Return ONLY a single-line workout list string, no bullets, no numbering, no quotes, no JSON.
+Return ONLY a single-line workout list string, no bullets, no numbering, no quotes, no JSON, no explanations.
 
 Format rules:
 - Use exactly: "<Exercise Name> x <sets> <reps> and <Exercise Name> x <sets> <reps> and ..."
-- Sets are integers like 3 or 4.
-- Reps are a range like "8-12" or "10-12".
+- Sets are integers like 3 or 4 (default 3–4 sets).
+- Reps are science-based ranges: compounds 6-10 or 6-12, accessories 8-12 or 10-15, isolations/rear delt/lateral raise 12-20.
 - Use Title Case exercise names.
-- Do NOT include warmups.
-- Do NOT include explanations.
-- Output 6–8 exercises appropriate for the request.
+- Do NOT include warmups or extra wording.
+
+Programming rules (complete routine, no templates):
+- Prioritize big compounds first, then accessories, then isolations.
+- Balance movement patterns: Back needs vertical pull + horizontal row + rear delt (optional lower trap/lat iso); Chest needs horizontal press + incline press + fly/pec iso; Shoulders need overhead press + lateral raise + rear delt; Legs need squat pattern + hinge pattern + quad isolation + hamstring isolation + calves (optional core).
+- Minimums by request:
+  - Shoulders/delts: >= 3 shoulder movements (overhead press + lateral raise + rear delt pattern).
+  - Chest/pecs: >= 3 chest movements (horizontal press + incline press + fly/pec isolation).
+  - Back/lats: >= 4 back movements (vertical pull + horizontal row + rear delt + optional lower trap/lat iso).
+  - Legs/quads/hams/glutes: >= 5 leg movements (squat + hinge + quad iso + hamstring iso + calves/core finisher).
+  - Biceps-only: >= 3 biceps movements.
+  - Triceps-only: >= 3 triceps movements.
+  - Pull day (back + biceps + rear delts): 6–8 total, Back >= 4, Biceps >= 2, include rear delt.
+  - Push day (chest + shoulders + triceps): 6–8 total, Chest >= 3, Shoulders >= 2, Triceps 1–2.
+  - Full body: 7–10 total covering squat + hinge + push + pull + core.
+  - Arms day (if unspecified): 6–8 total with a balance of biceps and triceps.
+- Always output a complete routine that satisfies the matching minimums.
 
 User text will be provided in the user message.
 """

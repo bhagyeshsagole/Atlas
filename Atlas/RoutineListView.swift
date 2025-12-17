@@ -10,8 +10,13 @@ import SwiftUI
 struct RoutineListView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var routineStore: RoutineStore
+    @State private var routineToEdit: Routine?
+    @State private var routineToDelete: Routine?
 
     let onAddRoutine: () -> Void
+
+    private let plusButtonSize: CGFloat = 36 // VISUAL TWEAK: Change `plusButtonSize` to adjust the tap target without changing style.
+    private let plusIconSize: CGFloat = 16 // VISUAL TWEAK: Change `plusIconSize` to make the + feel lighter/heavier.
 
     var body: some View {
         ScrollView {
@@ -24,28 +29,35 @@ struct RoutineListView: View {
                         .padding(.top, AppStyle.sectionSpacing)
                 } else {
                     ForEach(routineStore.routines) { routine in
-                        Button {
-                            print("Selected routine: \(routine.name)")
-                        } label: {
-                            GlassCard {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(routine.name)
-                                        .appFont(.title, weight: .semibold)
-                                        .foregroundStyle(.primary)
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(routine.name)
+                                    .appFont(.title, weight: .semibold)
+                                    .foregroundStyle(.primary)
 
-                                    if !routine.workouts.isEmpty {
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            ForEach(routine.workouts) { workout in
-                                                Text(workout.name)
-                                                    .appFont(.body, weight: .medium)
-                                                    .foregroundStyle(.secondary)
-                                            }
+                                if !routine.workouts.isEmpty {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        ForEach(routine.workouts) { workout in
+                                            Text(workout.name)
+                                                .appFont(.body, weight: .medium)
+                                                .foregroundStyle(.secondary)
                                         }
                                     }
                                 }
                             }
                         }
-                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) { // VISUAL TWEAK: Set `allowsFullSwipe` true/false to control “Mail-like” full swipe.
+                            Button("Edit") {
+                                routineToEdit = routine
+                            }
+                            .tint(.gray)
+
+                            Button(role: .destructive) {
+                                routineToDelete = routine
+                            } label: {
+                                Text("Delete")
+                            }
+                        }
                     }
                 }
             }
@@ -59,8 +71,10 @@ struct RoutineListView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: onAddRoutine) {
                     Image(systemName: "plus")
-                        .appFont(.section, weight: .semibold)
-                        .padding(10)
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: plusIconSize, weight: .semibold))
+                        .frame(width: plusButtonSize, height: plusButtonSize, alignment: .center)
+                        .padding(2)
                         .background(
                             RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
                                 .fill(.white.opacity(colorScheme == .dark ? AppStyle.headerButtonFillOpacityDark : AppStyle.headerButtonFillOpacityLight))
@@ -75,5 +89,23 @@ struct RoutineListView: View {
             }
         }
         .tint(.primary)
+        .confirmationDialog("Delete routine?", isPresented: Binding(get: { routineToDelete != nil }, set: { isPresented in
+            if !isPresented { routineToDelete = nil }
+        }), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let routineToDelete {
+                    routineStore.deleteRoutine(id: routineToDelete.id)
+                    self.routineToDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                routineToDelete = nil
+            }
+        }
+        .navigationDestination(item: $routineToEdit) { routine in
+            EditRoutineView(routine: routine) { updated in
+                routineStore.updateRoutine(updated)
+            }
+        }
     }
 }

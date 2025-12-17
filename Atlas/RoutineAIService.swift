@@ -148,15 +148,202 @@ struct RoutineAIService {
             throw RoutineAIError.missingAPIKey
         }
 
-        do {
-            #if DEBUG
-            print("[AI] Using OpenAI model: \(OpenAIConfig.model)")
-            #endif
-            return try await OpenAIChatClient.generateWorkoutListString(requestText: request, routineTitleHint: routineTitleHint)
-        } catch let error as OpenAIError {
-            throw RoutineAIError.openAIRequestFailed(status: error.statusCode, message: error.message)
-        } catch {
-            throw RoutineAIError.openAIRequestFailed(status: nil, message: error.localizedDescription)
+        let focus = detectFocus(in: request)
+        let ruleSummary = minimumRuleSummary(for: focus)
+        var attempt = 0
+        var lastError: String?
+
+        while attempt < 2 {
+            do {
+                #if DEBUG
+                print("[AI] Using OpenAI model: \(OpenAIConfig.model)")
+                #endif
+                let correctiveNote = lastError.map { "Your last output did not meet the minimums. Regenerate meeting: \($0)" }
+                let generated = try await OpenAIChatClient.generateWorkoutListString(requestText: request, routineTitleHint: routineTitleHint, correctiveNote: correctiveNote)
+                let exercises = parseExercises(from: generated)
+                if validate(exercises: exercises, for: focus) {
+                    return generated
+                } else {
+                    lastError = ruleSummary
+                }
+            } catch let error as OpenAIError {
+                throw RoutineAIError.openAIRequestFailed(status: error.statusCode, message: error.message)
+            } catch {
+                throw RoutineAIError.openAIRequestFailed(status: nil, message: error.localizedDescription)
+            }
+            attempt += 1
         }
+
+        throw RoutineAIError.openAIRequestFailed(status: nil, message: "AI output didn’t meet routine requirements. Try again.")
+    }
+
+    private static func detectFocus(in request: String) -> Focus {
+        let text = request.lowercased()
+        func containsAny(_ keywords: [String]) -> Bool {
+            keywords.contains { text.contains($0) }
+        }
+
+        if containsAny(["pull"]) { return .pull }
+        if containsAny(["push"]) { return .push }
+        if containsAny(["full body", "full-body", "total body"]) { return .fullBody }
+        if containsAny(["shoulder", "delt"]) { return .shoulders }
+        if containsAny(["chest", "pec"]) { return .chest }
+        if containsAny(["back", "lat", "lats"]) { return .back }
+        if containsAny(["leg", "quad", "ham", "glute"]) { return .legs }
+        if containsAny(["bicep", "biceps"]) { return .biceps }
+        if containsAny(["tricep", "triceps"]) { return .triceps }
+        if containsAny(["arm", "arms"]) { return .arms }
+        return .generic
+    }
+
+    private enum Focus {
+        case shoulders, chest, back, legs, biceps, triceps, arms, pull, push, fullBody, generic
+    }
+
+    private static func minimumRuleSummary(for focus: Focus) -> String {
+        switch focus {
+        case .shoulders: return "Shoulders: >= 3 movements (overhead press + lateral raise + rear delt)."
+        case .chest: return "Chest: >= 3 movements (horizontal press + incline press + fly/pec isolation)."
+        case .back: return "Back: >= 4 movements with vertical pull + horizontal row + rear delt."
+        case .legs: return "Legs: >= 5 movements (squat pattern + hinge pattern + quad iso + hamstring iso + calves/core)."
+        case .biceps: return "Biceps: >= 3 movements."
+        case .triceps: return "Triceps: >= 3 movements."
+        case .arms: return "Arms day: 6–8 movements with Biceps >= 3 and Triceps >= 3."
+        case .pull: return "Pull day: 6–8 total, Back >= 4, Biceps >= 2, include rear delt."
+        case .push: return "Push day: 6–8 total, Chest >= 3, Shoulders >= 2, Triceps 1–2."
+        case .fullBody: return "Full body: 7–10 total covering squat + hinge + push + pull + core."
+        case .generic: return "6–10 balanced exercises with compounds first."
+        }
+    }
+
+    private static func parseExercises(from generated: String) -> [String] {
+        generated
+            .components(separatedBy: " and ")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private static func validate(exercises: [String], for focus: Focus) -> Bool {
+        let totals = countByCategory(exercises: exercises)
+        let total = exercises.count
+
+        switch focus {
+        case .shoulders:
+            return totals.shoulders >= 3
+        case .chest:
+            return totals.chest >= 3
+        case .back:
+            return totals.back >= 4
+        case .legs:
+            return totals.legs >= 5
+        case .biceps:
+            return totals.biceps >= 3
+        case .triceps:
+            return totals.triceps >= 3
+        case .arms:
+            return (6...8).contains(total) && totals.biceps >= 3 && totals.triceps >= 3
+        case .pull:
+            return (6...8).contains(total) && totals.back >= 4 && totals.biceps >= 2 && totals.rearDelts >= 1
+        case .push:
+            return (6...8).contains(total) && totals.chest >= 3 && totals.shoulders >= 2 && totals.triceps >= 1
+        case .fullBody:
+            return (7...10).contains(total)
+                && totals.squatPatterns >= 1
+                && totals.hingePatterns >= 1
+                && totals.pushPatterns >= 1
+                && totals.pullPatterns >= 1
+                && totals.core >= 1
+        case .generic:
+            return (6...10).contains(total)
+        }
+    }
+
+    private struct CategoryTotals {
+        var shoulders = 0
+        var chest = 0
+        var back = 0
+        var legs = 0
+        var biceps = 0
+        var triceps = 0
+        var rearDelts = 0
+        var squatPatterns = 0
+        var hingePatterns = 0
+        var pushPatterns = 0
+        var pullPatterns = 0
+        var core = 0
+    }
+
+    private static func countByCategory(exercises: [String]) -> CategoryTotals {
+        var totals = CategoryTotals()
+        for exercise in exercises {
+            let name = exercise.lowercased()
+            func containsAny(_ keywords: [String]) -> Bool {
+                keywords.contains { name.contains($0) }
+            }
+
+            let isRearDelt = containsAny(["rear delt", "face pull", "reverse fly", "reverse pec deck", "reverse-pec deck", "rear raise"])
+            let isShoulderPress = containsAny(["overhead press", "ohp", "shoulder press", "military press", "arnold press", "push press"])
+            let isLateralRaise = containsAny(["lateral raise", "side raise", "delt raise"])
+            let isShoulder = containsAny(["shoulder", "delt"]) || isShoulderPress || isLateralRaise || isRearDelt
+            if isShoulder { totals.shoulders += 1 }
+
+            let isPushUp = containsAny(["push-up", "push up"])
+            let isBenchStyle = containsAny([
+                "bench press",
+                "flat bench",
+                "incline press",
+                "incline bench",
+                "decline press",
+                "dumbbell press",
+                "machine press",
+                "chest press",
+                "db bench",
+                "barbell bench"
+            ]) || (name.contains("press") && containsAny(["bench", "incline", "flat"]) && !name.contains("leg press"))
+            let isFly = containsAny(["fly", "pec deck", "pec-deck", "cable crossover", "crossover"])
+            let isChest = containsAny(["chest", "pec"]) || isBenchStyle || isFly || isPushUp
+            if isChest { totals.chest += 1 }
+
+            let isRow = containsAny(["row", "t-bar", "t bar", "pendlay", "seal row"])
+            let isVerticalPull = containsAny(["pulldown", "pull-down", "pull up", "pull-up", "chin up", "chin-up", "neutral grip pullup", "neutral-grip pullup"])
+            let isBack = containsAny(["back", "lat", "lats", "trap"]) || isRow || isVerticalPull || isRearDelt
+            if isBack { totals.back += 1 }
+
+            let isSquat = containsAny(["squat", "split squat", "front squat", "back squat", "hack squat", "leg press", "step-up", "step up", "lunge", "bulgarian", "pistol"])
+            let isHinge = containsAny(["deadlift", "romanian", "rdl", "good morning", "good-morning", "hip hinge", "hip thrust", "hip thrusts", "hip extension", "glute bridge", "kb swing", "kettlebell swing", "back extension"])
+            let isQuadIso = containsAny(["leg extension", "quad"])
+            let isHamIso = containsAny(["leg curl", "hamstring curl", "hamstring-curl", "hamstring"])
+            let isCalf = containsAny(["calf"])
+            let isGlute = containsAny(["glute"])
+            let isLeg = isSquat || isHinge || isQuadIso || isHamIso || isCalf || isGlute || containsAny(["leg", "ham", "quad", "glute"])
+            if isLeg { totals.legs += 1 }
+            if isSquat { totals.squatPatterns += 1 }
+            if isHinge { totals.hingePatterns += 1 }
+
+            let mentionsLegCurl = containsAny(["leg curl", "hamstring curl", "hamstring-curl"])
+            let isBicepsCurl = name.contains("curl") && !mentionsLegCurl && !containsAny(["hamstring"])
+            let isChinUp = containsAny(["chin up", "chin-up"])
+            let isBiceps = containsAny(["bicep", "biceps", "preacher", "hammer curl", "drag curl"]) || isBicepsCurl || isChinUp
+            if isBiceps { totals.biceps += 1 }
+
+            let isTricepsExtension = containsAny(["tricep", "triceps", "skullcrusher", "skull crusher", "french press", "pressdown", "pushdown", "overhead extension", "overhead tricep", "overhead triceps"])
+            let isDip = containsAny(["dip", "dips"])
+            let isCloseGrip = containsAny(["close-grip", "close grip"])
+            let isTriceps = isTricepsExtension || isDip || isCloseGrip
+            if isTriceps { totals.triceps += 1 }
+
+            let isCore = containsAny(["plank", "crunch", "sit-up", "sit up", "dead bug", "hollow", "leg raise", "knee raise", "ab wheel", "rollout", "pallof", "wood chop", "woodchop", "carry", "farmer"])
+            if isCore { totals.core += 1 }
+
+            let isPressing = isBenchStyle || isPushUp || isShoulderPress || isDip || isCloseGrip
+            if isPressing { totals.pushPatterns += 1 }
+
+            if isRow || isVerticalPull || isRearDelt {
+                totals.pullPatterns += 1
+            }
+
+            if isRearDelt { totals.rearDelts += 1 }
+        }
+        return totals
     }
 }

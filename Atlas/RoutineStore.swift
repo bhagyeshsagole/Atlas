@@ -86,4 +86,11 @@ final class RoutineStore: ObservableObject {
         }
         save()
     }
+
+    /// VISUAL TWEAK: Change which fields are updatable to control what the Edit screen can save.
+    func updateRoutine(_ routine: Routine) {
+        guard let index = routines.firstIndex(where: { $0.id == routine.id }) else { return }
+        routines[index] = routine
+        save()
+    }
 }
