@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct GlassCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     private let cornerRadius: CGFloat
     private let shadowRadius: CGFloat
     private let content: () -> Content
@@ -36,8 +37,36 @@ struct GlassCard<Content: View>: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(.white.opacity(0.18), lineWidth: 1)
+                    .stroke(strokeColor, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.16), radius: shadowRadius, x: 0, y: 12)
+            .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: 12)
+            .shadow(color: ambientShadow, radius: 4, x: 0, y: 2)
+    }
+
+    private var strokeColor: Color {
+        switch colorScheme {
+        case .dark:
+            return .white.opacity(0.18)
+        default:
+            return .black.opacity(0.12)
+        }
+    }
+
+    private var shadowColor: Color {
+        switch colorScheme {
+        case .dark:
+            return .black.opacity(0.28)
+        default:
+            return .black.opacity(0.22)
+        }
+    }
+
+    private var ambientShadow: Color {
+        switch colorScheme {
+        case .dark:
+            return .white.opacity(0.04)
+        default:
+            return .black.opacity(0.06)
+        }
     }
 }

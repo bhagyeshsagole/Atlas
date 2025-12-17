@@ -23,7 +23,11 @@ struct ContentView: View {
         NavigationStack(path: $path) {
             HomeView(
                 startWorkout: { path.append(.workout) },
-                openSettings: { showSettings = true }
+                openSettings: {
+                    if !showSettings {
+                        showSettings = true
+                    }
+                }
             )
             .navigationDestination(for: Route.self) { route in
                 switch route {

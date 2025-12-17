@@ -34,6 +34,7 @@ struct HomeView: View {
                     HStack {
                         Spacer()
                         Button {
+                            assert(Thread.isMainThread, "openSettings should run on main thread")
                             Haptics.playLightTap()
                             openSettings()
                         } label: {
@@ -183,17 +184,13 @@ struct HomeView: View {
     /// Formats the current month name for the header.
     /// Change impact: Changing the formatter impacts month title styling and localization.
     private var currentMonthTitle: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "LLLL yyyy"
-        return formatter.string(from: Date())
+        Self.monthFormatter.string(from: Date())
     }
 
     /// Formats today's label shown in the header badge.
     /// Change impact: Tweaking the format changes how the badge reads (e.g., includes weekday).
     private var todayString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE, MMM d"
-        return formatter.string(from: Date())
+        Self.todayFormatter.string(from: Date())
     }
 
     /// Builds the adaptive background gradient for light/dark.
@@ -251,6 +248,18 @@ struct HomeView: View {
     private var isDarkAppearance: Bool {
         appearanceMode == "dark"
     }
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "LLLL yyyy"
+        return formatter
+    }()
+
+    private static let todayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, MMM d"
+        return formatter
+    }()
 }
 
 struct DayCell: View {

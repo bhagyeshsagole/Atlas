@@ -12,9 +12,9 @@ enum AppMotion {
     /// Change impact: Tuning duration or bounce here retunes every animation and press response in the app.
     static var primary: Animation {
         if #available(iOS 17.0, *) {
-            return .snappy(duration: 0.24, extraBounce: 0.08)
+            return .interactiveSpring(response: 0.28, dampingFraction: 0.82, blendDuration: 0.12)
         } else {
-            return .interpolatingSpring(stiffness: 320, damping: 26)
+            return .interpolatingSpring(stiffness: 300, damping: 26)
         }
     }
 
