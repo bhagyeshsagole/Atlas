@@ -44,27 +44,11 @@ struct HomeView: View {
                         }
                         .buttonStyle(.plain)
                         Spacer()
-                        Button {
+                        AtlasHeaderIconButton(systemName: "gearshape") {
                             assert(Thread.isMainThread, "openSettings should run on main thread")
                             Haptics.playLightTap()
                             openSettings()
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .appFont(.section, weight: .semibold)
-                                .symbolRenderingMode(.monochrome)
-                                .foregroundStyle(.primary)
-                                .padding(AppStyle.headerIconHitArea)
-                                .background(
-                                    RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
-                                        .fill(.white.opacity(isDarkAppearance ? AppStyle.headerButtonFillOpacityDark : AppStyle.headerButtonFillOpacityLight))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
-                                        .stroke(.white.opacity(AppStyle.headerButtonStrokeOpacity), lineWidth: 1)
-                                )
                         }
-                        .buttonStyle(.plain)
-                        .tint(.primary)
                     }
                     .padding(.top, AppStyle.headerTopPadding)
                     .tint(.primary)
@@ -117,16 +101,11 @@ struct HomeView: View {
             }
             .scrollIndicators(.hidden)
 
-            // Start Workout pill pinned near bottom: press feel driven by `PressableGlassButtonStyle` constants.
-            Button {
+            // Start Workout pill pinned near bottom using shared AtlasPillButton sizing.
+            AtlasPillButton("Start Workout") {
                 Haptics.playLightTap()
                 startWorkout()
-            } label: {
-                Text("Start Workout")
-                    .appFont(.pill, weight: .semibold)
-                    .foregroundStyle(.primary)
             }
-            .buttonStyle(PressableGlassButtonStyle())
             .padding(.horizontal, AppStyle.screenHorizontalPadding)
             .padding(.bottom, AppStyle.startButtonBottomPadding)
             .opacity(showStartButton ? 1 : 0)
@@ -250,9 +229,6 @@ struct HomeView: View {
 
     /// Resolves whether the appearance should be dark based on stored mode and system fallback.
     /// Change impact: Adjusting logic here affects gradients and button fills on Home.
-    private var isDarkAppearance: Bool {
-        appearanceMode == "dark"
-    }
 }
 
 struct DayCell: View {

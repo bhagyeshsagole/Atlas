@@ -44,70 +44,46 @@ struct RoutineListView: View {
             }
             .scrollIndicators(.hidden)
 
-            if let routine = routineMenuTarget, isMenuPresented {
-                Color.black.opacity(0.001)
-                    .ignoresSafeArea()
-                    .onTapGesture {
+            if let routine = routineMenuTarget {
+                AtlasCompactCenterMenu(isPresented: isMenuPresented, onDismiss: dismissRoutineMenu) {
+                    Button {
+                        #if DEBUG
+                        print("[ROUTINE] Edit selected: \(routine.name)")
+                        #endif
+                        Haptics.playLightTap()
+                        routineToEdit = routine
                         dismissRoutineMenu()
+                    } label: {
+                        Text("Edit")
+                            .appFont(.title3, weight: .semibold)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
                     }
-                VStack(spacing: 12) {
-                    GlassCard {
-                        VStack(spacing: 12) {
-                            Button {
-                                #if DEBUG
-                                print("[ROUTINE] Edit selected: \(routine.name)")
-                                #endif
-                                Haptics.playLightTap()
-                                routineToEdit = routine
-                                dismissRoutineMenu()
-                            } label: {
-                                Text("Edit")
-                                    .appFont(.title3, weight: .semibold)
-                                    .foregroundStyle(.primary)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            Divider().foregroundStyle(.white.opacity(0.2))
-                            Button(role: .destructive) {
-                                routineStore.deleteRoutine(id: routine.id)
-                                Haptics.playLightTap()
-                                #if DEBUG
-                                print("[ROUTINE] Delete selected: \(routine.name)")
-                                print("[ROUTINE] Total routines now: \(routineStore.routines.count)")
-                                #endif
-                                dismissRoutineMenu()
-                            } label: {
-                                Text("Delete")
-                                    .appFont(.title3, weight: .semibold)
-                                    .foregroundStyle(.red)
-                                    .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 16)
-                    }
-                    .frame(maxWidth: AppStyle.popupMaxWidth)
-                    Button("Cancel") {
+                    Divider().foregroundStyle(.white.opacity(0.2))
+                    Button(role: .destructive) {
+                        routineStore.deleteRoutine(id: routine.id)
+                        Haptics.playLightTap()
+                        #if DEBUG
+                        print("[ROUTINE] Delete selected: \(routine.name)")
+                        print("[ROUTINE] Total routines now: \(routineStore.routines.count)")
+                        #endif
                         dismissRoutineMenu()
+                    } label: {
+                        Text("Delete")
+                            .appFont(.title3, weight: .semibold)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
                     }
-                    .appFont(.body, weight: .semibold)
-                    .foregroundStyle(.secondary)
                 }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center) // VISUAL TWEAK: Change popup width/spacing.
-                .transition(.opacity)
             }
         }
         .navigationTitle("Workout")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: onAddRoutine) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 22, weight: .semibold)) // VISUAL TWEAK: Change `plusSize` to make it heavier/lighter.
-                        .foregroundStyle(.primary)
-                }
-                .padding(AppStyle.headerIconHitArea)
-                .contentShape(Rectangle())
+                AtlasHeaderIconButton(systemName: "plus", action: onAddRoutine)
             }
         }
         .tint(.primary)
@@ -184,7 +160,7 @@ private struct RoutineCardView: View {
     let onMenu: () -> Void
 
     var body: some View {
-        GlassCard {
+        AtlasRowPill {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(routine.name)
@@ -199,14 +175,7 @@ private struct RoutineCardView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        Button(action: onMenu) {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.primary)
-                                .padding(6)
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
+                        AtlasHeaderIconButton(systemName: "ellipsis", action: onMenu)
                     }
                 }
                 let tags = routineTags(routine)

@@ -28,19 +28,10 @@ struct WorkoutView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Finish button: press feel comes from `PressableGlassButtonStyle`.
-            Button {
+            // Finish button shares the unified pill sizing.
+            AtlasPillButton("Finish Workout", systemImage: "checkmark.circle.fill") {
                 finishWorkout()
-            } label: {
-                HStack(spacing: AppStyle.pillContentSpacing) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .appFont(.pill, weight: .semibold)
-                    Text("Finish Workout")
-                        .appFont(.pill, weight: .semibold)
-                }
-                .foregroundStyle(.primary)
             }
-            .buttonStyle(PressableGlassButtonStyle())
 
             Spacer()
         }

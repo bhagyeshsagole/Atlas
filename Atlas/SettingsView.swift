@@ -133,22 +133,12 @@ struct SettingsView: View {
 struct SettingsHeaderBar: View {
     let title: String
     let onDismiss: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
 
     /// Builds the top bar with dismiss X and centered title.
     /// Change impact: Adjusting padding or icon styling alters perceived density and hierarchy of the header.
     var body: some View {
         HStack(spacing: AppStyle.settingsHeaderSpacing) {
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .appFont(.section, weight: .semibold)
-                    .foregroundStyle(.primary)
-                    .padding(AppStyle.headerIconHitArea)
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(colorScheme == .dark ? AppStyle.headerButtonFillOpacityDark : AppStyle.headerButtonFillOpacityLight))
-                    )
-            }
+            AtlasHeaderIconButton(systemName: "xmark", isGlassBackplate: true, action: onDismiss)
             Spacer()
             /// VISUAL TWEAK: Change `AppStyle.titleBaseSize` or `AppStyle.fontBump` to resize the Settings title.
             /// VISUAL TWEAK: Adjust `AppStyle.settingsHeaderSpacing` or header chip fill opacities to change header density.
@@ -156,7 +146,7 @@ struct SettingsHeaderBar: View {
                 .appFont(.title, weight: .semibold)
                 .foregroundStyle(.primary)
             Spacer()
-            Color.clear.frame(width: AppStyle.headerPlaceholderWidth)
+            Color.clear.frame(width: AtlasControlTokens.headerButtonSize)
         }
     }
 }
@@ -178,7 +168,6 @@ struct SettingsSectionLabel: View {
 }
 
 struct SettingsGroupCard<Content: View>: View {
-    @Environment(\.colorScheme) private var colorScheme
     @ViewBuilder let content: Content
 
     /// Wraps rows in a glass-like card with subtle stroke and shadow.
@@ -189,14 +178,7 @@ struct SettingsGroupCard<Content: View>: View {
         }
         .padding(AppStyle.settingsGroupPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.settingsGroupCornerRadius)
-                .fill(GlassStyle.background(for: colorScheme))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.settingsGroupCornerRadius)
-                .stroke(GlassStyle.outerStroke(for: colorScheme), lineWidth: 1)
-        )
+        .atlasGlassCard()
     }
 }
 

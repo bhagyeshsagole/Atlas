@@ -35,21 +35,16 @@ struct ReviewRoutineView: View {
                 } else {
                     VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                         ForEach($editableWorkouts) { $workout in
-                            GlassCard {
+                            AtlasRowPill {
                                 VStack(alignment: .leading, spacing: 12) {
                                     HStack {
                                         Text(workout.name)
                                             .appFont(.title, weight: .semibold)
                                             .foregroundStyle(.primary)
                                         Spacer()
-                                        Button {
+                                        AtlasHeaderIconButton(systemName: "xmark") {
                                             removeWorkout(workout.id)
-                                        } label: {
-                                            Image(systemName: "xmark")
-                                                .appFont(.section, weight: .bold)
-                                                .foregroundStyle(.secondary)
                                         }
-                                        .buttonStyle(.plain)
                                     }
 
                                     VStack(alignment: .leading, spacing: 10) {
@@ -66,14 +61,9 @@ struct ReviewRoutineView: View {
                     }
                 }
 
-                Button {
+                AtlasPillButton("Done") {
                     addRoutine()
-                } label: {
-                    Text("Done")
-                        .appFont(.pill, weight: .semibold)
-                        .foregroundStyle(.primary)
                 }
-                .buttonStyle(PressableGlassButtonStyle())
                 .disabled(editableWorkouts.isEmpty)
             }
             .padding(AppStyle.contentPaddingLarge)

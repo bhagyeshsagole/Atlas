@@ -58,14 +58,9 @@ struct CreateRoutineView: View {
                     }
                 }
 
-                Button {
+                AtlasPillButton(isParsing ? "Generating…" : "Generate") {
                     generate()
-                } label: {
-                    Text(isParsing ? "Generating…" : "Generate")
-                        .appFont(.pill, weight: .semibold)
-                        .foregroundStyle(.primary)
                 }
-                .buttonStyle(PressableGlassButtonStyle())
                 .disabled(isGenerating)
             }
             .padding(AppStyle.contentPaddingLarge)
