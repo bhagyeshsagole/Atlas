@@ -49,9 +49,9 @@ struct RoutineAIService {
             #endif
         }
 
-        guard !OpenAIConfig.apiKey.isEmpty else {
+        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
             #if DEBUG
-            print("[AI] Using fallback parser (reason: missing key)")
+            print("[AI] Missing API key — using fallback")
             #endif
             let workouts = fallbackParse(rawText: trimmedInput)
             logParsed(workouts)
@@ -82,7 +82,7 @@ struct RoutineAIService {
             return mapped
         } catch {
             #if DEBUG
-            print("[AI] Using fallback parser (reason: \(error))")
+            print("[AI] OpenAI failed (\(error)) — using fallback")
             #endif
             let fallback = fallbackParse(rawText: trimmedInput)
             logParsed(fallback)
@@ -167,9 +167,9 @@ struct RoutineAIService {
     /// Generates a workout list using OpenAI when possible, otherwise uses template-driven fallbacks.
     /// Change impact: Edit to reshape AI prompt wording or offline generation behavior.
     static func generateWorkoutListString(fromRequest request: String, routineTitleHint: String?) async -> String {
-        guard !OpenAIConfig.apiKey.isEmpty else {
+        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
             #if DEBUG
-            print("[AI] Using fallback generator (reason: missing key)")
+            print("[AI] Missing API key — using fallback")
             #endif
             return fallbackGeneratedList(for: request)
         }
@@ -181,7 +181,7 @@ struct RoutineAIService {
             return try await OpenAIChatClient.generateWorkoutListString(requestText: request, routineTitleHint: routineTitleHint)
         } catch {
             #if DEBUG
-            print("[AI] Using fallback generator (reason: \(error))")
+            print("[AI] OpenAI failed (\(error)) — using fallback")
             #endif
             return fallbackGeneratedList(for: request)
         }

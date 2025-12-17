@@ -158,8 +158,7 @@ private extension OpenAIChatClient {
     /// Builds an authorized OpenAI chat completion request using the current config.
     /// Change impact: Adjust headers or payload fields to alter how the app talks to OpenAI.
     static func buildRequest(messages: [ChatMessage], temperature: Double, responseFormat: ResponseFormat?) throws -> URLRequest {
-        let apiKey = OpenAIConfig.apiKey
-        guard !apiKey.isEmpty else {
+        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
             throw NSError(domain: "OpenAIChatClient", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing OpenAI API key."])
         }
 
