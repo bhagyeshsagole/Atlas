@@ -4,6 +4,7 @@
 //
 //  Created by Codex on 2/20/24.
 //
+//  Update: Hardened AI pipeline with generate/repair stages, structured logging, and safer timeouts.
 
 import Foundation
 
@@ -17,9 +18,14 @@ struct RoutineParseWorkout: Codable {
     let repsText: String
 }
 
-struct WorkoutListResponse: Codable {
-    let workoutList: String
-    let notes: String?
+struct RepairedWorkout: Codable {
+    let name: String
+    let sets: Int?
+    let reps: String?
+}
+
+struct RepairedWorkoutsResponse: Codable {
+    let workouts: [RepairedWorkout]
 }
 
 struct OpenAIError: Error {
@@ -32,7 +38,7 @@ struct OpenAIChatClient {
     /// Change impact: Edit to reshape the parsing prompt, temperature, or JSON decoding strategy.
     static func parseRoutineWorkouts(rawText: String) async throws -> RoutineParseOutput {
         let messages: [ChatMessage] = [
-            .init(role: "developer", content: Self.prompt),
+            .init(role: "developer", content: Self.parserPrompt),
             .init(role: "user", content: rawText)
         ]
         let request = try buildRequest(messages: messages, temperature: 0.2, responseFormat: ResponseFormat(type: "json_object"))
@@ -59,46 +65,86 @@ struct OpenAIChatClient {
         }
     }
 
-    /// Generates a workout list string via OpenAI with the configured prompt and temperature.
-    /// Change impact: Modify to tune creativity, prompt wording, or formatting expectations.
-    static func generateWorkoutListString(
+    /// Stage A: Generate free-form routine text.
+    static func generateRoutineFreeform(
         requestText: String,
-        routineTitleHint: String?,
         constraints: RoutineAIService.RoutineConstraints,
-        correctiveNote: String? = nil,
-        forceExactFormatReminder: Bool = false
-    ) async throws -> WorkoutListResponse {
-        var userContent = "Request: \(requestText)"
-        userContent += "\nRoutineTitleHint: \(routineTitleHint ?? "")"
-        userContent += "\nConstraints: atHome=\(constraints.atHome), noGym=\(constraints.noGym), noDumbbells=\(constraints.noDumbbells), noMachines=\(constraints.noMachines), bodyweightOnly=\(constraints.bodyweightOnly), preferredSplit=\(constraints.preferredSplit?.rawValue ?? "nil")"
-        if let correctiveNote {
-            userContent += "\nCorrection: \(correctiveNote)"
-        }
-        if forceExactFormatReminder {
-            userContent += "\nReturn JSON with workoutList in EXACT format. No bullets. No commas."
-        }
+        requestId: String
+    ) async throws -> (text: String, status: Int, elapsedMs: Int) {
+        var userContent = "Request: \(requestText)\n"
+        userContent += "Constraints detected: atHome=\(constraints.atHome), noGym=\(constraints.noGym), noDumbbells=\(constraints.noDumbbells), noMachines=\(constraints.noMachines), bodyweightOnly=\(constraints.bodyweightOnly)"
 
         let messages: [ChatMessage] = [
-            .init(role: "developer", content: generatorPrompt),
+            .init(role: "system", content: generateSystemPrompt),
+            .init(role: "developer", content: generateDeveloperPrompt),
             .init(role: "user", content: userContent)
         ]
-        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
-        let (data, _) = try await perform(request: request)
+
+        let request = try buildRequest(messages: messages, temperature: 0.3, responseFormat: nil)
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
         guard let content = chatResponse.choices.first?.message.content else {
-            throw OpenAIError(statusCode: nil, message: "No content returned from OpenAI.")
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        #if DEBUG
+        print("[AI][\(requestId)] stage=generate model=\(OpenAIConfig.model) status=\(response.statusCode) ms=\(elapsed)")
+        #endif
+
+        return (stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines), response.statusCode, elapsed)
+    }
+
+    /// Stage B/C: Repair routine text into strict JSON.
+    static func repairRoutine(
+        rawText: String,
+        constraints: RoutineAIService.RoutineConstraints,
+        requestId: String,
+        strict: Bool
+    ) async throws -> (response: RepairedWorkoutsResponse, status: Int, elapsedMs: Int) {
+        var userContent = """
+Raw routine text:
+\"\"\"
+\(rawText)
+\"\"\"
+Constraints detected: atHome=\(constraints.atHome), noGym=\(constraints.noGym), noDumbbells=\(constraints.noDumbbells), noMachines=\(constraints.noMachines), bodyweightOnly=\(constraints.bodyweightOnly)
+Return JSON now.
+"""
+        if strict {
+            userContent.append("\nIf you output anything except valid JSON, you failed.")
+        }
+
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: repairSystemPrompt),
+            .init(role: "developer", content: repairDeveloperPrompt),
+            .init(role: "user", content: userContent)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: ResponseFormat(type: "json_object"))
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
         }
 
         let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let jsonData = cleaned.data(using: .utf8) else {
-            throw OpenAIError(statusCode: nil, message: "Unable to encode model response.")
+            throw OpenAIError(statusCode: response.statusCode, message: "Unable to encode model response.")
         }
 
         do {
-            return try JSONDecoder().decode(WorkoutListResponse.self, from: jsonData)
+            let decoded = try JSONDecoder().decode(RepairedWorkoutsResponse.self, from: jsonData)
+            #if DEBUG
+            print("[AI][\(requestId)] stage=\(strict ? "repair2" : "repair") model=\(OpenAIConfig.model) status=\(response.statusCode) ms=\(elapsed) workouts=\(decoded.workouts.count)")
+            #endif
+            return (decoded, response.statusCode, elapsed)
         } catch {
-            throw OpenAIError(statusCode: nil, message: "Failed to decode workout list JSON: \(error.localizedDescription)")
+            throw OpenAIError(statusCode: response.statusCode, message: "Failed to decode workout JSON: \(error.localizedDescription)")
         }
     }
 
@@ -117,7 +163,7 @@ struct OpenAIChatClient {
         return trimmed
     }
 
-    private static let prompt = """
+    private static let parserPrompt = """
 You are a routine parser. Convert the user's text into JSON.
 
 Rules:
@@ -139,31 +185,35 @@ Return schema:
 User text will be provided in the user message.
 """
 
-    private static let generatorPrompt = """
-You are a strength training routine generator.
-You MUST output valid JSON only (no markdown, no extra text).
+    private static let generateSystemPrompt = """
+You are a strength training coach. The user may be vague (e.g., “Forearms workout”).
+Your job is to propose a routine that matches the request and constraints. Keep it concise.
+"""
 
-Constraints rules:
-- If `bodyweightOnly=true`: use ONLY bodyweight exercises (no equipment at all).
-- If `noGym=true` or `atHome=true`: do NOT use gym machines/cables.
-- If `noDumbbells=true`: do NOT use dumbbells. (Bodyweight, bands, pull-up bar, backpack, chair are allowed unless bodyweightOnly=true.)
-- Choose exercises appropriate to the requested day (push/pull/legs).
-- 6–8 exercises.
+    private static let generateDeveloperPrompt = """
+Return a routine with 6–8 exercises whenever possible.
+If the user does not specify equipment, assume normal gym access.
+If the user says “at home” / “no gym” / “no dumbbells” / “no machines” / “bodyweight only”, respect it.
+Prefer simple, common exercise names.
+Try to include sets + rep ranges, but it’s okay if you don’t.
+"""
 
-Output schema (EXACT):
+    private static let repairSystemPrompt = """
+You are a formatter. You ONLY output valid JSON. No markdown. No commentary.
+"""
+
+    private static let repairDeveloperPrompt = """
+Convert the provided routine text into the JSON schema below.
+If any exercise is missing sets/reps, fill defaults: sets=3, reps="10-12".
+Guarantee at least 5 exercises (prefer 6–8). If fewer, add more consistent exercises.
+Use Title Case for exercise names.
+
+JSON schema (EXACT KEYS):
 {
-  "workoutList": "<Exercise Name> x <sets> <reps> and <Exercise Name> x <sets> <reps> and ...",
-  "notes": "short string, optional"
+  "workouts": [
+    { "name": "Exercise Name", "sets": 3, "reps": "10-12" }
+  ]
 }
-
-Formatting rules for workoutList:
-- Single line string.
-- Use exactly “ x ” between exercise and sets (example: “Push-Up x 3 8-12”).
-- Use “ and ” between exercises (not commas/bullets).
-- Sets are integers (3 or 4).
-- Reps are ranges like “8-12”, “10-12”, “12-15”.
-- Title Case exercise names.
-- No warmups, no explanations.
 """
 }
 
@@ -209,6 +259,7 @@ private extension OpenAIChatClient {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 25
 
         let payload = OpenAIChatRequest(
             model: OpenAIConfig.model,
