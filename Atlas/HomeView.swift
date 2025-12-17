@@ -2,7 +2,7 @@
 //  HomeView.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Created by Codex on 2/12/24
 //
 
 import SwiftUI
@@ -11,7 +11,6 @@ import SwiftData
 struct HomeView: View {
     @AppStorage("appearanceMode") private var appearanceMode = "light"
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     private let calendar = Calendar.current
     private let cardCornerRadius: CGFloat = 26
@@ -24,8 +23,6 @@ struct HomeView: View {
 
     @State private var showCalendarCard = false
     @State private var showStartButton = false
-    @State private var isBrandPressed = false
-    @Namespace private var brandNamespace
 
     /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
     /// Change impact: Tweaking layout constants or reveal state timing shifts the feel of the entrance and spacing.
@@ -36,25 +33,14 @@ struct HomeView: View {
                     // Top bar: brand label and settings button aligned to one row.
                     HStack {
                         Button {
-                            triggerBrandPulse()
+                            Haptics.playMediumTap()
                         } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.primary.opacity(0.08))
-                                    .frame(width: 44, height: 44)
-                                    .scaleEffect(isBrandPressed ? 1.0 : 0.001)
-                                    .opacity(isBrandPressed ? 1.0 : 0.0)
-                                    .animation(reduceMotion ? .easeOut(duration: 0.2) : AppMotion.primary, value: isBrandPressed)
-                                    .matchedGeometryEffect(id: "brandBadge", in: brandNamespace)
-
-                                Text("Atlas")
-                                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(.primary)
-                                    .matchedGeometryEffect(id: "brandText", in: brandNamespace)
-                                    .padding(.horizontal, 4)
-                            }
-                            .frame(height: 44, alignment: .center)
-                            .contentShape(Rectangle())
+                            Text("Atlas")
+                                .font(.system(.title2, design: .rounded).weight(.bold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 10)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         Spacer()
@@ -90,7 +76,7 @@ struct HomeView: View {
                             HStack(spacing: headerSpacing) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(currentMonthTitle)
-                                        .font(.title2.weight(.semibold))
+                                        .font(.title.weight(.semibold))
                                         .foregroundStyle(.primary)
                                 }
                             }
@@ -99,7 +85,7 @@ struct HomeView: View {
                             HStack {
                                 ForEach(shortWeekdays, id: \.self) { symbol in
                                     Text(symbol)
-                                        .font(.footnote.weight(.medium))
+                                        .font(.callout.weight(.medium))
                                         .foregroundStyle(.secondary)
                                         .frame(maxWidth: .infinity)
                                 }
@@ -137,9 +123,9 @@ struct HomeView: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "figure.run")
-                        .font(.headline.weight(.semibold))
+                        .font(.title3.weight(.semibold))
                     Text("Start Workout")
-                        .font(.headline.weight(.semibold))
+                        .font(.title3.weight(.semibold))
                 }
                 .foregroundStyle(.primary)
             }
@@ -198,7 +184,7 @@ struct HomeView: View {
     /// Formats the current month name for the header.
     /// Change impact: Changing the formatter impacts month title styling and localization.
     private var currentMonthTitle: String {
-        Self.monthFormatter.string(from: Date())
+        HomeView.monthFormatter.string(from: Date())
     }
 
     /// Builds the adaptive background gradient for light/dark.
@@ -251,35 +237,17 @@ struct HomeView: View {
         return calendar.isDateInToday(date)
     }
 
-    /// Resolves whether the appearance should be dark based on stored mode and system fallback.
-    /// Change impact: Adjusting logic here affects gradients and button fills on Home.
-    private var isDarkAppearance: Bool {
-        appearanceMode == "dark"
-    }
-
-    /// Triggers the brand morph animation with haptic feedback.
-    /// Change impact: Adjusting timings changes how the brand pulse feels.
-    private func triggerBrandPulse() {
-        guard !isBrandPressed else { return }
-        assert(Thread.isMainThread, "Brand pulse should run on main thread")
-        Haptics.playMediumTap()
-        let animation = reduceMotion ? Animation.easeOut(duration: 0.2) : AppMotion.primary
-        withAnimation(animation) {
-            isBrandPressed = true
-        }
-        let delay = reduceMotion ? 0.2 : 0.5
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            withAnimation(animation) {
-                isBrandPressed = false
-            }
-        }
-    }
-
     private static let monthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "LLLL yyyy"
         return formatter
     }()
+
+    /// Resolves whether the appearance should be dark based on stored mode and system fallback.
+    /// Change impact: Adjusting logic here affects gradients and button fills on Home.
+    private var isDarkAppearance: Bool {
+        appearanceMode == "dark"
+    }
 }
 
 struct DayCell: View {
@@ -297,7 +265,7 @@ struct DayCell: View {
                     .font(isToday ? .body.weight(.semibold) : .body.weight(.regular))
                     .foregroundStyle(.primary.opacity(isToday ? 0.95 : 0.75))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 7)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
                             .fill(.white.opacity(isToday ? 0.12 : 0.0))
