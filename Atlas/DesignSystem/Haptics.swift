@@ -8,15 +8,15 @@
 import UIKit
 
 enum Haptics {
-    /// Triggers a light tap feedback for primary taps.
-    /// Change impact: Switching the impact style alters how Start/Finish taps feel system-wide.
+    /// VISUAL TWEAK: Change the `UIImpactFeedbackGenerator` style here to adjust the light tap feel.
+    /// VISUAL TWEAK: Swap `.light`, `.medium`, or `.soft` to tune gentle taps across the app.
     static func playLightTap() {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }
 
-    /// Triggers a medium tap feedback for brand or primary affordances.
-    /// Change impact: Adjusting this style changes how brand presses feel globally.
+    /// VISUAL TWEAK: Change the `UIImpactFeedbackGenerator` style here to adjust brand/primary tap feel.
+    /// VISUAL TWEAK: Swap `.medium`, `.heavy`, or `.rigid` to change press impact strength everywhere.
     static func playMediumTap() {
         let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.impactOccurred()

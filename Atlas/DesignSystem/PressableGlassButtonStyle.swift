@@ -9,15 +9,17 @@ import SwiftUI
 
 struct PressableGlassButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var colorScheme
-    private let pressedScale: CGFloat = 0.97
-    private let cornerRadius: CGFloat = 18
+    private let pressedScale: CGFloat = AppStyle.glassButtonPressedScale
+    private let cornerRadius: CGFloat = AppStyle.glassButtonCornerRadius
 
     /// Builds the pressable styling for glass buttons like Start Workout.
     /// Change impact: Tweaking `pressedScale`, stroke opacity, or material opacity instantly changes how the pill press feels everywhere.
     func makeBody(configuration: Configuration) -> some View {
+        /// VISUAL TWEAK: Change `AppStyle.glassButtonPressedScale` to deepen or soften the press animation.
+        /// VISUAL TWEAK: Adjust `AppStyle.glassButtonCornerRadius` or padding constants to reshape all pills.
         configuration.label
-            .padding(.vertical, 14)
-            .padding(.horizontal, 18)
+            .padding(.vertical, AppStyle.glassButtonVerticalPadding)
+            .padding(.horizontal, AppStyle.glassButtonHorizontalPadding)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)

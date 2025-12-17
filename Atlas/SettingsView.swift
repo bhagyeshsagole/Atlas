@@ -11,7 +11,6 @@ struct SettingsView: View {
     let onDismiss: () -> Void
     @AppStorage("appearanceMode") private var appearanceMode = "light"
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var activeDropdown: DropdownType?
 
@@ -22,9 +21,9 @@ struct SettingsView: View {
             backgroundColor
                 .ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                     SettingsHeaderBar(title: "Settings", onDismiss: onDismiss)
-                        .padding(.top, 6)
+                        .padding(.top, AppStyle.headerTopPadding)
 
                     // Appearance selector via shared dropdown menu.
                     SettingsSectionLabel(text: "APPEARANCE")
@@ -91,11 +90,11 @@ struct SettingsView: View {
                         )
                     }
 
-                    Spacer(minLength: 40)
+                    Spacer(minLength: AppStyle.settingsBottomPadding)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-                .padding(.bottom, 40)
+                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                .padding(.top, AppStyle.screenTopPadding)
+                .padding(.bottom, AppStyle.settingsBottomPadding)
             }
         }
         .tint(.primary)
@@ -124,7 +123,9 @@ struct SettingsView: View {
     /// Builds the background color tuned for the current theme.
     /// Change impact: Adjusting opacities here shifts overall contrast for light/dark mode.
     private var backgroundColor: Color {
-        appearanceMode == "dark" ? Color.black.opacity(0.94) : Color.white.opacity(0.96)
+        /// VISUAL TWEAK: Change `AppStyle.settingsBackgroundOpacityLight`/`Dark` to brighten or darken the Settings backdrop.
+        /// VISUAL TWEAK: Swap the base `Color.black`/`Color.white` if you want a different base hue.
+        appearanceMode == "dark" ? Color.black.opacity(AppStyle.settingsBackgroundOpacityDark) : Color.white.opacity(AppStyle.settingsBackgroundOpacityLight)
     }
 
 }
@@ -132,27 +133,30 @@ struct SettingsView: View {
 struct SettingsHeaderBar: View {
     let title: String
     let onDismiss: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Builds the top bar with dismiss X and centered title.
     /// Change impact: Adjusting padding or icon styling alters perceived density and hierarchy of the header.
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: AppStyle.settingsHeaderSpacing) {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.custom("Helvetica Neue", size: 16).weight(.semibold))
+                    .appFont(.section, weight: .semibold)
                     .foregroundStyle(.primary)
-                    .padding(10)
+                    .padding(AppStyle.headerIconHitArea)
                     .background(
                         Circle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(Color.white.opacity(colorScheme == .dark ? AppStyle.headerButtonFillOpacityDark : AppStyle.headerButtonFillOpacityLight))
                     )
             }
             Spacer()
+            /// VISUAL TWEAK: Change `AppStyle.titleBaseSize` or `AppStyle.fontBump` to resize the Settings title.
+            /// VISUAL TWEAK: Adjust `AppStyle.settingsHeaderSpacing` or header chip fill opacities to change header density.
             Text(title)
-                .font(.custom("Helvetica Neue", size: 20).weight(.semibold))
+                .appFont(.title, weight: .semibold)
                 .foregroundStyle(.primary)
             Spacer()
-            Color.clear.frame(width: 40)
+            Color.clear.frame(width: AppStyle.headerPlaceholderWidth)
         }
     }
 }
@@ -163,33 +167,35 @@ struct SettingsSectionLabel: View {
     /// Renders a compact uppercase section label in secondary tone.
     /// Change impact: Adjusting font or opacity shifts perceived grouping strength.
     var body: some View {
+        /// VISUAL TWEAK: Change `AppStyle.sectionBaseSize` or `AppStyle.fontBump` to resize section labels.
+        /// VISUAL TWEAK: Toggle `AppStyle.sectionLetterCaseUppercased` to switch casing for all section headers.
         Text(text)
-            .font(.custom("Helvetica Neue", size: 12).weight(.bold))
+            .appFont(.section, weight: .bold)
             .foregroundStyle(.secondary)
-            .textCase(.uppercase)
+            .textCase(AppStyle.sectionLetterCaseUppercased ? .uppercase : .none)
             .padding(.horizontal, 4)
     }
 }
 
 struct SettingsGroupCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ViewBuilder let content: Content
-    private let cornerRadius: CGFloat = 18
 
     /// Wraps rows in a glass-like card with subtle stroke and shadow.
     /// Change impact: Tweaking corner radius or fill opacity changes the sense of depth across all settings groups.
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: AppStyle.rowSpacing) {
             content
         }
-        .padding(12)
+        .padding(AppStyle.settingsGroupPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color.white.opacity(0.08))
+            RoundedRectangle(cornerRadius: AppStyle.settingsGroupCornerRadius)
+                .fill(GlassStyle.background(for: colorScheme))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: AppStyle.settingsGroupCornerRadius)
+                .stroke(GlassStyle.outerStroke(for: colorScheme), lineWidth: 1)
         )
     }
 }
@@ -204,19 +210,21 @@ struct SettingsRow: View {
     /// Change impact: Adjusting spacing or chevron visibility changes tap targets and hierarchy.
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: AppStyle.rowSpacing) {
+                /// VISUAL TWEAK: Change `AppStyle.bodyBaseSize` or `AppStyle.fontBump` to adjust row label size.
+                /// VISUAL TWEAK: Adjust `AppStyle.rowSpacing` to change spacing between label and trailing accessories.
                 Text(title)
-                    .font(.custom("Helvetica Neue", size: 16))
+                    .appFont(.body)
                     .foregroundStyle(.primary)
                 Spacer()
                 if let value {
                     Text(value)
-                        .font(.custom("Helvetica Neue", size: 15))
+                        .appFont(.body, weight: .regular)
                         .foregroundStyle(.secondary)
                 }
                 if showsChevron {
                     Image(systemName: "chevron.right")
-                        .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
+                        .appFont(.caption, weight: .semibold)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -242,22 +250,24 @@ struct SettingsDropdownRow: View {
     var body: some View {
         ZStack(alignment: .trailing) {
             Button(action: onTap) {
-                HStack(spacing: 12) {
+                HStack(spacing: AppStyle.rowSpacing) {
+                    /// VISUAL TWEAK: Change `AppStyle.bodyBaseSize` or `AppStyle.fontBump` to resize dropdown labels.
+                    /// VISUAL TWEAK: Adjust `AppStyle.rowSpacing`/`AppStyle.rowValueSpacing` to tighten or relax label/value spacing.
                     Text(title)
-                        .font(.custom("Helvetica Neue", size: 16))
+                        .appFont(.body)
                         .foregroundStyle(.primary)
                     Spacer()
-                    HStack(spacing: 6) {
+                    HStack(spacing: AppStyle.rowValueSpacing) {
                         Text(value)
-                            .font(.custom("Helvetica Neue", size: 15))
+                            .appFont(.body, weight: .regular)
                             .foregroundStyle(.secondary)
                         Image(systemName: "chevron.down")
-                            .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
+                            .appFont(.caption, weight: .semibold)
                             .foregroundStyle(.secondary)
                     }
                     .opacity(isOpen ? 0 : 1)
                     .allowsHitTesting(!isOpen)
-                    .animation(.easeInOut(duration: 0.15), value: isOpen)
+                    .animation(.easeInOut(duration: AppStyle.shortAnimationDuration), value: isOpen)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -266,11 +276,11 @@ struct SettingsDropdownRow: View {
 
             if isOpen {
                 DropdownMenuView(options: options, selectedID: selectedID, onSelect: onSelect)
-                    .frame(maxWidth: 170, alignment: .trailing)
+                    .frame(maxWidth: AppStyle.dropdownWidth, alignment: .trailing)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.trailing, 4)
+                    .padding(.trailing, AppStyle.dropdownTrailingPadding)
                     .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
-                    .animation(reduceMotion ? .easeOut(duration: 0.15) : AppMotion.primary, value: isOpen)
+                    .animation(reduceMotion ? .easeOut(duration: AppStyle.shortAnimationDuration) : AppMotion.primary, value: isOpen)
             }
         }
     }
@@ -284,41 +294,43 @@ struct DropdownMenuView: View {
     /// Renders the compact trailing dropdown menu with glass styling.
     /// Change impact: Adjusting corner radius or opacity changes perceived depth for all dropdowns.
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        /// VISUAL TWEAK: Change `AppStyle.dropdownRowSpacing`/padding constants to tighten or loosen the menu list.
+        /// VISUAL TWEAK: Change `AppStyle.dropdownCornerRadius`/`dropdownFillOpacity` to alter dropdown glass styling.
+        VStack(alignment: .leading, spacing: AppStyle.dropdownRowSpacing) {
             ForEach(options) { option in
                 Button {
                     onSelect(option.id)
                 } label: {
                     HStack {
                         Text(option.title)
-                            .font(.custom("Helvetica Neue", size: 15))
+                            .appFont(.body, weight: .regular)
                             .foregroundStyle(.primary)
                         Spacer()
                         if option.id == selectedID {
                             Image(systemName: "checkmark")
-                                .font(.custom("Helvetica Neue", size: 13).weight(.semibold))
+                                .appFont(.caption, weight: .semibold)
                                 .foregroundStyle(.primary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, AppStyle.dropdownRowHorizontalPadding)
+                    .padding(.vertical, AppStyle.dropdownRowVerticalPadding)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white.opacity(0.1))
+                        RoundedRectangle(cornerRadius: AppStyle.dropdownRowCornerRadius)
+                            .fill(Color.white.opacity(AppStyle.dropdownRowFillOpacity))
                     )
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(8)
+        .padding(AppStyle.dropdownMenuPadding)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white.opacity(0.12))
+            RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
+                .fill(Color.white.opacity(AppStyle.dropdownFillOpacity))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+            RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
+                .stroke(Color.white.opacity(AppStyle.dropdownStrokeOpacity), lineWidth: 1)
         )
     }
 }

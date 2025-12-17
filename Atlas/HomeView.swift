@@ -10,14 +10,8 @@ import SwiftData
 
 struct HomeView: View {
     @AppStorage("appearanceMode") private var appearanceMode = "light"
-    @Environment(\.colorScheme) private var colorScheme
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     private let calendar = Calendar.current
-    private let cardCornerRadius: CGFloat = 26
-    private let cardShadowRadius: CGFloat = 18
-    private let gridSpacing: CGFloat = 10
-    private let headerSpacing: CGFloat = 8
-    private let atlasFontSize: CGFloat = 30
 
     let startWorkout: () -> Void
     let openSettings: () -> Void
@@ -30,22 +24,22 @@ struct HomeView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                     // Top bar: brand label and settings button aligned to one row.
                     HStack {
                         Button {
                             onAtlasTap()
                         } label: {
-                            /// VISUAL TWEAK: Change `atlasFontSize` to make "Atlas" bigger/smaller.
-                            /// VISUAL TWEAK: Remove `.italic()` if you don’t want italics.
+                            /// VISUAL TWEAK: Change `AppStyle.brandBaseSize` or `AppStyle.fontBump` to make "Atlas" bigger/smaller.
+                            /// VISUAL TWEAK: Toggle `AppStyle.brandItalic` if you don’t want italics on the brand.
                             /// VISUAL TWEAK: Update `.foregroundStyle(.primary)` to change monochrome color rules.
-                            /// VISUAL TWEAK: Adjust `.padding` or HStack alignment to change header spacing.
+                            /// VISUAL TWEAK: Adjust `AppStyle.brandPaddingHorizontal`/`brandPaddingVertical` or HStack alignment to change header spacing.
                             /// VISUAL TWEAK: Change haptic style in `onAtlasTap()`.
                             Text("Atlas")
-                                .font(.system(size: atlasFontSize, weight: .bold, design: .default).italic())
+                                .appFont(.brand)
                                 .foregroundStyle(.primary)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, AppStyle.brandPaddingHorizontal)
+                                .padding(.vertical, AppStyle.brandPaddingVertical)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -56,33 +50,33 @@ struct HomeView: View {
                             openSettings()
                         } label: {
                             Image(systemName: "gearshape")
-                                .font(.headline.weight(.semibold))
+                                .appFont(.section, weight: .semibold)
                                 .symbolRenderingMode(.monochrome)
                                 .foregroundStyle(.primary)
-                                .padding(10)
+                                .padding(AppStyle.headerIconHitArea)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .fill(.white.opacity(isDarkAppearance ? 0.12 : 0.16))
+                                    RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
+                                        .fill(.white.opacity(isDarkAppearance ? AppStyle.headerButtonFillOpacityDark : AppStyle.headerButtonFillOpacityLight))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
+                                        .stroke(.white.opacity(AppStyle.headerButtonStrokeOpacity), lineWidth: 1)
                                 )
                         }
                         .buttonStyle(.plain)
                         .tint(.primary)
                     }
-                    .padding(.top, 6)
+                    .padding(.top, AppStyle.headerTopPadding)
                     .tint(.primary)
 
-                    // Calendar card: adjust `cardCornerRadius`/`cardShadowRadius`; animations rely on `AppMotion.primary`.
-                    GlassCard(cornerRadius: cardCornerRadius, shadowRadius: cardShadowRadius) {
-                        VStack(alignment: .leading, spacing: 16) {
-                            // Month header row: `headerSpacing` controls spacing between labels and badges.
-                            HStack(spacing: headerSpacing) {
+                    // Calendar card: adjust `AppStyle.glassCardCornerRadiusLarge`/`glassShadowRadiusPrimary`; animations rely on `AppMotion.primary`.
+                    GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                        VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
+                            // Month header row: `AppStyle.calendarHeaderSpacing` controls spacing between labels and badges.
+                            HStack(spacing: AppStyle.calendarHeaderSpacing) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(currentMonthTitle)
-                                        .font(.title.weight(.semibold))
+                                        .appFont(.title, weight: .semibold)
                                         .foregroundStyle(.primary)
                                 }
                             }
@@ -91,14 +85,14 @@ struct HomeView: View {
                             HStack {
                                 ForEach(shortWeekdays, id: \.self) { symbol in
                                     Text(symbol)
-                                        .font(.callout.weight(.medium))
+                                        .appFont(.body, weight: .medium)
                                         .foregroundStyle(.secondary)
                                         .frame(maxWidth: .infinity)
                                 }
                             }
 
-                            // Month grid: adjust `gridSpacing` to change vertical/horizontal padding between days.
-                            LazyVGrid(columns: gridColumns, spacing: gridSpacing) {
+                            // Month grid: adjust `AppStyle.calendarGridSpacing` to change vertical/horizontal padding between days.
+                            LazyVGrid(columns: gridColumns, spacing: AppStyle.calendarGridSpacing) {
                                 ForEach(Array(monthGrid.enumerated()), id: \.offset) { _, date in
                                     DayCell(
                                         date: date,
@@ -111,15 +105,15 @@ struct HomeView: View {
                         }
                     }
                     .opacity(showCalendarCard ? 1 : 0)
-                    .offset(y: showCalendarCard ? 0 : 8)
-                    .padding(.top, 12)
+                    .offset(y: showCalendarCard ? 0 : AppStyle.cardRevealOffset)
+                    .padding(.top, AppStyle.screenTopPadding)
                     .animation(AppMotion.primary, value: showCalendarCard)
 
-                    Spacer(minLength: 120)
+                    Spacer(minLength: AppStyle.homeBottomSpacer)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 160)
+                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                .padding(.top, AppStyle.screenTopPadding)
+                .padding(.bottom, AppStyle.homeBottomInset)
             }
 
             // Start Workout pill pinned near bottom: press feel driven by `PressableGlassButtonStyle` constants.
@@ -127,19 +121,19 @@ struct HomeView: View {
                 Haptics.playLightTap()
                 startWorkout()
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: AppStyle.pillContentSpacing) {
                     Image(systemName: "figure.run")
-                        .font(.title3.weight(.semibold))
+                        .appFont(.pill, weight: .semibold)
                     Text("Start Workout")
-                        .font(.title3.weight(.semibold))
+                        .appFont(.pill, weight: .semibold)
                 }
                 .foregroundStyle(.primary)
             }
             .buttonStyle(PressableGlassButtonStyle())
-            .padding(.horizontal, 20)
-            .padding(.bottom, 22)
+            .padding(.horizontal, AppStyle.screenHorizontalPadding)
+            .padding(.bottom, AppStyle.startButtonBottomPadding)
             .opacity(showStartButton ? 1 : 0)
-            .offset(y: showStartButton ? 0 : 10)
+            .offset(y: showStartButton ? 0 : AppStyle.startButtonHiddenOffset)
             .animation(AppMotion.primary.delay(0.06), value: showStartButton)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -158,7 +152,7 @@ struct HomeView: View {
     /// Builds the grid columns for a 7-day calendar.
     /// Change impact: Changing count or spacing reshapes the grid and day sizing.
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+        Array(repeating: GridItem(.flexible(), spacing: AppStyle.calendarColumnSpacing), count: 7)
     }
 
     /// Builds the month grid with leading offsets to align weekdays.
@@ -196,6 +190,8 @@ struct HomeView: View {
     /// Builds the adaptive background gradient for light/dark.
     /// Change impact: Tweaking colors here shifts the overall page mood in both themes.
     private var backgroundGradient: LinearGradient {
+        /// VISUAL TWEAK: Change the opacity pairs below to brighten or darken the Home background gradient.
+        /// VISUAL TWEAK: Swap the gradient colors to retune the light/dark atmosphere across the screen.
         if appearanceMode == "dark" {
             return LinearGradient(
                 colors: [
@@ -249,7 +245,8 @@ struct HomeView: View {
         return formatter
     }()
 
-    /// Change here to adjust haptic feel.
+    /// VISUAL TWEAK: Change the haptic call here to adjust brand tap feel.
+    /// VISUAL TWEAK: Swap `Haptics.playMediumTap()` for another style to change the press feedback.
     private func onAtlasTap() {
         Haptics.playMediumTap()
     }
@@ -273,27 +270,27 @@ struct DayCell: View {
         VStack(spacing: 6) {
             if let date {
                 Text(dayString(for: date))
-                    .font(isToday ? .body.weight(.semibold) : .body.weight(.regular))
-                    .foregroundStyle(.primary.opacity(isToday ? 0.95 : 0.75))
+                    .appFont(.body, weight: isToday ? .semibold : .regular)
+                    .foregroundStyle(.primary.opacity(isToday ? AppStyle.calendarDayTextOpacityToday : AppStyle.calendarDayTextOpacityDefault))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, AppStyle.calendarDayVerticalPadding)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.white.opacity(isToday ? 0.12 : 0.0))
+                        RoundedRectangle(cornerRadius: AppStyle.calendarDayCornerRadius)
+                            .fill(.white.opacity(isToday ? AppStyle.calendarDayHighlightOpacity : 0.0))
                     )
             } else {
                 Color.clear
-                    .frame(height: 32)
+                    .frame(height: AppStyle.calendarTodayHeight)
             }
 
             if hasWorkout {
                 Circle()
                     .fill(.white)
-                    .frame(width: 10, height: 10)
+                    .frame(width: AppStyle.calendarWorkoutDotSize, height: AppStyle.calendarWorkoutDotSize)
                     .transition(AppMotion.bubbleTransition)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 54)
+        .frame(maxWidth: .infinity, minHeight: AppStyle.calendarDayMinHeight)
         .animation(AppMotion.primary, value: hasWorkout)
     }
 

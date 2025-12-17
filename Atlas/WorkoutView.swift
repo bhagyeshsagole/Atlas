@@ -16,13 +16,15 @@ struct WorkoutView: View {
     /// Builds the Workout screen with a Finish control to persist today's workout.
     /// Change impact: Editing the button or layout here changes how the workout completes and feeds back to Home.
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: AppStyle.contentSpacingLarge) {
             // Header text block.
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: AppStyle.subheaderSpacing) {
+                /// VISUAL TWEAK: Change `AppStyle.titleBaseSize` or `AppStyle.fontBump` to resize the Workout title.
+                /// VISUAL TWEAK: Adjust `AppStyle.subheaderSpacing` to tighten or loosen the title/subtitle gap.
                 Text("Workout")
-                    .font(.largeTitle.weight(.semibold))
+                    .appFont(.title, weight: .semibold)
                 Text("Tap finish to log today and return.")
-                    .font(.subheadline)
+                    .appFont(.body, weight: .regular)
                     .foregroundStyle(.secondary)
             }
 
@@ -30,11 +32,11 @@ struct WorkoutView: View {
             Button {
                 finishWorkout()
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: AppStyle.pillContentSpacing) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.headline.weight(.semibold))
+                        .appFont(.pill, weight: .semibold)
                     Text("Finish Workout")
-                        .font(.headline.weight(.semibold))
+                        .appFont(.pill, weight: .semibold)
                 }
                 .foregroundStyle(.primary)
             }
@@ -42,7 +44,7 @@ struct WorkoutView: View {
 
             Spacer()
         }
-        .padding(24)
+        .padding(AppStyle.contentPaddingLarge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(.systemBackground))
         .navigationTitle("Workout")
@@ -52,6 +54,8 @@ struct WorkoutView: View {
     /// Saves today's workout, triggers haptic feedback, and returns to Home.
     /// Change impact: Adjusting date normalization or dismiss logic changes how the calendar updates after finishing.
     private func finishWorkout() {
+        /// VISUAL TWEAK: Change the haptic call here to adjust the Finish button feedback.
+        /// VISUAL TWEAK: Swap `Haptics.playLightTap()` for another generator to change tap strength.
         Haptics.playLightTap()
         let normalizedDate = calendar.startOfDay(for: Date())
         let workout = Workout(date: normalizedDate)
