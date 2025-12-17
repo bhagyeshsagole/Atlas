@@ -18,7 +18,8 @@ struct RoutineParseWorkout: Codable {
 }
 
 struct OpenAIChatClient {
-    /// VISUAL TWEAK: Change endpoint or request parameters here to affect how parsing calls are sent.
+    /// Sends a structured parsing request to OpenAI and maps the response to workout data.
+    /// Change impact: Edit to reshape the parsing prompt, temperature, or JSON decoding strategy.
     static func parseRoutineWorkouts(rawText: String) async throws -> RoutineParseOutput {
         let messages: [ChatMessage] = [
             .init(role: "developer", content: Self.prompt),
@@ -48,7 +49,8 @@ struct OpenAIChatClient {
         }
     }
 
-    /// VISUAL TWEAK: Change request body composition here to affect prompt strictness or creativity.
+    /// Generates a workout list string via OpenAI with the configured prompt and temperature.
+    /// Change impact: Modify to tune creativity, prompt wording, or formatting expectations.
     static func generateWorkoutListString(requestText: String, routineTitleHint: String?) async throws -> String {
         var userContent = requestText
         if let routineTitleHint, !routineTitleHint.isEmpty {
@@ -153,11 +155,18 @@ private struct OpenAIChatResponse: Codable {
 }
 
 private extension OpenAIChatClient {
+    /// Builds an authorized OpenAI chat completion request using the current config.
+    /// Change impact: Adjust headers or payload fields to alter how the app talks to OpenAI.
     static func buildRequest(messages: [ChatMessage], temperature: Double, responseFormat: ResponseFormat?) throws -> URLRequest {
+        let apiKey = OpenAIConfig.apiKey
+        guard !apiKey.isEmpty else {
+            throw NSError(domain: "OpenAIChatClient", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing OpenAI API key."])
+        }
+
         let url = URL(string: "https://api.openai.com/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(OpenAIConfig.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let payload = OpenAIChatRequest(
@@ -170,6 +179,8 @@ private extension OpenAIChatClient {
         return request
     }
 
+    /// Executes a URL request and ensures an HTTP response is returned.
+    /// Change impact: Update error handling or logging to change how network failures surface in-app.
     static func perform(request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {

@@ -22,8 +22,8 @@ struct ParsedWorkout: Identifiable, Codable, Hashable {
 }
 
 struct RoutineAIService {
-    /// VISUAL TWEAK: Change `OpenAIConfig.model` to switch models.
-    /// VISUAL TWEAK: Change prompt text to adjust parsing strictness.
+    /// Parses raw workout input using OpenAI when available, otherwise falls back to local heuristics.
+    /// Change impact: Adjust to tweak when the app relies on AI versus deterministic parsing.
     static func parseWorkouts(from rawText: String, routineTitleHint: String? = nil) async -> [ParsedWorkout] {
         let trimmedInput = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         #if DEBUG
@@ -153,7 +153,8 @@ struct RoutineAIService {
         #endif
     }
 
-    /// VISUAL TWEAK: Change the heuristic keywords to be stricter/looser in recognizing requests.
+    /// Detects whether the input is a request for a program versus an explicit list of exercises.
+    /// Change impact: Tuning the keywords changes when the app calls AI generation versus parsing user lists directly.
     static func isLikelyWorkoutRequest(_ rawText: String) -> Bool {
         let text = rawText.lowercased()
         let hasDigits = rawText.rangeOfCharacter(from: .decimalDigits) != nil
@@ -163,7 +164,8 @@ struct RoutineAIService {
         return !hasDigits || !hasSetsMarker || containsKeyword
     }
 
-    /// VISUAL TWEAK: Change the number of exercises (6–8) and default rep ranges for different training styles.
+    /// Generates a workout list using OpenAI when possible, otherwise uses template-driven fallbacks.
+    /// Change impact: Edit to reshape AI prompt wording or offline generation behavior.
     static func generateWorkoutListString(fromRequest request: String, routineTitleHint: String?) async -> String {
         guard !OpenAIConfig.apiKey.isEmpty else {
             #if DEBUG
@@ -185,7 +187,8 @@ struct RoutineAIService {
         }
     }
 
-    /// VISUAL TWEAK: Edit the fallback templates to match your preferred exercise selection.
+    /// Provides a deterministic workout list template when OpenAI is unavailable.
+    /// Change impact: Edit to adjust the default exercises returned without network access or credentials.
     private static func fallbackGeneratedList(for request: String) -> String {
         let text = request.lowercased()
         if text.contains("pull") {
