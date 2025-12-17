@@ -4,3 +4,7 @@ Atlas/Secrets.plist
 # Xcode user-specific state
 *.xcuserstate
 xcuserdata/
+**/LocalSecrets.swift
+**/Secrets*.plist
+**/*.xcuserstate
+**/xcuserdata/
