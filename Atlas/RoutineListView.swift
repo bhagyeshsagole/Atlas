@@ -31,11 +31,11 @@ struct RoutineListView: View {
                             .padding(.top, AppStyle.sectionSpacing)
                     } else {
                         ForEach(routineStore.routines) { routine in
-                            RoutineCardView(routine: routine)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    presentRoutineMenu(for: routine)
-                                }
+                            RoutineCardView(
+                                routine: routine,
+                                onStart: { startRoutine(routine) },
+                                onMenu: { presentRoutineMenu(for: routine) }
+                            )
                         }
                     }
                 }
@@ -57,6 +57,7 @@ struct RoutineListView: View {
                                 #if DEBUG
                                 print("[ROUTINE] Edit selected: \(routine.name)")
                                 #endif
+                                Haptics.playLightTap()
                                 routineToEdit = routine
                                 dismissRoutineMenu()
                             } label: {
@@ -66,8 +67,9 @@ struct RoutineListView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             Divider().foregroundStyle(.white.opacity(0.2))
-                            Button {
+                            Button(role: .destructive) {
                                 routineStore.deleteRoutine(id: routine.id)
+                                Haptics.playLightTap()
                                 #if DEBUG
                                 print("[ROUTINE] Delete selected: \(routine.name)")
                                 print("[ROUTINE] Total routines now: \(routineStore.routines.count)")
@@ -120,13 +122,20 @@ struct RoutineListView: View {
         .animation(AppStyle.popupAnimation, value: isMenuPresented)
     }
 
+    private func startRoutine(_ routine: Routine) {
+        Haptics.playLightTap()
+        #if DEBUG
+        print("[ROUTINE] Start workout tapped: \(routine.name)")
+        #endif
+    }
+
     private func presentRoutineMenu(for routine: Routine) {
         if !isMenuPresented {
             #if DEBUG
             print("[ROUTINE] Menu opened for: \(routine.name)")
             #endif
-            Haptics.playLightTap() // VISUAL TWEAK: Change haptic type in `presentRoutineMenu()` to adjust feedback.
         }
+        Haptics.playLightTap()
         routineMenuTarget = routine
         withAnimation(AppStyle.popupAnimation) { isMenuPresented = true }
     }
@@ -171,6 +180,8 @@ private func routineTags(_ routine: Routine) -> [String] {
 
 private struct RoutineCardView: View {
     let routine: Routine
+    let onStart: () -> Void
+    let onMenu: () -> Void
 
     var body: some View {
         GlassCard {
@@ -182,11 +193,21 @@ private struct RoutineCardView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer()
-                    Text(routineOverviewText(routine))
-                        .appFont(.footnote, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 10) {
+                        Text(routineOverviewText(routine))
+                            .appFont(.footnote, weight: .semibold)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Button(action: onMenu) {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .padding(6)
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+                    }
                 }
                 let tags = routineTags(routine)
                 if !tags.isEmpty {
@@ -209,6 +230,10 @@ private struct RoutineCardView: View {
                     }
                 }
             }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onStart()
         }
     }
 }
