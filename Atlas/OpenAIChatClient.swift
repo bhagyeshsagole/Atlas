@@ -17,6 +17,11 @@ struct RoutineParseWorkout: Codable {
     let repsText: String
 }
 
+struct OpenAIError: Error {
+    let statusCode: Int?
+    let message: String
+}
+
 struct OpenAIChatClient {
     /// Sends a structured parsing request to OpenAI and maps the response to workout data.
     /// Change impact: Edit to reshape the parsing prompt, temperature, or JSON decoding strategy.
@@ -30,7 +35,7 @@ struct OpenAIChatClient {
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
         guard let content = chatResponse.choices.first?.message.content else {
-            throw NSError(domain: "OpenAIChatClient", code: -2, userInfo: [NSLocalizedDescriptionKey: "No content returned from OpenAI."])
+            throw OpenAIError(statusCode: nil, message: "No content returned from OpenAI.")
         }
 
         #if DEBUG
@@ -39,13 +44,13 @@ struct OpenAIChatClient {
 
         let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let jsonData = cleaned.data(using: .utf8) else {
-            throw NSError(domain: "OpenAIChatClient", code: -3, userInfo: [NSLocalizedDescriptionKey: "Unable to encode model response."])
+            throw OpenAIError(statusCode: nil, message: "Unable to encode model response.")
         }
 
         do {
             return try JSONDecoder().decode(RoutineParseOutput.self, from: jsonData)
         } catch {
-            throw NSError(domain: "OpenAIChatClient", code: -4, userInfo: [NSLocalizedDescriptionKey: "Failed to decode routine JSON: \(error.localizedDescription)"])
+            throw OpenAIError(statusCode: nil, message: "Failed to decode routine JSON: \(error.localizedDescription)")
         }
     }
 
@@ -66,7 +71,7 @@ struct OpenAIChatClient {
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
         guard let content = chatResponse.choices.first?.message.content else {
-            throw NSError(domain: "OpenAIChatClient", code: -2, userInfo: [NSLocalizedDescriptionKey: "No content returned from OpenAI."])
+            throw OpenAIError(statusCode: nil, message: "No content returned from OpenAI.")
         }
         return stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -159,7 +164,7 @@ private extension OpenAIChatClient {
     /// Change impact: Adjust headers or payload fields to alter how the app talks to OpenAI.
     static func buildRequest(messages: [ChatMessage], temperature: Double, responseFormat: ResponseFormat?) throws -> URLRequest {
         guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
-            throw NSError(domain: "OpenAIChatClient", code: -10, userInfo: [NSLocalizedDescriptionKey: "Missing OpenAI API key."])
+            throw OpenAIError(statusCode: nil, message: "Missing OpenAI API key.")
         }
 
         let url = URL(string: "https://api.openai.com/v1/chat/completions")!
@@ -183,7 +188,7 @@ private extension OpenAIChatClient {
     static func perform(request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "OpenAIChatClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response."])
+            throw OpenAIError(statusCode: nil, message: "Invalid response.")
         }
 
         #if DEBUG
@@ -191,16 +196,9 @@ private extension OpenAIChatClient {
         #endif
 
         guard 200..<300 ~= http.statusCode else {
-            #if DEBUG
-            if http.statusCode == 401 {
-                print("[AI] Error: Unauthorized (check API key).")
-            } else if http.statusCode == 429 {
-                print("[AI] Error: Rate limited or quota exceeded.")
-            }
             let snippet = String(data: data, encoding: .utf8) ?? ""
-            print("[AI] Response snippet: \(snippet.prefix(200))")
-            #endif
-            throw NSError(domain: "OpenAIChatClient", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "OpenAI responded with an error."])
+            let message = String(snippet.prefix(200))
+            throw OpenAIError(statusCode: http.statusCode, message: message)
         }
 
         return (data, http)

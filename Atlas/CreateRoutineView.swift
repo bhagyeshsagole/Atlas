@@ -11,7 +11,7 @@ struct CreateRoutineView: View {
     @State private var title: String = ""
     @State private var rawWorkouts: String = ""
     @State private var isParsing = false
-    @State private var showEmptyAlert = false
+    @State private var alertMessage: String?
 
     let onGenerate: (String, [ParsedWorkout]) -> Void
 
@@ -65,10 +65,13 @@ struct CreateRoutineView: View {
         .navigationTitle("Routine")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.primary)
-        .alert("No workouts found", isPresented: $showEmptyAlert) {
+        .alert(alertMessage ?? "", isPresented: Binding(
+            get: { alertMessage != nil },
+            set: { isPresented in
+                if !isPresented { alertMessage = nil }
+            }
+        )) {
             Button("OK", role: .cancel) { }
-        } message: {
-            Text("Please describe at least one exercise to generate a routine.")
         }
     }
 
@@ -78,14 +81,35 @@ struct CreateRoutineView: View {
         let input = rawWorkouts.trimmingCharacters(in: .whitespacesAndNewlines)
         isParsing = true
         Task {
-            let workouts = await RoutineAIService.parseWorkouts(from: input, routineTitleHint: name)
-            await MainActor.run {
-                isParsing = false
-                guard !workouts.isEmpty else {
-                    showEmptyAlert = true
-                    return
+            do {
+                let workouts = try await RoutineAIService.parseWorkouts(from: input, routineTitleHint: name)
+                await MainActor.run {
+                    isParsing = false
+                    guard !workouts.isEmpty else {
+                        alertMessage = "No workouts found. Please describe at least one exercise."
+                        return
+                    }
+                    onGenerate(name, workouts)
                 }
-                onGenerate(name, workouts)
+            } catch let error as RoutineAIService.RoutineAIError {
+                await MainActor.run {
+                    isParsing = false
+                    switch error {
+                    case .missingAPIKey:
+                        alertMessage = "Missing API key. Add it in LocalSecrets.openAIAPIKey."
+                    case .openAIRequestFailed(let status, let message):
+                        if let status {
+                            alertMessage = "OpenAI error (\(status)). Check key/quota/network. \(message)"
+                        } else {
+                            alertMessage = "OpenAI error. Check key/quota/network. \(message)"
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isParsing = false
+                    alertMessage = "Unexpected error: \(error.localizedDescription)"
+                }
             }
         }
     }
