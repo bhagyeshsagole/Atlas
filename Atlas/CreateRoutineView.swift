@@ -11,9 +11,16 @@ struct CreateRoutineView: View {
     @State private var title: String = ""
     @State private var rawWorkouts: String = ""
     @State private var isParsing = false
+    @State private var isGenerating = false
     @State private var alertMessage: String?
+    @FocusState private var focusedField: Field?
 
     let onGenerate: (String, [ParsedWorkout]) -> Void
+
+    private enum Field {
+        case title
+        case workoutText
+    }
 
     var body: some View {
         ScrollView {
@@ -25,6 +32,7 @@ struct CreateRoutineView: View {
                     TextField("Push Day", text: $title)
                         .textFieldStyle(.roundedBorder)
                         .tint(.primary)
+                        .focused($focusedField, equals: .title)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -39,6 +47,7 @@ struct CreateRoutineView: View {
                                     .stroke(.secondary.opacity(0.3), lineWidth: 1)
                             )
                             .tint(.primary)
+                            .focused($focusedField, equals: .workoutText)
                         if rawWorkouts.isEmpty {
                             Text("lat pulldown x 3 10-12 and shoulder press x 3 10-12")
                                 .appFont(.body, weight: .regular)
@@ -57,7 +66,7 @@ struct CreateRoutineView: View {
                         .foregroundStyle(.primary)
                 }
                 .buttonStyle(PressableGlassButtonStyle())
-                .disabled(isParsing)
+                .disabled(isGenerating)
             }
             .padding(AppStyle.contentPaddingLarge)
         }
@@ -76,33 +85,52 @@ struct CreateRoutineView: View {
     }
 
     private func generate() {
-        guard !isParsing else { return }
+        guard !isGenerating else { return }
+        #if DEBUG
+        print("[AI] Generate tapped")
+        #endif
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Routine" : title.trimmingCharacters(in: .whitespacesAndNewlines)
         let input = rawWorkouts.trimmingCharacters(in: .whitespacesAndNewlines)
         let isRequestMode = RoutineAIService.isLikelyWorkoutRequest(input)
         isParsing = true
+        isGenerating = true
         Task {
+            defer {
+                Task { @MainActor in
+                    isParsing = false
+                    isGenerating = false
+                    #if DEBUG
+                    print("[AI] Generate finished")
+                    #endif
+                }
+            }
             do {
                 let workouts = try await RoutineAIService.parseWorkouts(from: input, routineTitleHint: name)
-                await MainActor.run {
-                    isParsing = false
-                    guard !workouts.isEmpty else {
+                if workouts.isEmpty {
+                    await MainActor.run { focusedField = nil }
+                    DispatchQueue.main.async {
                         if isRequestMode {
                             alertMessage = "AI returned an invalid format. Try rephrasing or specify equipment limits."
                         } else {
                             alertMessage = "No workouts found. Please describe at least one exercise."
                         }
-                        return
                     }
+                    return
+                }
+                await MainActor.run { focusedField = nil }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                await MainActor.run {
                     onGenerate(name, workouts)
                 }
             } catch let error as RoutineAIService.RoutineAIError {
-                await MainActor.run {
-                    isParsing = false
-                    switch error {
-                    case .missingAPIKey:
+                await MainActor.run { focusedField = nil }
+                switch error {
+                case .missingAPIKey:
+                    DispatchQueue.main.async {
                         alertMessage = "Missing API key. Add it in LocalSecrets.openAIAPIKey."
-                    case .openAIRequestFailed(let status, let message):
+                    }
+                case .openAIRequestFailed(let status, let message):
+                    DispatchQueue.main.async {
                         if let status {
                             alertMessage = "OpenAI error (\(status)). \(message)"
                         } else {
@@ -111,8 +139,8 @@ struct CreateRoutineView: View {
                     }
                 }
             } catch {
-                await MainActor.run {
-                    isParsing = false
+                await MainActor.run { focusedField = nil }
+                DispatchQueue.main.async {
                     alertMessage = "Unexpected error: \(error.localizedDescription)"
                 }
             }

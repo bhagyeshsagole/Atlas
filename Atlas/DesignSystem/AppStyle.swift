@@ -10,8 +10,10 @@ import SwiftUI
 enum AppTypeScale {
     case brand
     case title
+    case title3
     case section
     case body
+    case footnote
     case caption
     case pill
 }
@@ -33,9 +35,17 @@ enum AppStyle {
     /// VISUAL TWEAK: Adjust for tighter or louder grouping labels across Settings and Home.
     static let sectionBaseSize: CGFloat = 12
 
+    /// VISUAL TWEAK: Change `title3BaseSize` to resize secondary headings between title and body.
+    /// VISUAL TWEAK: Raise for louder mid-headlines; lower for calmer subheads.
+    static let title3BaseSize: CGFloat = 18
+
     /// VISUAL TWEAK: Change `bodyBaseSize` to resize standard body text.
     /// VISUAL TWEAK: Use this to affect most rows and descriptive copy at once.
     static let bodyBaseSize: CGFloat = 14
+
+    /// VISUAL TWEAK: Change `footnoteBaseSize` to resize small helper text.
+    /// VISUAL TWEAK: Lower for quieter notes; raise for more legibility.
+    static let footnoteBaseSize: CGFloat = 12
 
     /// VISUAL TWEAK: Change `captionBaseSize` to resize captions and helper text.
     /// VISUAL TWEAK: Bump up for more legibility on small notes.
@@ -53,6 +63,10 @@ enum AppStyle {
     /// VISUAL TWEAK: Match this to your preferred hierarchy strength for headings.
     static let titleWeight: Font.Weight = .semibold
 
+    /// VISUAL TWEAK: Change `title3Weight` to alter secondary heading emphasis.
+    /// VISUAL TWEAK: Use `.medium` for softer mid-headlines or `.bold` for stronger emphasis.
+    static let title3Weight: Font.Weight = .semibold
+
     /// VISUAL TWEAK: Change `sectionWeight` to alter section label emphasis.
     /// VISUAL TWEAK: Drop to `.medium` for calmer dividers, raise to `.bold` for stronger grouping.
     static let sectionWeight: Font.Weight = .bold
@@ -60,6 +74,10 @@ enum AppStyle {
     /// VISUAL TWEAK: Change `bodyWeight` to alter default body emphasis.
     /// VISUAL TWEAK: Use `.regular` for casual text or `.medium` for denser text.
     static let bodyWeight: Font.Weight = .regular
+
+    /// VISUAL TWEAK: Change `footnoteWeight` to adjust helper text emphasis.
+    /// VISUAL TWEAK: Increase for more contrast on small helper labels.
+    static let footnoteWeight: Font.Weight = .regular
 
     /// VISUAL TWEAK: Change `captionWeight` to alter helper text emphasis.
     /// VISUAL TWEAK: Increase for more contrast on small labels.
@@ -393,10 +411,14 @@ enum AppStyle {
             return (brandBaseSize + fontBump, brandWeight, brandItalic)
         case .title:
             return (titleBaseSize + fontBump, titleWeight, false)
+        case .title3:
+            return (title3BaseSize + fontBump, title3Weight, false) // VISUAL TWEAK: Change `title3Size` to tune medium headings globally.
         case .section:
             return (sectionBaseSize + fontBump, sectionWeight, false)
         case .body:
             return (bodyBaseSize + fontBump, bodyWeight, false)
+        case .footnote:
+            return (footnoteBaseSize + fontBump, footnoteWeight, false) // VISUAL TWEAK: Change `footnoteSize` to tune small helper text globally.
         case .caption:
             return (captionBaseSize + fontBump, captionWeight, false)
         case .pill:
