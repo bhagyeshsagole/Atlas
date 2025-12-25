@@ -3,6 +3,13 @@ import Foundation
 /// DEV NOTE: This is the single source of truth for post-workout summary JSON models.
 /// DEV NOTE: If you need to change the AI schema, update these structs + the prompt builder in RoutineAIService.
 struct PostWorkoutSummaryPayload: Codable {
+    let sessionDate: String
+    let rating: Double?
+    let insight: String?
+    let prs: [String]?
+    let improvements: [String]?
+
+    // Legacy fields kept optional for backward compatibility.
     struct SectionData: Codable {
         struct TrainedItem: Codable, Hashable {
             let exercise: String
@@ -35,7 +42,6 @@ struct PostWorkoutSummaryPayload: Codable {
         let quality: Quality
     }
 
-    let sessionDate: String
-    let tldr: [String]
-    let sections: SectionData
+    let tldr: [String]?
+    let sections: SectionData?
 }

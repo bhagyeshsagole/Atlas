@@ -387,39 +387,23 @@ You are a concise strength coach. You ONLY output JSON. No markdown, no extra te
 Return EXACTLY this JSON shape:
 {
   "sessionDate": "December 24, 2025 (Wednesday)",
-  "tldr": [
-    "Push day — Chest/Triceps focus",
-    "Volume: 4,820 kg | 10,626 lb · 18 sets · 156 reps",
-    "Best set: 45.4 kg | 100 lb × 8 (Bench Press)",
-    "Progress: Bench +2 reps @ 45.4 kg | 100 lb",
-    "Next: Keep 45.4 kg | 100 lb and aim 10/9/8"
+  "rating": 8.7,
+  "insight": "One sentence, max ~90 chars, factoring routine coverage.",
+  "prs": [
+    "Bench Press: +5 lb at same reps",
+    "Incline DB: +2 reps at 35s"
   ],
-  "sections": {
-    "trained": [
-      { "exercise": "Bench Press", "muscles": "Chest · Triceps · Front delts", "best": "45.4 kg | 100 lb × 8", "sets": 3, "note": "Form stayed tight" }
-    ],
-    "progress": [
-      { "exercise": "Bench Press", "delta": "+2 reps @ 45.4 kg | 100 lb", "confidence": "high" }
-    ],
-    "whatsNext": {
-      "focus": "Push day — prioritize chest + triceps",
-      "targets": [
-        "Bench Press — 45.4 kg | 100 lb × 10/9/8",
-        "Incline DB Press — 22.7 kg | 50 lb × 10/10/8"
-      ],
-      "note": "Keep rest 90–120s on compounds."
-  },
-  "quality": {
-    "rating": 8,
-    "reasons": ["Strong chest volume", "Triceps hit consistently", "Missing lateral delts"]
-  }
-}
+  "improvements": [
+    "Bench: keep 52.2 kg | 115 lb and aim 7 reps with safeties/spotter.",
+    "Incline DB: hit 35s for 10/10/10, then move to 40s.",
+    "Add rear delts: reverse pec deck 2×12–15."
+  ]
 }
 Rules:
-- rating must be an integer 1-10.
-- Never return empty arrays if the session has sets; always include at least one trained item.
+- rating must be a number 0.0–10.0.
+- insight is exactly one sentence (<= ~90 chars).
+- prs max 2 items; improvements max 3 items; never empty improvements (minimum 2).
 - Keep strings short. No paragraphs. No emojis. No markdown fences.
-- Exercises: max 8 items. Progress highlights: max 2. Each line max ~60 chars.
 """
 
     private static let postSummaryRepairSystemPrompt = """

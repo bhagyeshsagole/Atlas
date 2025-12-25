@@ -6,222 +6,155 @@ struct PostWorkoutSummaryView: View {
     var onDone: () -> Void = {}
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
 
     @State private var session: WorkoutSession?
     @State private var payload: PostWorkoutSummaryPayload?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var renderedText: String = ""
 
-    /// VISUAL TWEAK: Tune TL;DR card padding in `tldrCardPadding`.
-    private let tldrCardPadding: CGFloat = 14
-    /// VISUAL TWEAK: Adjust section spacing in `sectionSpacing`.
-    private let sectionSpacing: CGFloat = 16
-    /// VISUAL TWEAK: Change max lines shown per exercise row in `exerciseRowMaxLines`.
-    private let exerciseRowMaxLines: Int = 1
-    /// VISUAL TWEAK: Adjust `summaryCardMaxHeightRatio` to control how tall the summary card can be.
-    private let summaryCardMaxHeightRatio: CGFloat = 0.62
-    /// VISUAL TWEAK: Change `exerciseGridMaxItems` to show more/less exercises on the one-screen summary.
-    private let exerciseGridMaxItems: Int = 6
+    /// VISUAL TWEAK: Change `bodyLineSpacing` to make the text tighter/looser.
+    private let bodyLineSpacing: CGFloat = 6
+    /// VISUAL TWEAK: Change `titleScale` to make routine name bigger/smaller.
+    private let titleScale: CGFloat = 1.0
+    /// VISUAL TWEAK: Toggle `showsIndicators` to true if you ever want scroll bar back.
+    private let showsIndicators: Bool = false
     /// VISUAL TWEAK: Adjust `minScale` if text feels too tight.
-    private let minScale: CGFloat = 0.85
+    private let minScale: CGFloat = 0.9
 
-    /// DEV NOTE: This screen caches `aiPostSummaryJSON` so the API is called once per session.
+    /// DEV NOTE: This screen caches `aiPostSummaryJSON` and `aiPostSummaryText` so the API is called once per session.
     var body: some View {
-        GeometryReader { geo in
-            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Summary")
-                        .appFont(.title, weight: .semibold)
-                        .lineLimit(1)
-                        .minimumScaleFactor(minScale)
-                    Text(payload?.sessionDate ?? "Generating summary…")
-                        .appFont(.body, weight: .regular)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(minScale)
-                }
-
-                if let payload {
-                    VStack(alignment: .leading, spacing: sectionSpacing) {
-                        tldrCard(payload)
-                        summaryCard(payload, maxHeight: geo.size.height * summaryCardMaxHeightRatio)
-                    }
-                } else if isLoading {
-                    ProgressView("Generating summary…")
-                        .progressViewStyle(.circular)
-                } else if let errorMessage {
-                    Text(errorMessage)
-                        .appFont(.body, weight: .regular)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .minimumScaleFactor(minScale)
-                } else {
-                    Text("No summary available.")
-                        .appFont(.body, weight: .regular)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: AppStyle.sectionSpacing)
-
-                AtlasPillButton("Done") {
-                    dismiss()
-                    onDone()
-                }
-                .padding(.bottom, AppStyle.startButtonBottomPadding)
+        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(sessionTitle)
+                    .appFont(.title, weight: .semibold)
+                    .scaleEffect(titleScale, anchor: .leading)
+                    .lineLimit(1)
+                    .minimumScaleFactor(minScale)
+                Text(payload?.sessionDate ?? formattedSessionDate())
+                    .appFont(.body, weight: .regular)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(minScale)
             }
-            .padding(AppStyle.contentPaddingLarge)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Color(.systemBackground))
+
+            ScrollView(.vertical, showsIndicators: showsIndicators) {
+                Text(contentText())
+                    .appFont(.body, weight: .regular)
+                    .lineSpacing(bodyLineSpacing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(.primary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            Spacer(minLength: 0)
+        }
+        .padding(AppStyle.contentPaddingLarge)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(.systemBackground))
+        .safeAreaInset(edge: .bottom) {
+            AtlasPillButton("Done") {
+                dismiss()
+                onDone()
+            }
+            .padding(.horizontal, AppStyle.contentPaddingLarge)
+            .padding(.bottom, AppStyle.startButtonBottomPadding)
         }
         .task {
             await load()
         }
     }
 
-    private func tldrCard(_ payload: PostWorkoutSummaryPayload) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(payload.tldr.prefix(5)), id: \.self) { line in
-                    HStack(alignment: .top, spacing: 6) {
-                        Circle().fill(.primary).frame(width: 6, height: 6)
-                            .padding(.top, 6)
-                        Text(line)
-                            .appFont(.body, weight: .regular)
-                            .lineLimit(2)
-                            .foregroundStyle(.primary)
-                            .minimumScaleFactor(minScale)
-                    }
-                }
-            }
-            .padding(tldrCardPadding)
+    private func contentText() -> String {
+        if !renderedText.isEmpty {
+            return renderedText
         }
+        if isLoading {
+            return "Generating summary…"
+        }
+        if let errorMessage {
+            return "Summary unavailable.\n\(errorMessage)"
+        }
+        return "Summary unavailable."
     }
 
-    private func summaryCard(_ payload: PostWorkoutSummaryPayload, maxHeight: CGFloat) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: sectionSpacing) {
-                totalsRow(payload)
-                trainedGrid(payload)
-                progressRow(payload)
-                nextRow(payload)
-                qualityRow(payload)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(maxHeight: maxHeight, alignment: .top)
-        }
-    }
-
-    private func totalsRow(_ payload: PostWorkoutSummaryPayload) -> some View {
-        HStack {
-            Text("Totals")
-                .appFont(.section, weight: .bold)
-            Spacer()
-            Text(totalsLine(payload))
-                .appFont(.footnote, weight: .regular)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .minimumScaleFactor(minScale)
-        }
-    }
-
-    private func trainedGrid(_ payload: PostWorkoutSummaryPayload) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Trained")
-                .appFont(.section, weight: .bold)
-            let items = Array(payload.sections.trained.prefix(exerciseGridMaxItems))
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(items, id: \.self) { item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.exercise)
-                            .appFont(.body, weight: .semibold)
-                            .lineLimit(exerciseRowMaxLines)
-                            .minimumScaleFactor(minScale)
-                        Text(item.muscles)
-                            .appFont(.footnote, weight: .regular)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(minScale)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            if payload.sections.trained.count > exerciseGridMaxItems {
-                Text("+\(payload.sections.trained.count - exerciseGridMaxItems) more")
-                    .appFont(.footnote, weight: .regular)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func progressRow(_ payload: PostWorkoutSummaryPayload) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Progress")
-                .appFont(.section, weight: .bold)
-            let highlights = Array(payload.sections.progress.prefix(2))
-            if highlights.isEmpty {
-                Text("No prior history — first log")
-                    .appFont(.footnote, weight: .regular)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(highlights, id: \.self) { item in
-                    Text("\(item.exercise): \(item.delta)")
-                        .appFont(.footnote, weight: .regular)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .minimumScaleFactor(minScale)
+    private func computeTotals(session: WorkoutSession) -> (volumeKg: Double, sets: Int, reps: Int) {
+        var volume: Double = 0
+        var setsCount = 0
+        var repsCount = 0
+        for exercise in session.exercises {
+            for set in exercise.sets {
+                setsCount += 1
+                repsCount += set.reps
+                if let w = set.weightKg {
+                    volume += w * Double(set.reps)
                 }
             }
         }
+        return (volume, setsCount, repsCount)
     }
 
-    private func nextRow(_ payload: PostWorkoutSummaryPayload) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("What’s next")
-                .appFont(.section, weight: .bold)
-            Text(payload.sections.whatsNext.focus)
-                .appFont(.body, weight: .regular)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .minimumScaleFactor(minScale)
-            if let first = payload.sections.whatsNext.targets.first {
-                Text(first)
-                    .appFont(.footnote, weight: .regular)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .minimumScaleFactor(minScale)
-            }
+    private var sessionTitle: String {
+        session?.routineTitle.isEmpty == false ? session!.routineTitle : "Workout Summary"
+    }
+
+    private func formattedSessionDate() -> String {
+        guard let session else { return "Summary" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "LLLL dd, yyyy (EEEE)"
+        return formatter.string(from: session.startedAt)
+    }
+
+    private func buildDisplayText(with payload: PostWorkoutSummaryPayload?, for session: WorkoutSession) -> String {
+        let totals = computeTotals(session: session)
+        let volumeKg = String(format: "%.0f kg", totals.volumeKg)
+        let volumeLb = String(format: "%.0f lb", totals.volumeKg * WorkoutSessionFormatter.kgToLb)
+        let trainingVolumeLine = "Training volume: \(volumeKg) | \(volumeLb)"
+        let setsRepsLine = "Sets / Reps: \(totals.sets) sets / \(totals.reps) reps"
+
+        let ratingValue = payload?.rating.map { String(format: "%.1f", $0) } ?? "—"
+        let insight = (payload?.insight?.isEmpty == false ? payload?.insight : nil) ?? "Summary unavailable."
+        let ratingLine = "\(ratingValue)/10 — \(insight)"
+
+        let prs = Array((payload?.prs ?? []).prefix(2)).filter { !$0.isEmpty }
+        let prLines: [String]
+        if prs.isEmpty {
+            prLines = ["PRs: None"]
+        } else {
+            prLines = ["PRs:"] + prs.map { "• \($0)" }
         }
-    }
 
-    private func qualityRow(_ payload: PostWorkoutSummaryPayload) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Quality")
-                .appFont(.section, weight: .bold)
-            HStack {
-                Text("\(payload.sections.quality.rating)/10")
-                    .appFont(.title3, weight: .semibold)
-                    .lineLimit(1)
-                Spacer()
-                if let reason = payload.sections.quality.reasons.first {
-                    Text(reason)
-                        .appFont(.footnote, weight: .regular)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .minimumScaleFactor(minScale)
-                }
-            }
+        let improvementsRaw = Array((payload?.improvements ?? []).prefix(3)).filter { !$0.isEmpty }
+        let improvements: [String]
+        if improvementsRaw.isEmpty {
+            improvements = fallbackImprovements(for: session)
+        } else {
+            improvements = ["Improvements next time:"] + improvementsRaw.map { "• \($0)" }
         }
+
+        var lines: [String] = [
+            trainingVolumeLine,
+            setsRepsLine,
+            "",
+            ratingLine,
+            ""
+        ]
+        lines.append(contentsOf: prLines)
+        lines.append("")
+        lines.append(contentsOf: improvements)
+
+        return lines.joined(separator: "\n")
     }
 
-    private func totalsLine(_ payload: PostWorkoutSummaryPayload) -> String {
-        // Use TLDR volume if present; otherwise, fallback to summary payload.
-        let volumeLine = payload.tldr.first { $0.lowercased().contains("volume:") } ?? ""
-        if !volumeLine.isEmpty { return volumeLine }
-        return "Volume/sets/reps summarized"
+    private func fallbackImprovements(for session: WorkoutSession) -> [String] {
+        let name = session.exercises.first?.name ?? "First lift"
+        return [
+            "Improvements next time:",
+            "• \(name): match last top set and add 1–2 reps if strong.",
+            "• Add one accessory if time allows."
+        ]
     }
 
     private func load() async {
@@ -244,15 +177,32 @@ struct PostWorkoutSummaryView: View {
             return
         }
 
-        if !session.aiPostSummaryJSON.isEmpty {
+        if !session.aiPostSummaryText.isEmpty {
+            await MainActor.run {
+                renderedText = session.aiPostSummaryText
+                isLoading = false
+            }
             if let data = session.aiPostSummaryJSON.data(using: .utf8),
                let payload = try? JSONDecoder().decode(PostWorkoutSummaryPayload.self, from: data) {
                 await MainActor.run {
                     self.payload = payload
-                    self.isLoading = false
                 }
-                return
             }
+            return
+        }
+
+        if !session.aiPostSummaryJSON.isEmpty,
+           let data = session.aiPostSummaryJSON.data(using: .utf8),
+           let storedPayload = try? JSONDecoder().decode(PostWorkoutSummaryPayload.self, from: data) {
+            let text = buildDisplayText(with: storedPayload, for: session)
+            await MainActor.run {
+                payload = storedPayload
+                renderedText = text
+                session.aiPostSummaryText = text
+                try? modelContext.save()
+                isLoading = false
+            }
+            return
         }
 
         let previousLogs = try? modelContext.fetch(FetchDescriptor<ExerciseLog>(
@@ -270,16 +220,23 @@ struct PostWorkoutSummaryView: View {
 
         let unitPref = WorkoutUnits(from: weightUnit)
         if let result = await RoutineAIService.generatePostWorkoutSummary(session: session, previousSessionsByExercise: previousByExercise, unitPreference: unitPref) {
+            let text = buildDisplayText(with: result.payload, for: session)
             await MainActor.run {
                 payload = result.payload
+                renderedText = text
                 session.aiPostSummaryJSON = result.rawJSON
+                session.aiPostSummaryText = text
                 session.aiPostSummaryGeneratedAt = Date()
                 session.aiPostSummaryModel = result.model
                 try? modelContext.save()
                 isLoading = false
             }
         } else {
+            let fallbackText = buildDisplayText(with: nil, for: session)
             await MainActor.run {
+                renderedText = fallbackText
+                session.aiPostSummaryText = fallbackText
+                try? modelContext.save()
                 isLoading = false
                 errorMessage = "Unable to generate summary."
             }

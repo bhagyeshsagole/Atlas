@@ -15,6 +15,7 @@ final class WorkoutSession {
     var aiPostSummaryGeneratedAt: Date?
     var aiPostSummaryModel: String?
     var durationSeconds: Int?
+    var aiPostSummaryText: String
 
     init(id: UUID = UUID(), routineId: UUID?, routineTitle: String, startedAt: Date = Date(), endedAt: Date? = nil, isCompleted: Bool = false, exercises: [ExerciseLog] = []) {
         self.id = id
@@ -28,6 +29,7 @@ final class WorkoutSession {
         self.aiPostSummaryGeneratedAt = nil
         self.aiPostSummaryModel = nil
         self.durationSeconds = nil
+        self.aiPostSummaryText = ""
     }
 }
 
