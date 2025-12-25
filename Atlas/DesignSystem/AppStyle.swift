@@ -20,6 +20,7 @@ enum AppTypeScale {
 }
 
 enum AppStyle {
+    /// DEV MAP: Global typography/spacing tokens live here.
     /// VISUAL TWEAK: Change `fontBump` to raise or lower every type size globally at once.
     /// VISUAL TWEAK: Increase for a larger overall scale; decrease to tighten all text.
     static let fontBump: CGFloat = 2

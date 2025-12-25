@@ -9,9 +9,10 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    #if DEBUG
+#if DEBUG
     @Environment(\.modelContext) private var modelContext
-    #endif
+#endif
+    /// DEV MAP: Root navigation stack and settings presentation live here.
     @State private var path: [Route] = []
     @State private var showSettings = false
     @AppStorage("appearanceMode") private var appearanceMode = "light"

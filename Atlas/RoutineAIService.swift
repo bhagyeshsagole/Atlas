@@ -23,6 +23,7 @@ struct ParsedWorkout: Identifiable, Codable, Hashable {
 }
 
 struct RoutineAIService {
+    /// DEV MAP: AI pipeline (routine parsing/generation, summaries, coaching) lives here.
     enum RoutineAIError: Error {
         case missingAPIKey
         case openAIRequestFailed(status: Int?, message: String)

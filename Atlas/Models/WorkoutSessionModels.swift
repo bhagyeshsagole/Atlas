@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 
+/// DEV MAP: SwiftData models for real workout history live here.
 @Model
 final class WorkoutSession {
     @Attribute(.unique) var id: UUID

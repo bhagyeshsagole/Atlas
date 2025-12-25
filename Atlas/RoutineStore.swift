@@ -16,6 +16,7 @@ struct Routine: Identifiable, Codable, Hashable {
     var workouts: [RoutineWorkout]
     var summary: String
 
+    /// DEV MAP: Routine data model; persisted via JSON in RoutineStore.
     init(id: UUID, name: String, createdAt: Date, workouts: [RoutineWorkout], summary: String = "") {
         self.id = id
         self.name = name

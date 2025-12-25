@@ -18,6 +18,7 @@ struct DevFlags {
 ///     ])
 ///   ])
 enum DevHistorySeeder {
+    /// DEV MAP: Fake history seeding (DEBUG-only) lives here.
     private static let seededKey = "dev_seed_history_v1"
 
     static func seedIfNeeded(modelContext: ModelContext) {

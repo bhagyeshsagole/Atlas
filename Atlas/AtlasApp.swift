@@ -10,6 +10,7 @@ import SwiftData
 
 @main
 struct AtlasApp: App {
+    /// DEV MAP: App entry + shared model container wiring lives here.
     @StateObject private var routineStore = RoutineStore()
     /// Builds the shared SwiftData container with all app models.
     /// Change impact: Adding or removing models here changes which data persists across launches.

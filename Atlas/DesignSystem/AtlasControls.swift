@@ -11,6 +11,7 @@ import SwiftUI
 struct AtlasControlTokens {
     static let tapTarget: CGFloat = 44
 
+    /// DEV MAP: Shared control sizing (header icons, pills, glass) lives here.
     /// VISUAL TWEAK: Change `headerButtonSize` to make Back/+ identical everywhere.
     static let headerButtonSize: CGFloat = 44
     /// VISUAL TWEAK: Change `headerIconSize` to scale all header icons.
