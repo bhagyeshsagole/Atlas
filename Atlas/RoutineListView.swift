@@ -16,6 +16,7 @@ struct RoutineListView: View {
     @State private var routineToEdit: Routine?
     @State private var routineMenuTarget: Routine?
     @State private var isMenuPresented = false
+    @State private var selectedRoutine: Routine?
 
     let onAddRoutine: () -> Void
 
@@ -95,6 +96,9 @@ struct RoutineListView: View {
                 #endif
             }
         }
+        .navigationDestination(item: $selectedRoutine) { routine in
+            RoutinePreStartView(routine: routine)
+        }
         .animation(AppStyle.popupAnimation, value: isMenuPresented)
     }
 
@@ -103,6 +107,7 @@ struct RoutineListView: View {
         #if DEBUG
         print("[ROUTINE] Start workout tapped: \(routine.name)")
         #endif
+        selectedRoutine = routine
     }
 
     private func presentRoutineMenu(for routine: Routine) {

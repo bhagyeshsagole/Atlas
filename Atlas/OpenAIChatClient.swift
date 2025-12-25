@@ -148,6 +148,44 @@ Return JSON now.
         }
     }
 
+    /// Generates a concise summary for a routine. Returns plain text without markdown.
+    static func generateRoutineSummary(
+        routineTitle: String,
+        workouts: [RoutineWorkout]
+    ) async throws -> (text: String, status: Int, elapsedMs: Int) {
+        let workoutLines = workouts.map { workout in
+            let reps = workout.repsText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let wts = workout.wtsText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "- \(workout.name): \(reps.isEmpty ? "reps" : reps) | \(wts.isEmpty ? "wts" : wts)"
+        }.joined(separator: "\n")
+
+        let userContent = """
+Routine: \(routineTitle)
+Exercises:
+\(workoutLines)
+Return 2-5 short lines, plain text only. No markdown, no bullets.
+"""
+
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: summarySystemPrompt),
+            .init(role: "developer", content: summaryDeveloperPrompt),
+            .init(role: "user", content: userContent)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: nil)
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, response.statusCode, elapsed)
+    }
+
     /// VISUAL TWEAK: Adjust fence stripping here to tolerate different model formatting.
     private static func stripCodeFences(from content: String) -> String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -214,6 +252,20 @@ JSON schema (EXACT KEYS):
     { "name": "Exercise Name", "sets": 3, "reps": "10-12" }
   ]
 }
+"""
+
+    private static let summarySystemPrompt = """
+You summarize workout routines. You only return plain text (no markdown, no bullets).
+Keep it scannable and helpful.
+"""
+
+    private static let summaryDeveloperPrompt = """
+Return 2–5 short lines. Use concise labels like:
+Focus: ...
+Volume: ...
+Rep ranges: ...
+Tip: ...
+Avoid fluff. Do not wrap in quotes or code fences.
 """
 }
 

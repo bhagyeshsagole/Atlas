@@ -14,6 +14,8 @@ struct ReviewRoutineView: View {
     let onComplete: () -> Void
 
     @State private var editableWorkouts: [ParsedWorkout]
+    @State private var isSaving = false
+    @State private var alertMessage: String?
 
     init(routineName: String, workouts: [ParsedWorkout], onComplete: @escaping () -> Void) {
         self.routineName = routineName
@@ -64,7 +66,7 @@ struct ReviewRoutineView: View {
                 AtlasPillButton("Done") {
                     addRoutine()
                 }
-                .disabled(editableWorkouts.isEmpty)
+                .disabled(editableWorkouts.isEmpty || isSaving)
             }
             .padding(AppStyle.contentPaddingLarge)
         }
@@ -72,6 +74,14 @@ struct ReviewRoutineView: View {
         .navigationTitle("Routine")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.primary)
+        .alert(alertMessage ?? "", isPresented: Binding(
+            get: { alertMessage != nil },
+            set: { isPresented in
+                if !isPresented { alertMessage = nil }
+            }
+        )) {
+            Button("OK", role: .cancel) { }
+        }
     }
 
     private func removeWorkout(_ id: UUID) {
@@ -79,23 +89,68 @@ struct ReviewRoutineView: View {
     }
 
     private func addRoutine() {
-        let routine = Routine(
-            id: UUID(),
-            name: routineName,
-            createdAt: Date(),
-            workouts: editableWorkouts.map { workout in
-                RoutineWorkout(
-                    id: workout.id,
-                    name: workout.name,
-                    wtsText: workout.wtsText,
-                    repsText: workout.repsText
+        guard !isSaving else { return }
+        isSaving = true
+
+        let routineId = UUID()
+        let routineWorkouts = editableWorkouts.map { workout in
+            RoutineWorkout(
+                id: workout.id,
+                name: workout.name,
+                wtsText: workout.wtsText,
+                repsText: workout.repsText
+            )
+        }
+
+        Task {
+            let summaryText: String
+            do {
+                summaryText = try await RoutineAIService.generateRoutineSummary(
+                    routineTitle: routineName,
+                    workouts: routineWorkouts
                 )
+            } catch let error as RoutineAIService.RoutineAIError {
+                summaryText = "Summary unavailable. Try again."
+                await MainActor.run {
+                    alertMessage = summaryErrorMessage(for: error)
+                }
+            } catch {
+                summaryText = "Summary unavailable. Try again."
+                await MainActor.run {
+                    alertMessage = "Could not generate summary: \(error.localizedDescription)"
+                }
             }
-        )
-        routineStore.addRoutine(routine)
-        #if DEBUG
-        print("[AI] Saved routine '\(routine.name)' with \(routine.workouts.count) workouts. Total routines: \(routineStore.routines.count)")
-        #endif
-        onComplete()
+
+            let routine = Routine(
+                id: routineId,
+                name: routineName,
+                createdAt: Date(),
+                workouts: routineWorkouts,
+                summary: summaryText
+            )
+
+            await MainActor.run {
+                routineStore.addRoutine(routine)
+                #if DEBUG
+                print("[AI][SUMMARY] saved chars=\(summaryText.count)")
+                print("[AI] Saved routine '\(routine.name)' with \(routine.workouts.count) workouts. Total routines: \(routineStore.routines.count)")
+                #endif
+                isSaving = false
+                onComplete()
+            }
+        }
+    }
+
+    private func summaryErrorMessage(for error: RoutineAIService.RoutineAIError) -> String {
+        switch error {
+        case .missingAPIKey:
+            return "Missing API key. Add it in LocalSecrets.openAIAPIKey."
+        case .openAIRequestFailed(let status, let message):
+            if let status {
+                return "OpenAI error (\(status)). \(message)"
+            } else {
+                return "OpenAI error: \(message)"
+            }
+        }
     }
 }

@@ -14,6 +14,41 @@ struct Routine: Identifiable, Codable, Hashable {
     var name: String
     var createdAt: Date
     var workouts: [RoutineWorkout]
+    var summary: String
+
+    init(id: UUID, name: String, createdAt: Date, workouts: [RoutineWorkout], summary: String = "") {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+        self.workouts = workouts
+        self.summary = summary
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case createdAt
+        case workouts
+        case summary
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        workouts = try container.decode([RoutineWorkout].self, forKey: .workouts)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(workouts, forKey: .workouts)
+        try container.encode(summary, forKey: .summary)
+    }
 }
 
 struct RoutineWorkout: Identifiable, Codable, Hashable {

@@ -48,6 +48,34 @@ struct RoutineAIService {
     /// VISUAL TWEAK: Change `minWorkoutCount` to require more/less exercises.
     private static let minWorkoutCount = 5
 
+    /// Generates a concise summary for a routine using OpenAI.
+    /// Change impact: Adjust prompt or fallback text to tweak summary style without blocking save.
+    static func generateRoutineSummary(routineTitle: String, workouts: [RoutineWorkout]) async throws -> String {
+        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
+            throw RoutineAIError.missingAPIKey
+        }
+
+        #if DEBUG
+        print("[AI][SUMMARY] start routine=\(routineTitle)")
+        #endif
+
+        do {
+            let summary = try await OpenAIChatClient.generateRoutineSummary(
+                routineTitle: routineTitle,
+                workouts: workouts
+            )
+            #if DEBUG
+            print("[AI][SUMMARY] status=\(summary.status) ms=\(summary.elapsedMs)")
+            #endif
+            let trimmed = summary.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Summary unavailable. Try again." : trimmed
+        } catch let error as OpenAIError {
+            throw RoutineAIError.openAIRequestFailed(status: error.statusCode, message: error.message)
+        } catch {
+            throw RoutineAIError.openAIRequestFailed(status: nil, message: error.localizedDescription)
+        }
+    }
+
     /// Parses raw workout input using OpenAI for requests or local heuristics for explicit lists.
     /// Change impact: Adjust to tweak when the app relies on AI versus deterministic parsing.
     static func parseWorkouts(from rawText: String, routineTitleHint: String? = nil) async throws -> [ParsedWorkout] {
