@@ -4,7 +4,7 @@
 //
 //  Created by Codex on 2/20/24.
 //
-//  Update: Hardened AI pipeline with generate/repair stages, structured logging, and safer timeouts.
+//  Update: Hardened AI pipeline with generate/repair stages, structured logging, and safer timeouts
 
 import Foundation
 
