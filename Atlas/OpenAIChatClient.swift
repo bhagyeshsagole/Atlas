@@ -234,6 +234,49 @@ Last session sets (if any):
         }
     }
 
+    static func generatePostWorkoutSummary(context: RoutineAIService.PostSummaryContext) async throws -> (text: String, status: Int, elapsedMs: Int) {
+        let contextString = buildPostSummaryContextString(context: context)
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: postSummarySystemPrompt),
+            .init(role: "developer", content: postSummaryDeveloperPrompt),
+            .init(role: "user", content: contextString)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, response.statusCode, elapsed)
+    }
+
+    static func repairPostWorkoutSummary(rawText: String) async throws -> (text: String, status: Int, elapsedMs: Int) {
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: postSummaryRepairSystemPrompt),
+            .init(role: "developer", content: postSummaryRepairDeveloperPrompt),
+            .init(role: "user", content: rawText)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: ResponseFormat(type: "json_object"))
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, response.statusCode, elapsed)
+    }
+
     /// VISUAL TWEAK: Adjust fence stripping here to tolerate different model formatting.
     private static func stripCodeFences(from content: String) -> String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -335,6 +378,85 @@ Rules:
 - Always include suggestedWeight.value; convert to kg if unclear.
 - Do NOT include markdown or bullets.
 """
+
+    private static let postSummarySystemPrompt = """
+You are a concise strength coach. You ONLY output JSON. No markdown, no extra text. Keep answers short, skimmable, and dense with value.
+"""
+
+    private static let postSummaryDeveloperPrompt = """
+Return EXACTLY this JSON shape:
+{
+  "sessionDate": "December 24, 2025 (Wednesday)",
+  "tldr": [
+    "Push day — Chest/Triceps focus",
+    "Volume: 4,820 kg | 10,626 lb · 18 sets · 156 reps",
+    "Best set: 45.4 kg | 100 lb × 8 (Bench Press)",
+    "Progress: Bench +2 reps @ 45.4 kg | 100 lb",
+    "Next: Keep 45.4 kg | 100 lb and aim 10/9/8"
+  ],
+  "sections": {
+    "trained": [
+      { "exercise": "Bench Press", "muscles": "Chest · Triceps · Front delts", "best": "45.4 kg | 100 lb × 8", "sets": 3, "note": "Form stayed tight" }
+    ],
+    "progress": [
+      { "exercise": "Bench Press", "delta": "+2 reps @ 45.4 kg | 100 lb", "confidence": "high" }
+    ],
+    "whatsNext": {
+      "focus": "Push day — prioritize chest + triceps",
+      "targets": [
+        "Bench Press — 45.4 kg | 100 lb × 10/9/8",
+        "Incline DB Press — 22.7 kg | 50 lb × 10/10/8"
+      ],
+      "note": "Keep rest 90–120s on compounds."
+  },
+  "quality": {
+    "rating": 8,
+    "reasons": ["Strong chest volume", "Triceps hit consistently", "Missing lateral delts"]
+  }
+}
+}
+Rules:
+- rating must be an integer 1-10.
+- Never return empty arrays if the session has sets; always include at least one trained item.
+- Keep strings short. No paragraphs. No emojis. No markdown fences.
+- Exercises: max 8 items. Progress highlights: max 2. Each line max ~60 chars.
+"""
+
+    private static let postSummaryRepairSystemPrompt = """
+You fix JSON. You ONLY output valid JSON matching the schema sent. No markdown.
+"""
+
+    private static let postSummaryRepairDeveloperPrompt = """
+Repair the user's content into valid JSON matching the provided schema. Do not add commentary.
+"""
+}
+
+private extension OpenAIChatClient {
+    static func buildPostSummaryContextString(context: RoutineAIService.PostSummaryContext) -> String {
+        var lines: [String] = []
+        lines.append("Session date: \(context.sessionDate)")
+        lines.append("Routine: \(context.routineTitle)")
+        lines.append("Duration minutes: \(context.durationMinutes)")
+        lines.append("Totals: sets=\(context.totals.sets), reps=\(context.totals.reps), volumeKg=\(String(format: "%.1f", context.totals.volumeKg)), volumeLb=\(String(format: "%.1f", context.totals.volumeLb))")
+        lines.append("Unit preference: \(context.unitPreference == .kg ? "kg" : "lb")")
+        lines.append("Exercises:")
+        for ex in context.exercises {
+            let prevLine: String
+            if let prev = ex.previous {
+                let bestPrev = prev.sets.max(by: { ($0.weightKg ?? 0) * Double($0.reps) < ($1.weightKg ?? 0) * Double($1.reps) })
+                let bestPrevText = bestPrev.map { "prevTop=\(String(format: "%.1f", $0.weightKg ?? 0))kg x\($0.reps)" } ?? "prevTop=none"
+                prevLine = bestPrevText
+            } else {
+                prevLine = "prevTop=none"
+            }
+            let currentSets = ex.sets.map { set in
+                let weight = String(format: "%.1f", set.weightKg ?? 0)
+                return "\(set.tag): \(weight)kg x\(set.reps)"
+            }.joined(separator: "; ")
+            lines.append("- \(ex.name) | muscles=\(ex.muscles.0)/\(ex.muscles.1) | sets=\(currentSets) | \(prevLine)")
+        }
+        return lines.joined(separator: "\n")
+    }
 }
 
 private struct OpenAIChatRequest: Codable {

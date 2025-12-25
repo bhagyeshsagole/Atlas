@@ -39,6 +39,8 @@ struct WorkoutSessionView: View {
     @State private var alternateButtonFrame: CGRect = .zero
     @State private var popupSize: CGSize = .zero
     @Environment(\.colorScheme) private var colorScheme
+    @State private var completedSessionId: UUID?
+    @State private var showSummary = false
     private let menuBackgroundOpacity: Double = 0.96
     private let menuBackgroundColorDark = Color.black
     private let menuBackgroundColorLight = Color.white
@@ -82,7 +84,7 @@ struct WorkoutSessionView: View {
             .onAppear {
                 loadCoachingAndHistory()
             }
-            .onChange(of: exerciseIndex, initial: false) { _, _ in
+            .onChange(of: exerciseIndex) { _, _ in
                 clearFocus()
                 resetDraftForNewExercise()
                 loadCoachingAndHistory()
@@ -103,6 +105,13 @@ struct WorkoutSessionView: View {
         .overlay(alternatePopupOverlay)
         .onPreferenceChange(ViewFrameKey.self) { frame in
             alternateButtonFrame = frame
+        }
+        .sheet(isPresented: $showSummary) {
+            if let sessionId = completedSessionId {
+                PostWorkoutSummaryView(sessionID: sessionId) {
+                    dismiss()
+                }
+            }
         }
     }
 
@@ -494,8 +503,12 @@ struct WorkoutSessionView: View {
 
         session.isCompleted = true
         session.endedAt = Date()
+        if let end = session.endedAt {
+            session.durationSeconds = Int(end.timeIntervalSince(session.startedAt))
+        }
         try? modelContext.save()
-        dismiss()
+        completedSessionId = session.id
+        showSummary = true
     }
 
     private func loadCoachingAndHistory() {

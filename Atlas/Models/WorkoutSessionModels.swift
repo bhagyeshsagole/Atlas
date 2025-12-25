@@ -11,6 +11,10 @@ final class WorkoutSession {
     var endedAt: Date?
     var isCompleted: Bool
     @Relationship(deleteRule: .cascade) var exercises: [ExerciseLog]
+    var aiPostSummaryJSON: String
+    var aiPostSummaryGeneratedAt: Date?
+    var aiPostSummaryModel: String?
+    var durationSeconds: Int?
 
     init(id: UUID = UUID(), routineId: UUID?, routineTitle: String, startedAt: Date = Date(), endedAt: Date? = nil, isCompleted: Bool = false, exercises: [ExerciseLog] = []) {
         self.id = id
@@ -20,6 +24,10 @@ final class WorkoutSession {
         self.endedAt = endedAt
         self.isCompleted = isCompleted
         self.exercises = exercises
+        self.aiPostSummaryJSON = ""
+        self.aiPostSummaryGeneratedAt = nil
+        self.aiPostSummaryModel = nil
+        self.durationSeconds = nil
     }
 }
 

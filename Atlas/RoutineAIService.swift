@@ -328,6 +328,157 @@ struct RoutineAIService {
         #endif
     }
 
+    /// DEV MAP: Post-workout summary prompt + JSON schema lives here.
+    static func generatePostWorkoutSummary(
+        session: WorkoutSession,
+        previousSessionsByExercise: [String: ExerciseLog?],
+        unitPreference: WorkoutUnits
+    ) async -> (payload: PostWorkoutSummaryPayload, rawJSON: String, model: String)? {
+        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
+            #if DEBUG
+            print("[AI][POST] Key present: false model=\(OpenAIConfig.model)")
+            #endif
+            return fallbackSummary(session: session)
+        }
+
+        #if DEBUG
+        print("[AI][POST] Key present: true model=\(OpenAIConfig.model)")
+        print("[AI][POST] session=\(session.id) model=\(OpenAIConfig.model) start")
+        #endif
+
+        do {
+            let local = makeLocalSummaryContext(session: session, previousSessionsByExercise: previousSessionsByExercise, unitPreference: unitPreference)
+            let result = try await OpenAIChatClient.generatePostWorkoutSummary(context: local)
+            #if DEBUG
+            print("[AI][POST] status=\(result.status) ms=\(result.elapsedMs)")
+            #endif
+            if let payload = try? JSONDecoder().decode(PostWorkoutSummaryPayload.self, from: Data(result.text.utf8)) {
+                #if DEBUG
+                print("[AI][POST] parsed ok workouts=\(payload.sections.trained.count) rating=\(payload.sections.quality.rating)")
+                #endif
+                return (payload, result.text, OpenAIConfig.model)
+            }
+
+            if let repaired = try? await OpenAIChatClient.repairPostWorkoutSummary(rawText: result.text),
+               let payload = try? JSONDecoder().decode(PostWorkoutSummaryPayload.self, from: Data(repaired.text.utf8)) {
+                #if DEBUG
+                print("[AI][POST][REPAIR] status=\(repaired.status) ms=\(repaired.elapsedMs)")
+                #endif
+                return (payload, repaired.text, OpenAIConfig.model)
+            }
+        } catch let error as OpenAIError {
+            #if DEBUG
+            print("[AI][POST] error status=\(String(describing: error.statusCode)) message=\(error.message)")
+            #endif
+            return fallbackSummary(session: session)
+        } catch {
+            #if DEBUG
+            print("[AI][POST] error message=\(error.localizedDescription)")
+            #endif
+            return fallbackSummary(session: session)
+        }
+
+        return fallbackSummary(session: session)
+    }
+
+    private static func fallbackSummary(session: WorkoutSession) -> (payload: PostWorkoutSummaryPayload, rawJSON: String, model: String)? {
+        let dateLine = makeFormatter().string(from: session.startedAt)
+        let volume = computeVolumeKg(session: session)
+        let tldr = [
+            "\(session.routineTitle) — quick recap",
+            "Volume: \(String(format: "%.1f", volume)) kg",
+            "Sets: \(totalSets(session: session)) · Reps: \(totalReps(session: session))"
+        ]
+        let payload = PostWorkoutSummaryPayload(
+            sessionDate: dateLine,
+            tldr: Array(tldr.prefix(5)),
+            sections: .init(
+                trained: session.exercises.map {
+                    let muscles = ExerciseMuscleMap.muscles(for: $0.name)
+                    return .init(exercise: $0.name, muscles: "\(muscles.primary) · \(muscles.secondary)", best: "Logged", sets: $0.sets.count, note: "Keep form consistent")
+                },
+                progress: session.exercises.map { .init(exercise: $0.name, delta: "First time logged", confidence: "low") },
+                whatsNext: .init(focus: "Repeat this routine", targets: [], note: "Start light and add reps"),
+                quality: .init(rating: 7, reasons: ["Fallback summary", "Add more data for richer insights"])
+            )
+        )
+        if let data = try? JSONEncoder().encode(payload), let raw = String(data: data, encoding: .utf8) {
+            return (payload, raw, OpenAIConfig.model)
+        }
+        return nil
+    }
+
+    struct PostSummaryContext {
+        let sessionDate: String
+        let routineTitle: String
+        let durationMinutes: Int
+        let totals: (sets: Int, reps: Int, volumeKg: Double, volumeLb: Double)
+        let exercises: [ExerciseContext]
+        let unitPreference: WorkoutUnits
+    }
+
+    struct ExerciseContext {
+        let name: String
+        let muscles: (String, String)
+        let sets: [SetLog]
+        let previous: ExerciseLog?
+    }
+
+    private static func makeLocalSummaryContext(
+        session: WorkoutSession,
+        previousSessionsByExercise: [String: ExerciseLog?],
+        unitPreference: WorkoutUnits
+    ) -> PostSummaryContext {
+        let formatter = makeFormatter()
+        let dateLine = formatter.string(from: session.startedAt)
+        let durationSeconds = session.durationSeconds ?? Int((session.endedAt ?? Date()).timeIntervalSince(session.startedAt))
+        let durationMinutes = max(1, durationSeconds / 60)
+        let totalSets = totalSets(session: session)
+        let totalReps = totalReps(session: session)
+        let volumeKg = computeVolumeKg(session: session)
+        let volumeLb = volumeKg * WorkoutSessionFormatter.kgToLb
+
+        let exercises: [ExerciseContext] = session.exercises.map { ex in
+            let prev = previousSessionsByExercise[ex.name.lowercased()] ?? nil
+            return ExerciseContext(
+                name: ex.name,
+                muscles: ExerciseMuscleMap.muscles(for: ex.name),
+                sets: ex.sets,
+                previous: prev ?? nil
+            )
+        }
+
+        return PostSummaryContext(
+            sessionDate: dateLine,
+            routineTitle: session.routineTitle,
+            durationMinutes: durationMinutes,
+            totals: (totalSets, totalReps, volumeKg, volumeLb),
+            exercises: exercises,
+            unitPreference: unitPreference
+        )
+    }
+
+    private static func totalSets(session: WorkoutSession) -> Int {
+        session.exercises.reduce(0) { $0 + $1.sets.count }
+    }
+
+    private static func totalReps(session: WorkoutSession) -> Int {
+        session.exercises.reduce(0) { $0 + $1.sets.reduce(0) { $0 + $1.reps } }
+    }
+
+    private static func computeVolumeKg(session: WorkoutSession) -> Double {
+        session.exercises.flatMap(\.sets).reduce(0) { partial, set in
+            guard let weight = set.weightKg else { return partial }
+            return partial + weight * Double(set.reps)
+        }
+    }
+
+    private static func makeFormatter() -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "LLLL dd, yyyy (EEEE)"
+        return formatter
+    }
+
     /// Detects whether the input is a request for a program versus an explicit list of exercises.
     /// Change impact: Tuning the keywords changes when the app calls AI generation versus parsing user lists directly.
     static func isLikelyWorkoutRequest(_ rawText: String) -> Bool {

@@ -12,6 +12,7 @@ Update Protocol:
 - Where to edit:
   - `Atlas/AtlasApp.swift`: App entry; injects `RoutineStore`, sets SwiftData ModelContainer.
   - `Atlas/ContentView.swift`: NavigationStack routes (Home → routines → create/review → settings fullScreenCover).
+- SwiftData container init + fallback lives in `Atlas/AtlasApp.swift` (`PersistenceController.makeContainer()`), which retries disk, resets store, then falls back to in-memory with DEBUG logs.
 - What to change: Add routes, adjust root environment objects, change preferred color scheme mapping in `resolvedColorScheme`.
 - Example: To add a new route, extend `Route` enum in `ContentView` and add a `.navigationDestination` case.
 
@@ -39,10 +40,12 @@ Update Protocol:
 ## C) Workout Sessions / History (real performance logs)
 - What it controls: Actual performed sessions, exercises, sets (SwiftData).
 - Where to edit:
-  - `Atlas/Models/WorkoutSessionModels.swift`: SwiftData models `WorkoutSession`, `ExerciseLog`, `SetLog`; formatting helpers.
-  - `Atlas/WorkoutSessionView.swift`: Logs sets, session-only exercises, queries last session history.
+  - `Atlas/Models/WorkoutSessionModels.swift`: SwiftData models `WorkoutSession`, `ExerciseLog`, `SetLog`; formatting helpers; AI summary cache fields.
+  - `Atlas/WorkoutSessionView.swift`: Logs sets, session-only exercises, queries last session history; routes to post-workout summary.
   - `Atlas/DevHistorySeeder.swift` (DEBUG): Optional fake history seeding.
-- What to change: Add fields to logs; adjust history queries; tweak set logging UI; edit seed data when testing.
+  - `Atlas/PostWorkoutSummaryView.swift`: Post-session TL;DR layout and loading/caching of AI summary.
+  - `Atlas/Models/ExerciseMuscleMap.swift`: Exercise → primary/secondary muscle lookup for summaries.
+- What to change: Add fields to logs; adjust history queries; tweak set logging UI; edit seed data when testing; adjust summary display spacing.
 - Example format (SetLog stored canonically in kg):
   - `SetLog(tag: "S", weightKg: 60.0, reps: 8, createdAt: Date())`
 
@@ -52,10 +55,20 @@ Update Protocol:
   - `Atlas/OpenAIConfig.swift`: Model name (`gpt-4o-mini`), API key loader (from `LocalSecrets`).
   - `Atlas/OpenAIChatClient.swift`: Request building, prompts (generation/repair/summary/coaching), parsing/repair JSON logic.
   - `Atlas/RoutineAIService.swift`: Request vs explicit parsing, salvage, summary and exercise coaching cache.
+  - API key is read on-demand inside AI calls; missing keys only fail when a request is made (no launch-time assertions).
   - API key source: `Atlas/Config/LocalSecrets.swift` (do not commit real keys).
 - How to test key works (non-UI):
   - Run a generate/repair flow; look for logs `[AI][REQ] stage=generate` and HTTP status 200 in DEBUG console.
   - Missing/invalid key prints `[AI] Key present: false` or throws `Missing OpenAI API key.`.
+
+## Post-Workout Summary (AI)
+- What it controls: AI-generated TL;DR summary after session completion.
+- Where to edit:
+  - Prompt/schema: `Atlas/OpenAIChatClient.swift` (`postSummary...` prompts), `Atlas/RoutineAIService.swift` (`generatePostWorkoutSummary`), models in `Atlas/Models/PostWorkoutSummaryModels.swift`.
+  - Layout + spacing: `Atlas/PostWorkoutSummaryView.swift` (`tldrCardPadding`, `sectionSpacing`, `exerciseRowMaxLines`).
+  - Muscle lookup: `Atlas/Models/ExerciseMuscleMap.swift`.
+  - Caching fields on session: `WorkoutSession.aiPostSummaryJSON`, `.aiPostSummaryGeneratedAt`, `.aiPostSummaryModel`, `.durationSeconds`.
+- What to change: Tweak TL;DR lines/section spacing, edit muscle map entries, adjust rating/target wording in the prompt.
 
 ## E) Design System / UI Consistency
 - What it controls: Typography scale, spacing, glass styling, shared controls.
