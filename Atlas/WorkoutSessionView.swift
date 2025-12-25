@@ -94,7 +94,11 @@ struct WorkoutSessionView: View {
         .background(Color(.systemBackground))
         .tint(.primary)
         .safeAreaInset(edge: .bottom) {
-            bottomActions
+            if !isEditingSetFields {
+                bottomActions
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(AppStyle.popupAnimation, value: isEditingSetFields)
+            }
         }
         .overlay(alternatePopupOverlay)
         .onPreferenceChange(ViewFrameKey.self) { frame in
@@ -364,6 +368,10 @@ struct WorkoutSessionView: View {
         suggestions[currentExercise.id]
     }
 
+    private var isEditingSetFields: Bool {
+        focusedField != nil
+    }
+
     private var loggedSetsForCurrent: [SetLog] {
         loggedSets[currentExercise.id] ?? []
     }
@@ -424,6 +432,7 @@ struct WorkoutSessionView: View {
                     setDraft = SetLogDraft(weight: "", reps: "", tag: setDraft.tag)
                     /// UX TWEAK: Dismiss keyboard after successfully adding a set by clearing focus.
                     focusedField = nil
+                    /// UX TWEAK: Bottom action pills hide while typing (keyboard up) and reappear after Add/dismiss.
                     isAddingSet = false
                 }
             } catch {
