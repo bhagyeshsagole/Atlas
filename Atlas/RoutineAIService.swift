@@ -28,6 +28,22 @@ struct RoutineAIService {
         case openAIRequestFailed(status: Int?, message: String)
     }
 
+    struct ExerciseSuggestion: Hashable {
+        var techniqueTips: String
+        var thisSessionPlan: String
+        var suggestedWeightKg: Double?
+        var suggestedReps: String
+        var suggestedTag: String
+    }
+
+    private struct CoachingCacheKey: Hashable {
+        let routineId: UUID?
+        let exerciseName: String
+        let lastSessionDate: Date?
+    }
+
+    private static var coachingCache: [CoachingCacheKey: ExerciseSuggestion] = [:]
+
     struct RoutineConstraints {
         enum PreferredSplit: String {
             case push, pull, legs
@@ -74,6 +90,65 @@ struct RoutineAIService {
         } catch {
             throw RoutineAIError.openAIRequestFailed(status: nil, message: error.localizedDescription)
         }
+    }
+
+    /// Generates technique tips and session targets for a specific exercise. Non-blocking: returns fallback text on failure.
+    /// Change impact: Adjust prompt or caching key to change how often tips refresh.
+    static func generateExerciseCoaching(
+        routineTitle: String,
+        routineId: UUID?,
+        exerciseName: String,
+        lastSessionSetsText: String,
+        lastSessionDate: Date?,
+        preferredUnit: WorkoutUnits
+    ) async -> ExerciseSuggestion {
+        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
+            return defaultSuggestion()
+        }
+
+        let cacheKey = CoachingCacheKey(routineId: routineId, exerciseName: exerciseName.lowercased(), lastSessionDate: lastSessionDate)
+        if let cached = coachingCache[cacheKey] {
+            return cached
+        }
+
+        #if DEBUG
+        print("[AI][COACH] start exercise=\(exerciseName)")
+        #endif
+
+        do {
+            let result = try await OpenAIChatClient.generateExerciseCoaching(
+                routineTitle: routineTitle,
+                exerciseName: exerciseName,
+                lastSessionSetsText: lastSessionSetsText,
+                preferredUnit: preferredUnit
+            )
+            let suggestion = result.suggestion
+            #if DEBUG
+            print("[AI][COACH] status=\(result.status) ms=\(result.elapsedMs)")
+            #endif
+            coachingCache[cacheKey] = suggestion
+            return suggestion
+        } catch let error as OpenAIError {
+            #if DEBUG
+            print("[AI][COACH] error status=\(String(describing: error.statusCode)) message=\(error.message)")
+            #endif
+            return defaultSuggestion()
+        } catch {
+            #if DEBUG
+            print("[AI][COACH] error message=\(error.localizedDescription)")
+            #endif
+            return defaultSuggestion()
+        }
+    }
+
+    private static func defaultSuggestion() -> ExerciseSuggestion {
+        ExerciseSuggestion(
+            techniqueTips: "Tips unavailable — continue logging.",
+            thisSessionPlan: "Follow your usual working sets.",
+            suggestedWeightKg: nil,
+            suggestedReps: "10-12",
+            suggestedTag: "S"
+        )
     }
 
     /// Parses raw workout input using OpenAI for requests or local heuristics for explicit lists.

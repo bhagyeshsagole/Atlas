@@ -3,7 +3,7 @@ import SwiftUI
 struct RoutinePreStartView: View {
     let routine: Routine
     @Environment(\.dismiss) private var dismiss
-    @State private var isStarting = false
+    @State private var showSession = false
 
     /// VISUAL TWEAK: Adjust the summary card height by changing `summaryCardMaxHeight`.
     private let summaryCardMaxHeight: CGFloat = 480
@@ -17,7 +17,7 @@ struct RoutinePreStartView: View {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                             sectionHeader("Summary")
-                            Text(routine.summary.isEmpty ? "Summary unavailable. Try again." : routine.summary)
+                            Text(routine.summary.isEmpty ? "Summary unavailable — regenerate later" : routine.summary)
                                 .appFont(.body, weight: .regular)
                                 .foregroundStyle(.primary)
                                 .multilineTextAlignment(.leading)
@@ -52,11 +52,6 @@ struct RoutinePreStartView: View {
             .padding(AppStyle.contentPaddingLarge)
             .padding(.bottom, bottomActionPadding + AppStyle.sectionSpacing)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-            NavigationLink(destination: WorkoutView(), isActive: $isStarting) {
-                EmptyView()
-            }
-            .hidden()
         }
         .navigationTitle(routine.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -64,6 +59,9 @@ struct RoutinePreStartView: View {
         .tint(.primary)
         .safeAreaInset(edge: .bottom) {
             bottomActions
+        }
+        .navigationDestination(isPresented: $showSession) {
+            WorkoutSessionView(routine: routine)
         }
     }
 
@@ -73,10 +71,12 @@ struct RoutinePreStartView: View {
                 Haptics.playLightTap()
                 dismiss()
             }
+            .frame(maxWidth: .infinity)
             AtlasPillButton("Start Workout") {
                 Haptics.playLightTap()
-                isStarting = true
+                showSession = true
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, AppStyle.screenHorizontalPadding)
         .padding(.bottom, bottomActionPadding)

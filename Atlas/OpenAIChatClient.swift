@@ -186,6 +186,54 @@ Return 2-5 short lines, plain text only. No markdown, no bullets.
         return (cleaned, response.statusCode, elapsed)
     }
 
+    /// Generates coaching tips and session targets for a specific exercise.
+    static func generateExerciseCoaching(
+        routineTitle: String,
+        exerciseName: String,
+        lastSessionSetsText: String,
+        preferredUnit: WorkoutUnits
+    ) async throws -> (suggestion: RoutineAIService.ExerciseSuggestion, status: Int, elapsedMs: Int) {
+        let userContent = """
+Routine: \(routineTitle)
+Exercise: \(exerciseName)
+Preferred unit: \(preferredUnit == .kg ? "kg" : "lb")
+Last session sets (if any):
+\(lastSessionSetsText.isEmpty ? "None" : lastSessionSetsText)
+"""
+
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: coachingSystemPrompt),
+            .init(role: "developer", content: coachingDeveloperPrompt),
+            .init(role: "user", content: userContent)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let jsonData = cleaned.data(using: .utf8) else {
+            throw OpenAIError(statusCode: response.statusCode, message: "Unable to encode model response.")
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(CoachingSuggestionResponse.self, from: jsonData)
+            let suggestion = decoded.toSuggestion()
+            #if DEBUG
+            print("[AI][COACH] parsed=true")
+            #endif
+            return (suggestion, response.statusCode, elapsed)
+        } catch {
+            throw OpenAIError(statusCode: response.statusCode, message: "Failed to decode coaching JSON: \(error.localizedDescription)")
+        }
+    }
+
     /// VISUAL TWEAK: Adjust fence stripping here to tolerate different model formatting.
     private static func stripCodeFences(from content: String) -> String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -267,6 +315,26 @@ Rep ranges: ...
 Tip: ...
 Avoid fluff. Do not wrap in quotes or code fences.
 """
+
+    private static let coachingSystemPrompt = """
+You coach strength exercises. You return ONLY JSON. No markdown, no prose.
+"""
+
+    private static let coachingDeveloperPrompt = """
+Return JSON matching:
+{
+  "techniqueTips": "short text",
+  "thisSessionPlan": "short text",
+  "suggestedWeight": { "value": 45.4, "unit": "kg" },
+  "suggestedReps": "10-12",
+  "suggestedTag": "S"
+}
+Rules:
+- techniqueTips and thisSessionPlan must be concise (1-2 sentences each).
+- suggestedTag is one of "W", "S", "DS" (default S).
+- Always include suggestedWeight.value; convert to kg if unclear.
+- Do NOT include markdown or bullets.
+"""
 }
 
 private struct OpenAIChatRequest: Codable {
@@ -295,6 +363,38 @@ private struct OpenAIChatResponse: Codable {
     struct Message: Codable {
         let role: String
         let content: String
+    }
+}
+
+private struct CoachingSuggestionResponse: Codable {
+    struct SuggestedWeight: Codable {
+        let value: Double
+        let unit: String?
+    }
+
+    let techniqueTips: String
+    let thisSessionPlan: String
+    let suggestedWeight: SuggestedWeight?
+    let suggestedReps: String?
+    let suggestedTag: String?
+
+    func toSuggestion() -> RoutineAIService.ExerciseSuggestion {
+        var weightKg: Double?
+        if let weight = suggestedWeight {
+            if weight.unit?.lowercased() == "lb" {
+                weightKg = weight.value / WorkoutSessionFormatter.kgToLb
+            } else {
+                weightKg = weight.value
+            }
+        }
+
+        return RoutineAIService.ExerciseSuggestion(
+            techniqueTips: techniqueTips.trimmingCharacters(in: .whitespacesAndNewlines),
+            thisSessionPlan: thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines),
+            suggestedWeightKg: weightKg,
+            suggestedReps: (suggestedReps ?? "10-12").trimmingCharacters(in: .whitespacesAndNewlines),
+            suggestedTag: (suggestedTag ?? "S").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        )
     }
 }
 

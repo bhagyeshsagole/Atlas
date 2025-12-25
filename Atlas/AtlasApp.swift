@@ -15,7 +15,7 @@ struct AtlasApp: App {
     /// Change impact: Adding or removing models here changes which data persists across launches.
     let sharedModelContainer: ModelContainer = {
         do {
-            return try ModelContainer(for: Workout.self)
+            return try ModelContainer(for: Workout.self, WorkoutSession.self, ExerciseLog.self, SetLog.self)
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
