@@ -84,6 +84,7 @@ struct WorkoutSessionView: View {
             }
             .onChange(of: exerciseIndex, initial: false) { _, _ in
                 clearFocus()
+                resetDraftForNewExercise()
                 loadCoachingAndHistory()
             }
 
@@ -420,7 +421,9 @@ struct WorkoutSessionView: View {
                 try modelContext.save()
                 await MainActor.run {
                     loggedSets[currentExercise.id, default: []].append(set)
-                    setDraft = SetLogDraft(weight: "", reps: "", tag: "W")
+                    setDraft = SetLogDraft(weight: "", reps: "", tag: setDraft.tag)
+                    /// UX TWEAK: Dismiss keyboard after successfully adding a set by clearing focus.
+                    focusedField = nil
                     isAddingSet = false
                 }
             } catch {
@@ -460,6 +463,9 @@ struct WorkoutSessionView: View {
 
     private func goToNextExercise() {
         guard exerciseIndex < sessionExercises.count - 1 else { return }
+        /// VISUAL TWEAK: Default tag for a new exercise is set in `resetDraftForNewExercise()`.
+        /// DEV NOTE: We do NOT reset tag after adding a set; tag persists until user changes it.
+        resetDraftForNewExercise()
         exerciseIndex += 1
     }
 
@@ -526,6 +532,10 @@ struct WorkoutSessionView: View {
 
     private func clearFocus() {
         focusedField = nil
+    }
+
+    private func resetDraftForNewExercise() {
+        setDraft = SetLogDraft(weight: "", reps: "", tag: "W")
     }
 
     private func setLine(_ set: SetLog) -> String {
