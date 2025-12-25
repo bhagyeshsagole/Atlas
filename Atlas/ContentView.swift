@@ -9,6 +9,9 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    #if DEBUG
+    @Environment(\.modelContext) private var modelContext
+    #endif
     @State private var path: [Route] = []
     @State private var showSettings = false
     @AppStorage("appearanceMode") private var appearanceMode = "light"
@@ -55,6 +58,11 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showSettings) {
             SettingsView(onDismiss: { showSettings = false })
         }
+        #if DEBUG
+        .task {
+            DevHistorySeeder.seedIfNeeded(modelContext: modelContext)
+        }
+        #endif
     }
 
     /// Resolves the app-wide color scheme based on stored appearance.

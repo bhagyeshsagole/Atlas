@@ -38,6 +38,10 @@ struct WorkoutSessionView: View {
     @State private var showAltPopup = false
     @State private var alternateButtonFrame: CGRect = .zero
     @State private var popupSize: CGSize = .zero
+    @Environment(\.colorScheme) private var colorScheme
+    private let menuBackgroundOpacity: Double = 0.96
+    private let menuBackgroundColorDark = Color.black
+    private let menuBackgroundColorLight = Color.white
     @State private var newExerciseName: String = ""
     @FocusState private var focusedField: Field?
 
@@ -268,7 +272,9 @@ struct WorkoutSessionView: View {
                         .frame(maxWidth: popupWidth, alignment: .leading)
                         .background(
                             RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
-                                .fill(Color(.systemBackground).opacity(0.65))
+                                /// VISUAL TWEAK: Increase `menuBackgroundOpacity` if you can still see content behind the popup.
+                                /// VISUAL TWEAK: Adjust `menuBackgroundColorDark/Light` to change the popup tone.
+                                .fill((colorScheme == .dark ? menuBackgroundColorDark : menuBackgroundColorLight).opacity(menuBackgroundOpacity))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
