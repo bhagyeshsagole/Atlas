@@ -1,3 +1,10 @@
+//
+//  WorkoutSessionView.swift
+//  Atlas
+//
+//  Overview: Live workout session logger with AI coaching and set tracking.
+//
+
 import SwiftUI
 import SwiftData
 

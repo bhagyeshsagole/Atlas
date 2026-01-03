@@ -2,7 +2,7 @@
 //  Workout.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: SwiftData model representing a completed workout date.
 //
 
 import Foundation

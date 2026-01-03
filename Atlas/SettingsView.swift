@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: Full-screen settings for appearance selection and weight units.
 //
 
 import SwiftUI

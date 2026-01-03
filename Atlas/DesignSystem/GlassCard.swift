@@ -2,7 +2,7 @@
 //  GlassCard.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: Reusable glass card container with shared styling.
 //
 
 import SwiftUI

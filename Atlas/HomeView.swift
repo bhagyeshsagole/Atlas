@@ -2,7 +2,7 @@
 //  HomeView.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24
+//  Overview: Home screen with calendar, brand header, and start workout entry point.
 //
 
 import SwiftUI

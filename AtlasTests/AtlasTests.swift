@@ -2,7 +2,7 @@
 //  AtlasTests.swift
 //  AtlasTests
 //
-//  Created by Bhagyesh Sagole on 12/16/25.
+//  Overview: Skeleton for Atlas unit tests.
 //
 
 import Testing

@@ -2,7 +2,7 @@
 //  RoutineStore.swift
 //  Atlas
 //
-//  Created by Codex on 2/20/24.
+//  Overview: JSON-backed routine persistence layer shared across views.
 //
 //  Update: Hardening pass to support custom storage URLs for tests without changing runtime behavior.
 

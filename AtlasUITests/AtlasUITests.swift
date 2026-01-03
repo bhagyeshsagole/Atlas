@@ -2,7 +2,7 @@
 //  AtlasUITests.swift
 //  AtlasUITests
 //
-//  Created by Bhagyesh Sagole on 12/16/25.
+//  Overview: UI test scaffold for launching the app and running interactions.
 //
 
 import XCTest

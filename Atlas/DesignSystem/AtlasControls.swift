@@ -2,9 +2,7 @@
 //  AtlasControls.swift
 //  Atlas
 //
-//  Created by Codex on 3/05/24.
-//
-//  Unified control system for header icons, pills, and glass menus.
+//  Overview: Unified control system for header icons, pills, and glass menus.
 
 import SwiftUI
 

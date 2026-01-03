@@ -2,7 +2,7 @@
 //  PressableGlassButtonStyle.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: Button style for glass CTA pills shared across the app.
 //
 
 import SwiftUI

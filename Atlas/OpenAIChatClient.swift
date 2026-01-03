@@ -2,7 +2,7 @@
 //  OpenAIChatClient.swift
 //  Atlas
 //
-//  Created by Codex on 2/20/24.
+//  Overview: Low-level OpenAI chat client for routine parsing and coaching pipelines.
 //
 //  Update: Hardened AI pipeline with generate/repair stages, structured logging, and safer timeouts
 

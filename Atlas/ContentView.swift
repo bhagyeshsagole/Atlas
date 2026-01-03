@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  Atlas
 //
-//  Created by Bhagyesh Sagole on 12/16/25.
+//  Overview: Root navigation shell coordinating home, routine creation, and settings flows.
 //
 
 import SwiftUI

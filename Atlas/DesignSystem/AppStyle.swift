@@ -2,7 +2,7 @@
 //  AppStyle.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: Design tokens for typography, spacing, and glass styling.
 //
 //  Update: Hardening pass to align typography scales, header hit areas, and popup sizing/animation.
 

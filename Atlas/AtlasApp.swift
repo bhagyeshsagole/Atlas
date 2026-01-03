@@ -2,7 +2,7 @@
 //  AtlasApp.swift
 //  Atlas
 //
-//  Created by Bhagyesh Sagole on 12/16/25.
+//  Overview: App entry point wiring the SwiftData container and injecting shared stores.
 //
 
 import SwiftUI
@@ -51,7 +51,7 @@ enum AtlasPersistence {
             #endif
             let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
             return (try? ModelContainer(for: schema, configurations: [fallback]))
-            ?? (try! ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]))
+        ?? (try! ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]))
         }
     }
 }

@@ -2,7 +2,7 @@
 //  RoutineListView.swift
 //  Atlas
 //
-//  Created by Codex on 2/20/24.
+//  Overview: Lists routines with edit/start menus and navigation into editor views.
 //
 //  Update: Hardening pass to align header hit areas, popup sizing, haptics, and truncation.
 

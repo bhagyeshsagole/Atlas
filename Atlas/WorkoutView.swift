@@ -2,7 +2,7 @@
 //  WorkoutView.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: Simple workout completion screen that logs today's session.
 //
 
 import SwiftUI

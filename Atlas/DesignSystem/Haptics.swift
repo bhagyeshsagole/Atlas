@@ -2,7 +2,7 @@
 //  Haptics.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: Haptic utility functions for consistent feedback across controls.
 //
 
 import UIKit

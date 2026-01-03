@@ -2,7 +2,7 @@
 //  RoutineAIService.swift
 //  Atlas
 //
-//  Created by Codex on 2/20/24.
+//  Overview: AI pipeline for parsing workouts, generating summaries, and coaching suggestions.
 //
 //  Update: Rebuilt AI pipeline (generate → repair → parse) with auto-repair and local salvage to avoid user-facing format errors.
 

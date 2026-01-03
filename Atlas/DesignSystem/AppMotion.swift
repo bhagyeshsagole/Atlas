@@ -2,7 +2,7 @@
 //  AppMotion.swift
 //  Atlas
 //
-//  Created by Codex on 2/12/24.
+//  Overview: Shared animation curves for transitions and press responses.
 //
 
 import SwiftUI

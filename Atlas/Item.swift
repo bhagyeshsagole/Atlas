@@ -2,7 +2,7 @@
 //  Item.swift
 //  Atlas
 //
-//  Created by Bhagyesh Sagole on 12/16/25.
+//  Overview: Sample SwiftData item storing a timestamp.
 //
 
 import Foundation

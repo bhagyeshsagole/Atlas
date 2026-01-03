@@ -2,7 +2,7 @@
 //  AtlasUITestsLaunchTests.swift
 //  AtlasUITests
 //
-//  Created by Bhagyesh Sagole on 12/16/25.
+//  Overview: Launch test capturing startup performance and screenshots.
 //
 
 import XCTest
