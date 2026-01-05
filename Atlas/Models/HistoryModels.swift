@@ -1,7 +1,16 @@
+//
+//  HistoryModels.swift
+//  Atlas
+//
+//  Overview: SwiftData history models for performed workout sessions.
+//
+
 import Foundation
 import SwiftData
 
-/// DEV MAP: SwiftData models for real workout history live here.
+/// DEV NOTE: SwiftData history (performed sessions) lives here.
+/// DEV NOTE: Weight is stored in KG; convert to LB only for UI.
+/// VISUAL TWEAK: If we ever change tags beyond W/S/DS, update SetTag here.
 @Model
 final class WorkoutSession {
     @Attribute(.unique) var id: UUID
@@ -9,27 +18,53 @@ final class WorkoutSession {
     var routineTitle: String
     var startedAt: Date
     var endedAt: Date?
-    var isCompleted: Bool
-    @Relationship(deleteRule: .cascade) var exercises: [ExerciseLog]
+    var totalSets: Int
+    var totalReps: Int
+    var volumeKg: Double
+    var aiPostSummaryText: String
     var aiPostSummaryJSON: String
+    var rating: Double?
+    /// Compatibility: existing flows track completion/duration; keep them for now.
+    var isCompleted: Bool
+    var durationSeconds: Int?
     var aiPostSummaryGeneratedAt: Date?
     var aiPostSummaryModel: String?
-    var durationSeconds: Int?
-    var aiPostSummaryText: String
+    @Relationship(deleteRule: .cascade) var exercises: [ExerciseLog]
 
-    init(id: UUID = UUID(), routineId: UUID?, routineTitle: String, startedAt: Date = Date(), endedAt: Date? = nil, isCompleted: Bool = false, exercises: [ExerciseLog] = []) {
+    init(
+        id: UUID = UUID(),
+        routineId: UUID?,
+        routineTitle: String,
+        startedAt: Date = Date(),
+        endedAt: Date? = nil,
+        totalSets: Int = 0,
+        totalReps: Int = 0,
+        volumeKg: Double = 0,
+        aiPostSummaryText: String = "",
+        aiPostSummaryJSON: String = "",
+        rating: Double? = nil,
+        isCompleted: Bool = false,
+        durationSeconds: Int? = nil,
+        aiPostSummaryGeneratedAt: Date? = nil,
+        aiPostSummaryModel: String? = nil,
+        exercises: [ExerciseLog] = []
+    ) {
         self.id = id
         self.routineId = routineId
         self.routineTitle = routineTitle
         self.startedAt = startedAt
         self.endedAt = endedAt
+        self.totalSets = totalSets
+        self.totalReps = totalReps
+        self.volumeKg = volumeKg
+        self.aiPostSummaryText = aiPostSummaryText
+        self.aiPostSummaryJSON = aiPostSummaryJSON
+        self.rating = rating
         self.isCompleted = isCompleted
+        self.durationSeconds = durationSeconds
+        self.aiPostSummaryGeneratedAt = aiPostSummaryGeneratedAt
+        self.aiPostSummaryModel = aiPostSummaryModel
         self.exercises = exercises
-        self.aiPostSummaryJSON = ""
-        self.aiPostSummaryGeneratedAt = nil
-        self.aiPostSummaryModel = nil
-        self.durationSeconds = nil
-        self.aiPostSummaryText = ""
     }
 }
 
@@ -41,7 +76,13 @@ final class ExerciseLog {
     var session: WorkoutSession?
     @Relationship(deleteRule: .cascade) var sets: [SetLog]
 
-    init(id: UUID = UUID(), name: String, orderIndex: Int, session: WorkoutSession? = nil, sets: [SetLog] = []) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        orderIndex: Int,
+        session: WorkoutSession? = nil,
+        sets: [SetLog] = []
+    ) {
         self.id = id
         self.name = name
         self.orderIndex = orderIndex
@@ -53,20 +94,39 @@ final class ExerciseLog {
 @Model
 final class SetLog {
     @Attribute(.unique) var id: UUID
-    var tag: String
+    var tagRaw: String
     var weightKg: Double?
     var reps: Int
     var createdAt: Date
     var exercise: ExerciseLog?
 
-    init(id: UUID = UUID(), tag: String, weightKg: Double?, reps: Int, createdAt: Date = Date(), exercise: ExerciseLog? = nil) {
+    init(
+        id: UUID = UUID(),
+        tag: String,
+        weightKg: Double?,
+        reps: Int,
+        createdAt: Date = Date(),
+        exercise: ExerciseLog? = nil
+    ) {
         self.id = id
-        self.tag = tag
+        self.tagRaw = tag
         self.weightKg = weightKg
         self.reps = reps
         self.createdAt = createdAt
         self.exercise = exercise
     }
+
+    /// Compatibility alias so existing code that references `.tag` continues to compile.
+    var tag: String {
+        get { tagRaw }
+        set { tagRaw = newValue }
+    }
+}
+
+enum SetTag: String {
+    case W
+    case S
+    case DS
 }
 
 enum WorkoutUnits {
@@ -119,12 +179,10 @@ enum WorkoutSessionHistory {
         for exerciseName: String,
         context: ModelContext
     ) -> ExerciseLog? {
-        let sessionDescriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.isCompleted == true },
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        guard let sessions = try? context.fetch(sessionDescriptor) else { return nil }
-        for session in sessions {
+        /// DEV NOTE: Placeholder in Pass 1 — replace with real SwiftData query in Pass 2.
+        let descriptor = FetchDescriptor<WorkoutSession>()
+        guard let sessions = try? context.fetch(descriptor) else { return nil }
+        for session in sessions.sorted(by: { $0.startedAt > $1.startedAt }) {
             if let match = session.exercises.first(where: { $0.name.lowercased() == exerciseName.lowercased() }) {
                 return match
             }

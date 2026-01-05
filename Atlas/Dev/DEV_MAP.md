@@ -16,6 +16,12 @@ Update Protocol:
 - What to change: Add routes, adjust root environment objects, change preferred color scheme mapping in `resolvedColorScheme`.
 - Example: To add a new route, extend `Route` enum in `ContentView` and add a `.navigationDestination` case.
 
+## Session History v1 — Pass 1
+- Models live in `Atlas/Models/HistoryModels.swift` (WorkoutSession, ExerciseLog, SetLog, SetTag helpers).
+- SwiftData container wiring updated in `AtlasApp.swift` (includes history models; DEBUG boot log lists them).
+- HistoryStore placeholder (no predicates yet) lives in `Atlas/HistoryStore.swift`; real queries planned for Pass 2.
+- Note: No UI wiring in this pass; Home/Workout screens remain unchanged.
+
 ## B) Routines (templates)
 - What it controls: Routine templates (name + workouts), persistence via JSON.
 - Where to edit:

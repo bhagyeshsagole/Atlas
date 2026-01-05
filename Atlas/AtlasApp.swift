@@ -44,14 +44,18 @@ enum AtlasPersistence {
         let schema = Schema(modelTypes)
         do {
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-            return try ModelContainer(for: schema, configurations: [config])
+            let container = try ModelContainer(for: schema, configurations: config)
+            #if DEBUG
+            print("[BOOT] SwiftData schema includes: WorkoutSession, ExerciseLog, SetLog")
+            #endif
+            return container
         } catch {
             #if DEBUG
             print("[BOOT] SwiftData container failed: \(error). Falling back to in-memory.")
             #endif
             let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-            return (try? ModelContainer(for: schema, configurations: [fallback]))
-        ?? (try! ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]))
+            return (try? ModelContainer(for: schema, configurations: fallback))
+        ?? (try! ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)))
         }
     }
 }
