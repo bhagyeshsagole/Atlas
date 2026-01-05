@@ -3,6 +3,7 @@
 //  Atlas
 //
 //  Overview: JSON-backed routine persistence layer shared across views.
+/// DEV MAP: Routines (templates) persist to `routines.json` at `FileManager.documentDirectory/routines.json` unless a custom storageURL is provided.
 //
 //  Update: Hardening pass to support custom storage URLs for tests without changing runtime behavior.
 

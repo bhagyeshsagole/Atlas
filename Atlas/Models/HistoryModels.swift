@@ -8,7 +8,7 @@
 import Foundation
 import SwiftData
 
-/// DEV NOTE: SwiftData history (performed sessions) lives here.
+/// DEV MAP: SwiftData history (performed sessions) lives here.
 /// DEV NOTE: Weight is stored in KG; convert to LB only for UI.
 /// VISUAL TWEAK: If we ever change tags beyond W/S/DS, update SetTag here.
 @Model

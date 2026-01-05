@@ -7,7 +7,7 @@ struct DevFlags {
     static var seedHistory: Bool = false
 }
 
-/// DEV SEED: Toggle `DevFlags.seedHistory` to true to insert fake sessions.
+/// DEV MAP: Fake history seeding (DEBUG-only) lives here; toggle `DevFlags.seedHistory` to write sample sessions.
 /// DEV SEED: Edit `sampleSessions` below to change dates/weights/reps.
 /// DEV SEED: Expected format:
 ///   Session(date: ..., routineTitle: "...", exercises: [

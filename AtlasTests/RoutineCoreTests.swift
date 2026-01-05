@@ -68,4 +68,12 @@ final class RoutineCoreTests: XCTestCase {
         reloadedStore.deleteRoutine(id: updated.id)
         XCTAssertEqual(reloadedStore.routines.count, 0)
     }
+
+    func testRoutineStoreLoadCorruptedFileDoesNotCrash() {
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("RoutineStoreCorrupted-\(UUID().uuidString).json")
+        try? "not-json".data(using: .utf8)?.write(to: tempURL)
+        let store = RoutineStore(storageURL: tempURL)
+        store.load()
+        XCTAssertTrue(store.routines.isEmpty)
+    }
 }

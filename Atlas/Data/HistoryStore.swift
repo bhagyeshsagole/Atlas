@@ -9,6 +9,7 @@ import Foundation
 import Combine
 import SwiftData
 
+/// DEV MAP: History writes/reads live here (queries, discard rules, calendar data).
 /// DEV NOTE: ALL history writes go through HistoryStore so UI + AI always agree.
 /// DEV NOTE: Queries avoid #Predicate macros to prevent SwiftData macro compiler issues.
 @MainActor
@@ -21,6 +22,11 @@ final class HistoryStore: ObservableObject {
     }
 
     func startSession(routineId: UUID?, routineTitle: String, exercises: [String]) -> WorkoutSession {
+        // Re-entrancy guard: reuse any active draft for the same routine to avoid duplicate starts.
+        if let active = existingActiveSession(routineId: routineId, routineTitle: routineTitle) {
+            return active
+        }
+
         let session = WorkoutSession(
             routineId: routineId,
             routineTitle: routineTitle,
@@ -171,6 +177,21 @@ final class HistoryStore: ObservableObject {
 
     private func startOfDay(_ date: Date) -> Date {
         calendar.startOfDay(for: date)
+    }
+
+    private func existingActiveSession(routineId: UUID?, routineTitle: String) -> WorkoutSession? {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+        return sessions.first { session in
+            guard session.endedAt == nil else { return false }
+            if let rid = routineId {
+                return session.routineId == rid
+            } else {
+                return session.routineId == nil && session.routineTitle == routineTitle
+            }
+        }
     }
 
     private func saveContext() {

@@ -17,10 +17,12 @@ Update Protocol:
 - Example: To add a new route, extend `Route` enum in `ContentView` and add a `.navigationDestination` case.
 
 ## Session History v1 — Pass 2
-- HistoryStore lives in `Atlas/Data/HistoryStore.swift`; CRUD + queries are implemented without `#Predicate` macros (filtering in Swift).
-- Volume calculation lives in `HistoryStore.computeTotals`; date grouping helpers in `dayInterval`/`monthInterval`.
-- Queries: `recentSessions`, `sessions(on:)`, `activeDays(in:)` filter on `endedAt != nil` and `totalSets > 0`.
-- UI is still not wired; hook up Home/Workout flows in Pass 3.
+- History models: `Atlas/Models/HistoryModels.swift` (WorkoutSession, ExerciseLog, SetLog, SetTag).
+- History store: `Atlas/Data/HistoryStore.swift` (CRUD + queries, discard-if-zero-sets, volume calc, date helpers). No `#Predicate` macros; filtering is in Swift.
+- Calendar marks/query data come from `HistoryStore.activeDays(in:)`; day sessions from `HistoryStore.sessions(on:)`.
+- DayHistoryView wiring not present yet; add consumption later when UI hooks up.
+- Dev seeding: `Atlas/DevHistorySeeder.swift` (toggle `DevFlags.seedHistory`, expected Session/Exercise/Set format inline).
+- Persistence: SwiftData store lives in Application Support (`Atlas.sqlite`). Verify persistence by logging a session, killing the app, and reopening to see it still present. Boot logs (DEBUG) print store path and history session count.
 
 ## B) Routines (templates)
 - What it controls: Routine templates (name + workouts), persistence via JSON.
