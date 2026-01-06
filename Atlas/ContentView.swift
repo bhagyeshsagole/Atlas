@@ -21,6 +21,7 @@ struct ContentView: View {
         case routines
         case createRoutine
         case reviewRoutine(RoutineDraft)
+        case history
     }
 
     /// Builds the root navigation stack for Home and Workout flows.
@@ -52,6 +53,8 @@ struct ContentView: View {
                     ) {
                         path = [.routines]
                     }
+                case .history:
+                    AllHistoryView()
                 }
             }
         }

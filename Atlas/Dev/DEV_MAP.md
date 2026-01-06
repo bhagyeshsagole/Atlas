@@ -23,6 +23,9 @@ Update Protocol:
 - DayHistoryView wiring not present yet; add consumption later when UI hooks up.
 - Dev seeding: `Atlas/DevHistorySeeder.swift` (toggle `DevFlags.seedHistory`, expected Session/Exercise/Set format inline).
 - Persistence: SwiftData store lives in Application Support (`Atlas.sqlite`). Verify persistence by logging a session, killing the app, and reopening to see it still present. Boot logs (DEBUG) print store path and history session count.
+- Home session deck UI lives in `Atlas/Views/SessionHistoryStackView.swift` (collapsed stack + expand-on-swipe); sessions fed via `@Query` filtering in `Atlas/HomeView.swift`.
+- Home session deck visibility: rendered directly under the calendar in `Atlas/HomeView.swift`; sizing handled in `SessionHistoryStackView` (min height). Completed-session filtering occurs in HomeView (`endedAt != nil && totalSets > 0`), and a placeholder card is shown when empty.
+- All history screen: `Atlas/Views/AllHistoryView.swift`; route added in `ContentView` as `.history`; Home placeholder card navigates to it.
 
 ## B) Routines (templates)
 - What it controls: Routine templates (name + workouts), persistence via JSON.

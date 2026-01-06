@@ -11,6 +11,7 @@ import SwiftData
 struct HomeView: View {
     @AppStorage("appearanceMode") private var appearanceMode = "light"
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
+    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var historySessions: [WorkoutSession]
     private let calendar = Calendar.current
 
     let startWorkout: () -> Void
@@ -18,6 +19,7 @@ struct HomeView: View {
 
     @State private var showCalendarCard = false
     @State private var showStartButton = false
+    @State private var isHistoryPresented = false
 
     /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
     /// Change impact: Tweaking layout constants or reveal state timing shifts the feel of the entrance and spacingg.
@@ -92,6 +94,9 @@ struct HomeView: View {
                     .offset(y: showCalendarCard ? 0 : AppStyle.cardRevealOffset)
                     .padding(.top, AppStyle.screenTopPadding)
                     .animation(AppMotion.primary, value: showCalendarCard)
+
+                    sessionDeckSection
+                        .padding(.top, AppStyle.sectionSpacing)
 
                     Spacer(minLength: AppStyle.homeBottomSpacer)
                 }
@@ -213,6 +218,48 @@ struct HomeView: View {
     private func isToday(_ date: Date?) -> Bool {
         guard let date else { return false }
         return calendar.isDateInToday(date)
+    }
+
+    private var completedSessions: [WorkoutSession] {
+        historySessions
+            .filter { $0.totalSets > 0 && $0.endedAt != nil }
+            .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
+    }
+
+    private var sessionDeckSection: some View {
+        VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
+                    if completedSessions.isEmpty {
+                        Button {
+                            Haptics.playLightTap()
+                            isHistoryPresented = true
+                        } label: {
+                            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("No sessions yet")
+                                        .appFont(.title3, weight: .semibold)
+                                        .foregroundStyle(.secondary)
+                                    Text("Tap to view history")
+                                        .appFont(.footnote, weight: .regular)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(AppStyle.glassContentPadding)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        SessionHistoryStackView(sessions: completedSessions)
+                            .frame(maxWidth: .infinity, minHeight: 140)
+                    }
+        }
+        .onAppear {
+            #if DEBUG
+            print("[HOME] sessions total=\(historySessions.count) completed=\(completedSessions.count)")
+            #endif
+        }
+        .navigationDestination(isPresented: $isHistoryPresented) {
+            AllHistoryView()
+        }
     }
 
     private static let monthFormatter: DateFormatter = {
