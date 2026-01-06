@@ -16,9 +16,8 @@ struct DayHistoryView: View {
         let start = Calendar.current.startOfDay(for: day)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start
         return allSessions.filter { session in
-            guard session.totalSets > 0 else { return false }
-            let date = session.endedAt ?? session.startedAt
-            return date >= start && date < end
+            guard session.totalSets > 0, let ended = session.endedAt else { return false }
+            return ended >= start && ended < end
         }
     }
 

@@ -91,7 +91,7 @@ struct WorkoutSessionView: View {
             .onAppear {
                 loadCoachingAndHistory()
             }
-            .onChange(of: exerciseIndex) { _ in
+            .onChange(of: exerciseIndex) { _, _ in
                 clearFocus()
                 resetDraftForNewExercise()
                 loadCoachingAndHistory()
@@ -306,7 +306,7 @@ struct WorkoutSessionView: View {
                             GeometryReader { sizeProxy in
                                 Color.clear
                                     .onAppear { popupSize = sizeProxy.size }
-                                    .onChange(of: sizeProxy.size) { newValue in
+                                    .onChange(of: sizeProxy.size) { _, newValue in
                                         popupSize = newValue
                                     }
                             }

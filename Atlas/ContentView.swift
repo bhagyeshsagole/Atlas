@@ -12,6 +12,7 @@ struct ContentView: View {
 #if DEBUG
     @Environment(\.modelContext) private var modelContext
 #endif
+    @EnvironmentObject private var historyStore: HistoryStore
     /// DEV MAP: Root navigation stack and settings presentation live here.
     @State private var path: [Route] = []
     @State private var showSettings = false
@@ -74,12 +75,8 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showSettings) {
             SettingsView(onDismiss: { showSettings = false })
         }
-        #if DEBUG
-        .task {
-            DevHistorySeeder.seedIfNeeded(modelContext: modelContext)
-        }
-        #endif
         .onAppear {
+            historyStore.repairZeroTotalSessionsIfNeeded()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                 withAnimation(.spring(response: 0.6, dampingFraction: 0.9)) {
                     showIntro = false

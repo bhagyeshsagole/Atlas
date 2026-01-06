@@ -92,7 +92,7 @@ struct HomeView: View {
                     .animation(AppMotion.primary, value: showCalendarCard)
 
                     sessionDeckSection
-                        .padding(.top, AppStyle.sectionSpacing)
+                        .padding(.top, AppStyle.cardContentSpacing)
 
                     Spacer(minLength: AppStyle.homeBottomSpacer)
                 }
@@ -156,14 +156,9 @@ struct HomeView: View {
     }
 
     private var activeSessionDays: Set<Date> {
-        let sessionsWithActivity = historySessions.filter { $0.totalSets > 0 }
-        let days = sessionsWithActivity.compactMap { session -> Date? in
-            let date = session.endedAt ?? session.startedAt
-            guard let day = calendar.date(from: calendar.dateComponents([.year, .month, .day], from: date)) else {
-                return nil
-            }
-            return calendar.startOfDay(for: day)
-        }
+        let days = historySessions
+            .filter { $0.totalSets > 0 && $0.endedAt != nil }
+            .map { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) }
         return Set(days)
     }
 
@@ -223,18 +218,14 @@ struct HomeView: View {
         return calendar.isDateInToday(date)
     }
 
-    private var completedSessions: [WorkoutSession] {
+    private var activitySessions: [WorkoutSession] {
         historySessions
-            .filter { $0.totalSets > 0 && $0.endedAt != nil }
+            .filter { $0.totalSets > 0 }
             .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
     }
 
-    private var lastCompletedSession: WorkoutSession? {
-        completedSessions.first
-    }
-
     private var lastDisplaySession: WorkoutSession? {
-        lastCompletedSession ?? historySessions.first
+        activitySessions.first ?? historySessions.first
     }
 
     @ViewBuilder
@@ -244,7 +235,20 @@ struct HomeView: View {
         }
         .onAppear {
             #if DEBUG
-            print("[HOME] sessions total=\(historySessions.count) completed=\(completedSessions.count)")
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let monthDays = historySessions
+                .filter { $0.totalSets > 0 && $0.endedAt != nil }
+                .filter { session in
+                    guard let ended = session.endedAt else { return false }
+                    return calendar.isDate(ended, equalTo: currentMonthStart, toGranularity: .month)
+                }
+                .map { session -> String in
+                    guard let ended = session.endedAt else { return "nil" }
+                    return formatter.string(from: calendar.startOfDay(for: ended))
+                }
+            let today = calendar.startOfDay(for: Date())
+            print("[HOME][DEBUG] today=\(formatter.string(from: today)) sessions total=\(historySessions.count) completedMonth=\(monthDays) todayActive=\(activeSessionDays.contains(today))")
             #endif
         }
     }
@@ -310,6 +314,12 @@ struct HomeView: View {
         let day = calendar.startOfDay(for: date)
         selectedDayForHistory = day
         Haptics.playLightTap()
+        #if DEBUG
+        let count = sessionsOn(day: day).count
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        print("[HOME][DEBUG] tappedDay=\(formatter.string(from: day)) sessionsForDay=\(count)")
+        #endif
         isDayHistoryPresented = true
     }
 
@@ -341,6 +351,15 @@ struct HomeView: View {
     private func onAtlasTap() {
         Haptics.playMediumTap()
     }
+
+    private func sessionsOn(day: Date) -> [WorkoutSession] {
+        let start = calendar.startOfDay(for: day)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
+        return historySessions.filter { session in
+            guard session.totalSets > 0, let ended = session.endedAt else { return false }
+            return ended >= start && ended < end
+        }
+    }
 }
 
 struct DayCell: View {
@@ -365,7 +384,7 @@ struct DayCell: View {
                     )
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if hasSession, let onSelect {
+                        if let onSelect {
                             onSelect(date)
                         }
                     }

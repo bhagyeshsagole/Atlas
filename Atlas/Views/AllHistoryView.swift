@@ -126,7 +126,7 @@ private struct SessionRow: View {
         } else {
             volumeString = "—"
         }
-        return "Sets \(sets) · Reps \(reps) · Volume \(volumeString)"
+        return "Sets \(sets) • Reps \(reps) • Volume \(volumeString)"
     }
 
     private func setLine(_ set: SetLog) -> String {

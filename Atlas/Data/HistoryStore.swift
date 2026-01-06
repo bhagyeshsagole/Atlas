@@ -74,31 +74,34 @@ final class HistoryStore: ObservableObject {
 
         #if DEBUG
         let weightDisplay = weightKg.map { String(format: "%.2f", $0) } ?? "nil"
-        print("[HISTORY] addSet ex=\(exerciseName) tag=\(tag.rawValue) kg=\(weightDisplay) reps=\(reps)")
+        let totalSetCount = session.exercises.reduce(0) { $0 + $1.sets.count }
+        print("[HISTORY] addSet session=\(session.id) ex=\(exerciseName) tag=\(tag.rawValue) kg=\(weightDisplay) reps=\(reps)")
+        print("[HISTORY] session now has sets=\(totalSetCount)")
         #endif
     }
 
     /// Returns true if the session was stored, false if discarded for zero sets.
     func endSession(session: WorkoutSession) -> Bool {
-        let totals = computeTotals(for: session)
+        let liveSession = resolvedSession(for: session.id) ?? session
+        let totals = computeTotals(for: liveSession)
 
-        session.totalSets = totals.sets
-        session.totalReps = totals.reps
-        session.volumeKg = totals.volumeKg
+        liveSession.totalSets = totals.sets
+        liveSession.totalReps = totals.reps
+        liveSession.volumeKg = totals.volumeKg
 
         guard totals.sets > 0 else {
-            modelContext.delete(session)
+            modelContext.delete(liveSession)
             saveContext()
             return false
         }
 
-        session.endedAt = Date()
-        session.isCompleted = true
+        liveSession.endedAt = Date()
+        liveSession.isCompleted = true
 
         saveContext()
 
         #if DEBUG
-        print("[HISTORY] end session id=\(session.id) stored=true sets=\(totals.sets) volumeKg=\(String(format: "%.2f", totals.volumeKg))")
+        print("[HISTORY] end session id=\(liveSession.id) stored=true sets=\(totals.sets) reps=\(totals.reps) volumeKg=\(String(format: "%.2f", totals.volumeKg))")
         #endif
 
         return true
@@ -145,11 +148,16 @@ final class HistoryStore: ObservableObject {
 
     /// VISUAL TWEAK: Change volume calculation rules here if needed.
     private func computeTotals(for session: WorkoutSession) -> (sets: Int, reps: Int, volumeKg: Double) {
+        let sessionID = session.id
+        let fetchedExercises = (try? modelContext.fetch(FetchDescriptor<ExerciseLog>())) ?? []
+        let exercisesForSession = fetchedExercises.filter { $0.session?.id == sessionID }
+        let sourceExercises = exercisesForSession.isEmpty ? session.exercises : exercisesForSession
+
         var totalSets = 0
         var totalReps = 0
         var volume: Double = 0
 
-        for exercise in session.exercises {
+        for exercise in sourceExercises {
             for set in exercise.sets {
                 totalSets += 1
                 totalReps += set.reps
@@ -192,6 +200,38 @@ final class HistoryStore: ObservableObject {
                 return session.routineId == nil && session.routineTitle == routineTitle
             }
         }
+    }
+
+    /// Repairs sessions that have logged sets but zero totals (backfill).
+    func repairZeroTotalSessionsIfNeeded() {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+        var repaired = 0
+        for session in sessions {
+            let totals = computeTotals(for: session)
+            if session.endedAt != nil && totals.sets > 0 && session.totalSets == 0 {
+                session.totalSets = totals.sets
+                session.totalReps = totals.reps
+                session.volumeKg = totals.volumeKg
+                repaired += 1
+            }
+        }
+        if repaired > 0 {
+            saveContext()
+            #if DEBUG
+            print("[HISTORY] repaired \(repaired) sessions with missing totals")
+            #endif
+        }
+    }
+
+    private func resolvedSession(for id: UUID) -> WorkoutSession? {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+        return sessions.first { $0.id == id }
     }
 
     private func saveContext() {
