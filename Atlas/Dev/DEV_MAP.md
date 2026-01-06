@@ -26,6 +26,8 @@ Update Protocol:
 - Home session deck UI lives in `Atlas/Views/SessionHistoryStackView.swift` (collapsed stack + expand-on-swipe); sessions fed via `@Query` filtering in `Atlas/HomeView.swift`.
 - Home session deck visibility: rendered directly under the calendar in `Atlas/HomeView.swift`; sizing handled in `SessionHistoryStackView` (min height). Completed-session filtering occurs in HomeView (`endedAt != nil && totalSets > 0`), and a placeholder card is shown when empty.
 - All history screen: `Atlas/Views/AllHistoryView.swift`; route added in `ContentView` as `.history`; Home placeholder card navigates to it.
+- Home calendar underlines + day drill-down: underlines computed in `HomeView` from completed sessions; tapping an underlined day opens `DayHistoryView(day:)` via navigation destination.
+- Last session preview card logic lives in `HomeView` (shows last completed session title + day label; falls back to placeholder and links to history).
 
 ## B) Routines (templates)
 - What it controls: Routine templates (name + workouts), persistence via JSON.

@@ -20,23 +20,19 @@ struct HomeView: View {
     @State private var showCalendarCard = false
     @State private var showStartButton = false
     @State private var isHistoryPresented = false
+    @State private var isDayHistoryPresented = false
+    @State private var selectedDayForHistory: Date = Date()
 
     /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
-    /// Change impact: Tweaking layout constants or reveal state timing shifts the feel of the entrance and spacingg.
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                    // Top bar: brand label and settings button aligned to one row.
+                    // Top bar
                     HStack {
                         Button {
                             onAtlasTap()
                         } label: {
-                            /// VISUAL TWEAK: Change `AppStyle.brandBaseSize` or `AppStyle.fontBump` to make "Atlas" bigger/smaller.
-                            /// VISUAL TWEAK: Toggle `AppStyle.brandItalic` if you don’t want italics on the brand.
-                            /// VISUAL TWEAK: Update `.foregroundStyle(.primary)` to change monochrome color rules.
-                            /// VISUAL TWEAK: Adjust `AppStyle.brandPaddingHorizontal`/`brandPaddingVertical` or HStack alignment to change header spacing.
-                            /// VISUAL TWEAK: Change haptic style in `onAtlasTap()`.
                             Text("Atlas")
                                 .appFont(.brand)
                                 .foregroundStyle(.primary)
@@ -55,10 +51,9 @@ struct HomeView: View {
                     .padding(.top, AppStyle.headerTopPadding)
                     .tint(.primary)
 
-                    // Calendar card: adjust `AppStyle.glassCardCornerRadiusLarge`/`glassShadowRadiusPrimary`; animations rely on `AppMotion.primary`.
+                    // Calendar card
                     GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
                         VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
-                            // Month header row: `AppStyle.calendarHeaderSpacing` controls spacing between labels and badges.
                             HStack(spacing: AppStyle.calendarHeaderSpacing) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(currentMonthTitle)
@@ -67,7 +62,6 @@ struct HomeView: View {
                                 }
                             }
 
-                            // Weekday labels row.
                             HStack {
                                 ForEach(shortWeekdays, id: \.self) { symbol in
                                     Text(symbol)
@@ -77,15 +71,17 @@ struct HomeView: View {
                                 }
                             }
 
-                            // Month grid: adjust `AppStyle.calendarGridSpacing` to change vertical/horizontal padding between days.
                             LazyVGrid(columns: gridColumns, spacing: AppStyle.calendarGridSpacing) {
                                 ForEach(Array(monthGrid.enumerated()), id: \.offset) { _, date in
                                     DayCell(
                                         date: date,
                                         calendar: calendar,
                                         isToday: isToday(date),
-                                        hasWorkout: hasWorkout(on: date)
-                                    )
+                                        hasWorkout: hasWorkout(on: date),
+                                        hasSession: hasSession(on: date)
+                                    ) { tappedDate in
+                                        handleDaySelection(tappedDate)
+                                    }
                                 }
                             }
                         }
@@ -106,7 +102,7 @@ struct HomeView: View {
             }
             .scrollIndicators(.hidden)
 
-            // Start Workout pill pinned near bottom using shared AtlasPillButton sizing.
+            // Start Workout pill
             AtlasPillButton("Start Workout") {
                 Haptics.playLightTap()
                 startWorkout()
@@ -128,21 +124,20 @@ struct HomeView: View {
                 showStartButton = true
             }
         }
+        .navigationDestination(isPresented: $isHistoryPresented) {
+            AllHistoryView()
+        }
+        .navigationDestination(isPresented: $isDayHistoryPresented) {
+            DayHistoryView(day: selectedDayForHistory)
+        }
     }
 
-    /// Builds the grid columns for a 7-day calendar.
-    /// Change impact: Changing count or spacing reshapes the grid and day sizing.
     private var gridColumns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: AppStyle.calendarColumnSpacing), count: 7)
     }
 
-    /// Builds the month grid with leading offsets to align weekdays.
-    /// Change impact: Adjust date math here to shift which days appear and how the grid anchors.
     private var monthGrid: [Date?] {
-        guard let startOfMonth = calendar.date(
-            from: calendar.dateComponents([.year, .month], from: Date())
-        ) else { return [] }
-
+        let startOfMonth = currentMonthStart
         let range = calendar.range(of: .day, in: .month, for: startOfMonth) ?? 1..<32
         let firstWeekday = calendar.component(.weekday, from: startOfMonth)
         let leadingEmptyDays = (firstWeekday - calendar.firstWeekday + 7) % 7
@@ -156,23 +151,31 @@ struct HomeView: View {
         return days
     }
 
-    /// Builds a set of normalized dates that have workouts.
-    /// Change impact: Changing normalization alters which cells show bubbles (e.g., time-zone shifts).
     private var workoutDays: Set<Date> {
         Set(workouts.map { calendar.startOfDay(for: $0.date) })
     }
 
-    /// Formats the current month name for the header.
-    /// Change impact: Changing the formatter impacts month title styling and localization.
-    private var currentMonthTitle: String {
-        HomeView.monthFormatter.string(from: Date())
+    private var activeSessionDays: Set<Date> {
+        let sessionsWithActivity = historySessions.filter { $0.totalSets > 0 }
+        let days = sessionsWithActivity.compactMap { session -> Date? in
+            let date = session.endedAt ?? session.startedAt
+            guard let day = calendar.date(from: calendar.dateComponents([.year, .month, .day], from: date)) else {
+                return nil
+            }
+            return calendar.startOfDay(for: day)
+        }
+        return Set(days)
     }
 
-    /// Builds the adaptive background gradient for light/dark.
-    /// Change impact: Tweaking colors here shifts the overall page mood in both themes.
+    private var currentMonthTitle: String {
+        HomeView.monthFormatter.string(from: currentMonthStart)
+    }
+
+    private var currentMonthStart: Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+    }
+
     private var backgroundGradient: LinearGradient {
-        /// VISUAL TWEAK: Change the opacity pairs below to brighten or darken the Home background gradient.
-        /// VISUAL TWEAK: Swap the gradient colors to retune the light/dark atmosphere across the screen.
         if appearanceMode == "dark" {
             return LinearGradient(
                 colors: [
@@ -194,8 +197,6 @@ struct HomeView: View {
         }
     }
 
-    /// Builds weekday symbols aligned to the system calendar.
-    /// Change impact: Changing `shortWeekdaySymbols` impacts how week rows label each column.
     private var shortWeekdays: [String] {
         var symbols = calendar.shortWeekdaySymbols
         let first = calendar.firstWeekday - 1
@@ -205,16 +206,18 @@ struct HomeView: View {
         return symbols
     }
 
-    /// Determines if a given date should show a workout bubble.
-    /// Change impact: Updating this logic changes when bubbles animate in/out on the calendar.
     private func hasWorkout(on date: Date?) -> Bool {
         guard let date else { return false }
         let normalized = calendar.startOfDay(for: date)
         return workoutDays.contains(normalized)
     }
 
-    /// Determines if the date is today for styling.
-    /// Change impact: Altering the comparison changes which cell gets the "today" highlight.
+    private func hasSession(on date: Date?) -> Bool {
+        guard let date else { return false }
+        let normalized = calendar.startOfDay(for: date)
+        return activeSessionDays.contains(normalized)
+    }
+
     private func isToday(_ date: Date?) -> Bool {
         guard let date else { return false }
         return calendar.isDateInToday(date)
@@ -226,40 +229,75 @@ struct HomeView: View {
             .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
     }
 
+    private var lastCompletedSession: WorkoutSession? {
+        completedSessions.first
+    }
+
+    private var lastDisplaySession: WorkoutSession? {
+        lastCompletedSession ?? historySessions.first
+    }
+
+    @ViewBuilder
     private var sessionDeckSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
-                    if completedSessions.isEmpty {
-                        Button {
-                            Haptics.playLightTap()
-                            isHistoryPresented = true
-                        } label: {
-                            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text("No sessions yet")
-                                        .appFont(.title3, weight: .semibold)
-                                        .foregroundStyle(.secondary)
-                                    Text("Tap to view history")
-                                        .appFont(.footnote, weight: .regular)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(AppStyle.glassContentPadding)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        SessionHistoryStackView(sessions: completedSessions)
-                            .frame(maxWidth: .infinity, minHeight: 140)
-                    }
+            lastSessionPreview
         }
         .onAppear {
             #if DEBUG
             print("[HOME] sessions total=\(historySessions.count) completed=\(completedSessions.count)")
             #endif
         }
-        .navigationDestination(isPresented: $isHistoryPresented) {
-            AllHistoryView()
+    }
+
+    @ViewBuilder
+    private var lastSessionPreview: some View {
+        if let last = lastDisplaySession {
+            lastSessionCard(last)
+        } else {
+            noSessionsCard
         }
+    }
+
+    private func lastSessionCard(_ session: WorkoutSession) -> some View {
+        Button {
+            Haptics.playLightTap()
+            isHistoryPresented = true
+        } label: {
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(session.routineTitle)
+                        .appFont(.title3, weight: .semibold)
+                        .foregroundStyle(.primary)
+                    Text(dayLabel(for: session.endedAt ?? session.startedAt))
+                        .appFont(.footnote, weight: .regular)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(AppStyle.glassContentPadding)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var noSessionsCard: some View {
+        Button {
+            Haptics.playLightTap()
+            isHistoryPresented = true
+        } label: {
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No sessions yet")
+                        .appFont(.title3, weight: .semibold)
+                        .foregroundStyle(.secondary)
+                    Text("Tap to view history")
+                        .appFont(.footnote, weight: .regular)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(AppStyle.glassContentPadding)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private static let monthFormatter: DateFormatter = {
@@ -268,14 +306,41 @@ struct HomeView: View {
         return formatter
     }()
 
-    /// VISUAL TWEAK: Change the haptic call here to adjust brand tap feel.
-    /// VISUAL TWEAK: Swap `Haptics.playMediumTap()` for another style to change the press feedback.
+    private func handleDaySelection(_ date: Date) {
+        let day = calendar.startOfDay(for: date)
+        selectedDayForHistory = day
+        Haptics.playLightTap()
+        isDayHistoryPresented = true
+    }
+
+    private func dayLabel(for date: Date) -> String {
+        let start = calendar.startOfDay(for: date)
+        let today = calendar.startOfDay(for: Date())
+        if start == today { return "Today" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: today), start == yesterday {
+            return "Yesterday"
+        }
+        let day = calendar.component(.day, from: start)
+        let monthYearFormatter = DateFormatter()
+        monthYearFormatter.dateFormat = "MMMM yyyy"
+        let suffix: String
+        let tens = day % 100
+        if tens >= 11 && tens <= 13 {
+            suffix = "th"
+        } else {
+            switch day % 10 {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(day)\(suffix) \(monthYearFormatter.string(from: start))"
+    }
+
     private func onAtlasTap() {
         Haptics.playMediumTap()
     }
-
-    /// Resolves whether the appearance should be dark based on stored mode and system fallback.
-    /// Change impact: Adjusting logic here affects gradients and button fills on Home.
 }
 
 struct DayCell: View {
@@ -283,9 +348,9 @@ struct DayCell: View {
     let calendar: Calendar
     let isToday: Bool
     let hasWorkout: Bool
+    let hasSession: Bool
+    let onSelect: ((Date) -> Void)?
 
-    /// Builds a day cell with a number label and animated workout bubble.
-    /// Change impact: Adjusting text or bubble sizing affects readability and animation subtlety in the grid.
     var body: some View {
         VStack(spacing: 6) {
             if let date {
@@ -298,6 +363,17 @@ struct DayCell: View {
                         RoundedRectangle(cornerRadius: AppStyle.calendarDayCornerRadius)
                             .fill(.white.opacity(isToday ? AppStyle.calendarDayHighlightOpacity : 0.0))
                     )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if hasSession, let onSelect {
+                            onSelect(date)
+                        }
+                    }
+                if hasSession {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.45))
+                        .frame(width: 18, height: 2)
+                }
             } else {
                 Color.clear
                     .frame(height: AppStyle.calendarTodayHeight)
@@ -314,8 +390,6 @@ struct DayCell: View {
         .animation(AppMotion.primary, value: hasWorkout)
     }
 
-    /// Formats the numeric day string for the cell.
-    /// Change impact: Adjusting formatting changes how the grid numbers render (e.g., leading zeros).
     private func dayString(for date: Date) -> String {
         String(calendar.component(.day, from: date))
     }

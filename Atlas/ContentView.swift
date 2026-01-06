@@ -15,6 +15,7 @@ struct ContentView: View {
     /// DEV MAP: Root navigation stack and settings presentation live here.
     @State private var path: [Route] = []
     @State private var showSettings = false
+    @State private var showIntro = true
     @AppStorage("appearanceMode") private var appearanceMode = "light"
 
     private enum Route: Hashable {
@@ -28,14 +29,25 @@ struct ContentView: View {
     /// Change impact: Altering destinations or path management changes how users transition between screens.
     var body: some View {
         NavigationStack(path: $path) {
-            HomeView(
-                startWorkout: { path.append(.routines) },
-                openSettings: {
-                    if !showSettings {
-                        showSettings = true
+            ZStack {
+                HomeView(
+                    startWorkout: { path.append(.routines) },
+                    openSettings: {
+                        if !showSettings {
+                            showSettings = true
+                        }
                     }
+                )
+                if showIntro {
+                    IntroOverlay {
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.9)) {
+                            showIntro = false
+                        }
+                    }
+                    .ignoresSafeArea()
+                    .zIndex(1)
                 }
-            )
+            }
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .routines:
@@ -67,6 +79,13 @@ struct ContentView: View {
             DevHistorySeeder.seedIfNeeded(modelContext: modelContext)
         }
         #endif
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.9)) {
+                    showIntro = false
+                }
+            }
+        }
     }
 
     /// Resolves the app-wide color scheme based on stored appearance.
@@ -88,4 +107,28 @@ struct RoutineDraft: Hashable {
     ContentView()
         .modelContainer(for: Workout.self, inMemory: true)
         .environmentObject(RoutineStore())
+}
+
+private struct IntroOverlay: View {
+    let onFinish: () -> Void
+    @State private var scale: CGFloat = 1.4
+
+    var body: some View {
+        ZStack(alignment: .center) {
+            Color.black
+            Text("Atlas")
+                .appFont(.brand)
+                .foregroundStyle(.white)
+                .scaleEffect(scale)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .onAppear {
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) {
+                scale = 1.0
+            }
+        }
+        .onTapGesture {
+            onFinish()
+        }
+    }
 }
