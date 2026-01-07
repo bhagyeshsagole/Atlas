@@ -2,7 +2,33 @@
 //  ContentView.swift
 //  Atlas
 //
-//  Overview: Root navigation shell coordinating home, routine creation, and settings flows.
+//  What this file is:
+//  - Root navigation shell that hosts the home screen, routine builder, and settings overlay.
+//
+//  Where it’s used:
+//  - Entry for the NavigationStack that routes into routines, history, and settings.
+//  - Sits under `AtlasApp` and wraps most screens the user sees.
+//
+//  Key concepts:
+//  - `NavigationStack` uses a `path` array to push/pop screens by value.
+//  - `@AppStorage` keeps appearance choice in UserDefaults so it persists between launches.
+//
+//  Safe to change:
+//  - Add/remove navigation routes, adjust intro timing, or tweak which view shows in a route.
+//
+//  NOT safe to change:
+//  - The `Route` enum cases used in navigation destinations; removing cases breaks stored paths.
+//  - How `historyStore.repairZeroTotalSessionsIfNeeded()` is called on appear (prevents stale data).
+//
+//  Common bugs / gotchas:
+//  - Forgetting to pop/push using the `path` array can leave the stack in an inconsistent state.
+//  - Accidentally keeping `showIntro` true will hide the app under the intro overlay.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → A) App Entry + Navigation
+//
+// FLOW SUMMARY:
+// ContentView hosts NavigationStack → HomeView is root → taps push routines/history via Route → Settings shown as fullScreenCover over any route.
 //
 
 import SwiftUI
@@ -14,10 +40,10 @@ struct ContentView: View {
 #endif
     @EnvironmentObject private var historyStore: HistoryStore
     /// DEV MAP: Root navigation stack and settings presentation live here.
-    @State private var path: [Route] = []
-    @State private var showSettings = false
-    @State private var showIntro = true
-    @AppStorage("appearanceMode") private var appearanceMode = "light"
+    @State private var path: [Route] = [] // Value-based navigation stack entries.
+    @State private var showSettings = false // Drives the full-screen settings sheet.
+    @State private var showIntro = true // Controls the launch overlay visibility.
+    @AppStorage("appearanceMode") private var appearanceMode = "light" // Persists appearance choice in UserDefaults.
 
     private enum Route: Hashable {
         case routines

@@ -2,7 +2,26 @@
 //  Haptics.swift
 //  Atlas
 //
-//  Overview: Haptic utility functions for consistent feedback across controls.
+//  What this file is:
+//  - Simple helper for playing light and medium haptic feedback across the app.
+//
+//  Where it’s used:
+//  - Called by buttons and controls (e.g., Home gear button, start workout) to provide tap feedback.
+//
+//  Key concepts:
+//  - `UIImpactFeedbackGenerator` triggers the vibration patterns; style controls intensity.
+//
+//  Safe to change:
+//  - Swap feedback styles or add new helpers for different strengths.
+//
+//  NOT safe to change:
+//  - Removing or renaming functions without updating call sites; taps would silently lose feedback.
+//
+//  Common bugs / gotchas:
+//  - Haptics do nothing in Simulator; test on a device to feel changes.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → F) Popups / Menus / Haptics
 //
 
 import UIKit

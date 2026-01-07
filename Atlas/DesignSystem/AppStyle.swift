@@ -2,9 +2,28 @@
 //  AppStyle.swift
 //  Atlas
 //
-//  Overview: Design tokens for typography, spacing, and glass styling.
+//  What this file is:
+//  - Central design tokens for typography, spacing, and layout padding used across the app.
 //
-//  Update: Hardening pass to align typography scales, header hit areas, and popup sizing/animation.
+//  Where it’s used:
+//  - Referenced by most views for consistent sizing of text, cards, and spacing.
+//
+//  Key concepts:
+//  - Static constants act like a style guide; changing one value updates every view that uses it.
+//
+//  Safe to change:
+//  - Font sizes, spacing, and padding values when tuning the visual system.
+//
+//  NOT safe to change:
+//  - Removing tokens without updating dependent views; missing constants will break compilation.
+//
+//  Common bugs / gotchas:
+//  - Large global tweaks (like `fontBump`) affect every screen; adjust incrementally.
+//  - Reducing padding too far can cause content to collide with safe areas.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → E) Design System / UI Consistency
+//
 
 import SwiftUI
 

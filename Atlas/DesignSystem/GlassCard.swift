@@ -2,7 +2,26 @@
 //  GlassCard.swift
 //  Atlas
 //
-//  Overview: Reusable glass card container with shared styling.
+//  What this file is:
+//  - Reusable glass card container that wraps content with frosted styling and shared padding.
+//
+//  Where it’s used:
+//  - Home calendar card, history cards, and other glass sections across the app.
+//
+//  Key concepts:
+//  - Uses SwiftUI generics to accept any `Content` view while applying the same background/overlay.
+//
+//  Safe to change:
+//  - Corner radius, shadow, or padding values to tweak the card look.
+//
+//  NOT safe to change:
+//  - Removing overlays/material without updating views that expect glass styling; visuals would break.
+//
+//  Common bugs / gotchas:
+//  - Lowering shadow opacity too far can make cards blend into the background.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → E) Design System / UI Consistency
 //
 
 import SwiftUI

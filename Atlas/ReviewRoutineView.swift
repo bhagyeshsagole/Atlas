@@ -2,7 +2,29 @@
 //  ReviewRoutineView.swift
 //  Atlas
 //
-//  Overview: Lets users tweak AI-generated workouts before saving a routine.
+//  What this file is:
+//  - Review screen to edit AI-generated workouts before saving them as a routine.
+//
+//  Where it’s used:
+//  - Pushed from `ContentView` after CreateRoutineView finishes parsing a routine.
+//
+//  Key concepts:
+//  - Uses `@State` arrays of `ParsedWorkout` so edits update the list live.
+//  - Generates a summary via AI before saving to `RoutineStore`.
+//
+//  Safe to change:
+//  - UI layout, button text, or validation messages.
+//
+//  NOT safe to change:
+//  - Removing the guard against duplicate saves (`isSaving`); without it, multiple routines may save.
+//  - Skipping the summary generation fallback; the UI expects a summary string.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to trim empty workouts leaves blank entries in saved routines.
+//  - If you disable the alert binding, summary errors will silently fail.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → B) Routines (templates)
 //
 
 import SwiftUI
@@ -13,8 +35,8 @@ struct ReviewRoutineView: View {
     let routineName: String
     let onComplete: () -> Void
 
-    @State private var editableWorkouts: [ParsedWorkout]
-    @State private var isSaving = false
+    @State private var editableWorkouts: [ParsedWorkout] // Live list the user can edit before saving.
+    @State private var isSaving = false // Prevents double-saves while AI summary completes.
     @State private var alertMessage: String?
 
     init(routineName: String, workouts: [ParsedWorkout], onComplete: @escaping () -> Void) {

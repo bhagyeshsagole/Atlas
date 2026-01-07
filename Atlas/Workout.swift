@@ -2,7 +2,26 @@
 //  Workout.swift
 //  Atlas
 //
-//  Overview: SwiftData model representing a completed workout date.
+//  What this file is:
+//  - SwiftData model representing a completed workout date for calendar marks.
+//
+//  Where it’s used:
+//  - Queried in `HomeView` to underline days on the calendar.
+//
+//  Key concepts:
+//  - Minimal `@Model` with a single `Date` property stored in SwiftData.
+//
+//  Safe to change:
+//  - Add optional metadata if you also migrate data and update queries.
+//
+//  NOT safe to change:
+//  - Removing or altering the `date` property without handling migrations; calendar marks rely on it.
+//
+//  Common bugs / gotchas:
+//  - Storing non-normalized dates can lead to duplicate marks; normalize to start-of-day when saving.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → A) App Entry + Navigation
 //
 
 import Foundation

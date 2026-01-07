@@ -2,10 +2,34 @@
 //  RoutineStore.swift
 //  Atlas
 //
-//  Overview: JSON-backed routine persistence layer shared across views.
-/// DEV MAP: Routines (templates) persist to `routines.json` at `FileManager.documentDirectory/routines.json` unless a custom storageURL is provided.
+//  What this file is:
+//  - JSON-backed routine (template) storage for the routine builder and list screens.
 //
-//  Update: Hardening pass to support custom storage URLs for tests without changing runtime behavior.
+//  Where it’s used:
+//  - Injected as an environment object in `AtlasApp` and read/written by routine views.
+//  - Saves to `routines.json` in the app Documents directory unless a custom URL is injected (tests).
+//
+//  Key concepts:
+//  - Uses `Codable` structs to turn routine data into JSON on disk.
+//  - `@Published` array notifies SwiftUI views whenever routines change.
+//
+//  Safe to change:
+//  - Add new fields to `Routine`/`RoutineWorkout` (with migration defaults), adjust file name/location if you also update load/save.
+//
+//  NOT safe to change:
+//  - Removing fields without a migration plan; it will break decoding of existing user data.
+//  - How `fileURL` resolves the Documents directory; altering without care can orphan user files.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to call `save()` after edits will drop changes on app quit.
+//  - Changing `filename` without moving old data will make existing routines disappear.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → B) Routines (templates)
+//
+// FLOW SUMMARY:
+// Routine views read/write RoutineStore → store serializes routines to routines.json → on app start, `load()` hydrates the in-memory list for the UI.
+//
 
 import Foundation
 import Combine
@@ -62,12 +86,12 @@ struct RoutineWorkout: Identifiable, Codable, Hashable {
 
 @MainActor
 final class RoutineStore: ObservableObject {
-    @Published var routines: [Routine] = []
+    @Published var routines: [Routine] = [] // Live in-memory list that drives routine UI.
     private let filename = "routines.json"
     private let customStorageURL: URL?
 
     init(storageURL: URL? = nil) {
-        self.customStorageURL = storageURL
+        self.customStorageURL = storageURL // Tests can inject a sandboxed path to avoid touching real user data.
     }
 
     /// VISUAL TWEAK: Change the filename or directory here to affect which routine file the UI reads.
@@ -77,6 +101,7 @@ final class RoutineStore: ObservableObject {
             return customStorageURL
         }
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        // If Documents is unavailable (rare), fall back to temp to avoid crashing file writes.
         return (documents ?? URL(fileURLWithPath: NSTemporaryDirectory())).appendingPathComponent(filename)
     }
 

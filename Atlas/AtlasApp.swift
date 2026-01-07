@@ -2,7 +2,33 @@
 //  AtlasApp.swift
 //  Atlas
 //
-//  Overview: App entry point wiring the SwiftData container and injecting shared stores.
+//  What this file is:
+//  - App entry point that builds the data containers and injects shared stores into the UI.
+//
+//  Where it’s used:
+//  - Runs at launch and wraps `ContentView` with environment objects for routines and history.
+//  - Builds the SwiftData container that every screen depends on for persistence.
+//
+//  Key concepts:
+//  - SwiftData `ModelContainer` is the on-device database; `ModelContext` is the handle we use to read/write it.
+//  - `@StateObject` keeps shared stores alive for the whole app session instead of recreating them per view.
+//
+//  Safe to change:
+//  - Logging lines or minor boot diagnostics; toggling debug prints.
+//
+//  NOT safe to change:
+//  - The model list passed into the container or how the container is shared; changing this can break stored data.
+//  - Environment injection of `RoutineStore` and `HistoryStore`, which routes data to the rest of the app.
+//
+//  Common bugs / gotchas:
+//  - Removing a model from `modelTypes` can make SwiftData forget saved data for that type.
+//  - Creating multiple `ModelContainer` instances will fragment persistence across screens.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → A) App Entry + Navigation
+//
+// FLOW SUMMARY:
+// App launch → build SwiftData ModelContainer → create RoutineStore + HistoryStore → inject into ContentView → child screens read/write via shared context.
 //
 
 import SwiftUI

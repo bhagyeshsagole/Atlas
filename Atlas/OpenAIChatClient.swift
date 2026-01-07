@@ -2,9 +2,34 @@
 //  OpenAIChatClient.swift
 //  Atlas
 //
-//  Overview: Low-level OpenAI chat client for routine parsing and coaching pipelines.
+//  What this file is:
+//  - Low-level HTTP client for OpenAI chat calls used to parse routines and generate summaries/coaching.
 //
-//  Update: Hardened AI pipeline with generate/repair stages, structured logging, and safer timeouts
+//  Where it’s used:
+//  - Called by `RoutineAIService` to build/repair routine JSON and create post-workout summaries.
+//  - Provides request builders and response parsing helpers shared across AI flows.
+//
+//  Key concepts:
+//  - Each OpenAI request is built from `ChatMessage` arrays and executed via URLSession.
+//  - Responses may include code fences; we strip them before decoding JSON.
+//
+//  Safe to change:
+//  - Prompt text, temperature, or logging, as long as JSON decoding expectations stay aligned.
+//
+//  NOT safe to change:
+//  - Response parsing structure (choices/message/content) without updating all callers.
+//  - Error handling paths that surface status codes to the UI.
+//
+//  Common bugs / gotchas:
+//  - If the API key is missing, requests throw; make sure Config/LocalSecrets.swift holds a valid key in development.
+//  - Returning anything other than valid JSON in repair flows will trip the decoding guardrails.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → D) AI / OpenAI
+//
+// FLOW SUMMARY:
+// RoutineAIService builds prompts → OpenAIChatClient assembles request → OpenAI returns text/JSON → helper strips code fences → caller decodes into app models.
+//
 
 import Foundation
 

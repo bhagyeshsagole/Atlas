@@ -2,7 +2,32 @@
 //  HistoryStore.swift
 //  Atlas
 //
-//  Overview: Centralized SwiftData history writer/reader for sessions, sets, and calendar marks.
+//  What this file is:
+//  - Central SwiftData writer/reader for workout sessions, exercises, sets, and calendar data.
+//
+//  Where it’s used:
+//  - Injected from `AtlasApp` and called by logging screens (WorkoutSessionView), home calendar, and history lists.
+//
+//  Key concepts:
+//  - `ModelContext` is the SwiftData connection for reading/writing persisted models.
+//  - Methods here mutate data and then save; SwiftUI views observing the data update automatically.
+//
+//  Safe to change:
+//  - Add new helper queries, adjust debug logs, or expand calculations if you also handle migrations.
+//
+//  NOT safe to change:
+//  - Delete or skip `saveContext()` calls; writes would be lost.
+//  - Remove the discard rule for zero-set sessions without checking UI expectations.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to fetch via `FetchDescriptor` can lead to stale data; always operate on the live context.
+//  - Editing totals without recalculating volume can desync stats.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → C) Workout Sessions / History (real performance logs)
+//
+// FLOW SUMMARY:
+// WorkoutSessionView starts/ends sessions → HistoryStore saves sets and totals → SwiftData persists → HomeView/History views query HistoryStore/SwiftData for calendar + cards.
 //
 
 import Foundation
@@ -14,7 +39,7 @@ import SwiftData
 /// DEV NOTE: Queries avoid #Predicate macros to prevent SwiftData macro compiler issues.
 @MainActor
 final class HistoryStore: ObservableObject {
-    private let modelContext: ModelContext
+    private let modelContext: ModelContext // Shared SwiftData context injected at app boot.
     private let calendar = Calendar.current
 
     init(modelContext: ModelContext) {
@@ -59,6 +84,7 @@ final class HistoryStore: ObservableObject {
     }
 
     func addSet(session: WorkoutSession, exerciseName: String, orderIndex: Int, tag: SetTag, weightKg: Double?, reps: Int) {
+        // Try to reuse an exercise by order, then by name, else make a new exercise row.
         let exerciseLog = session.exercises.first(where: { $0.orderIndex == orderIndex })
             ?? session.exercises.first(where: { $0.name.caseInsensitiveCompare(exerciseName) == .orderedSame })
             ?? {
@@ -89,6 +115,7 @@ final class HistoryStore: ObservableObject {
         liveSession.totalReps = totals.reps
         liveSession.volumeKg = totals.volumeKg
 
+        // Drop drafts with zero sets so empty sessions do not clutter history.
         guard totals.sets > 0 else {
             modelContext.delete(liveSession)
             saveContext()
@@ -150,6 +177,7 @@ final class HistoryStore: ObservableObject {
     private func computeTotals(for session: WorkoutSession) -> (sets: Int, reps: Int, volumeKg: Double) {
         let sessionID = session.id
         let fetchedExercises = (try? modelContext.fetch(FetchDescriptor<ExerciseLog>())) ?? []
+        // Fetch from context to ensure we count persisted exercises even if the session reference is stale.
         let exercisesForSession = fetchedExercises.filter { $0.session?.id == sessionID }
         let sourceExercises = exercisesForSession.isEmpty ? session.exercises : exercisesForSession
 

@@ -2,26 +2,51 @@
 //  HomeView.swift
 //  Atlas
 //
-//  Overview: Home screen with calendar, brand header, and start workout entry point.
+//  What this file is:
+//  - Home screen that shows the calendar, recent history cards, and Start Workout entry point.
+//
+//  Where it’s used:
+//  - Root view inside `ContentView` NavigationStack; drives navigation to routines and history.
+//
+//  Key concepts:
+//  - `@Query` reads SwiftData models directly into the view and updates when data changes.
+//  - Animations reveal calendar/start controls on appear for smoother entry.
+//
+//  Safe to change:
+//  - UI spacing, animations, or copy; adding new navigation buttons.
+//
+//  NOT safe to change:
+//  - Filters that hide sessions with `endedAt == nil` or `totalSets == 0`, which keep history clean.
+//  - Calendar day taps feeding `handleDaySelection`, which drives navigation to day history.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to normalize dates (start-of-day) can mark the wrong days as active.
+//  - Hiding the start button accidentally makes the app feel unresponsive.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → A) App Entry + Navigation
+//
+// FLOW SUMMARY:
+// HomeView renders calendar + session deck → tapping day goes to DayHistoryView; Start Workout → RoutineListView; gear opens SettingsView.
 //
 
 import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @AppStorage("appearanceMode") private var appearanceMode = "light"
-    @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
-    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var historySessions: [WorkoutSession]
+    @AppStorage("appearanceMode") private var appearanceMode = "light" // Persists light/dark preference across launches.
+    @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout] // SwiftData-driven calendar marks.
+    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var historySessions: [WorkoutSession] // Live session history for deck + calendar.
     private let calendar = Calendar.current
 
     let startWorkout: () -> Void
     let openSettings: () -> Void
 
-    @State private var showCalendarCard = false
-    @State private var showStartButton = false
-    @State private var isHistoryPresented = false
-    @State private var isDayHistoryPresented = false
-    @State private var selectedDayForHistory: Date = Date()
+    @State private var showCalendarCard = false // Drives initial reveal animation.
+    @State private var showStartButton = false // Keeps CTA hidden until animation triggers.
+    @State private var isHistoryPresented = false // Navigation flag into AllHistoryView.
+    @State private var isDayHistoryPresented = false // Navigation flag into DayHistoryView.
+    @State private var selectedDayForHistory: Date = Date() // Which day the drill-down should show.
 
     /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
     var body: some View {
@@ -157,6 +182,7 @@ struct HomeView: View {
 
     private var activeSessionDays: Set<Date> {
         let days = historySessions
+            // Only count sessions that actually finished with sets so empty drafts do not underline the calendar.
             .filter { $0.totalSets > 0 && $0.endedAt != nil }
             .map { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) }
         return Set(days)

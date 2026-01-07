@@ -1,3 +1,31 @@
+//
+//  PostWorkoutSummaryView.swift
+//  Atlas
+//
+//  What this file is:
+//  - Post-session screen that shows AI-generated or cached summaries for a completed workout.
+//
+//  Where it’s used:
+//  - Presented from `WorkoutSessionView` after ending a session.
+//
+//  Key concepts:
+//  - Fetches the stored session by ID using SwiftData and reuses cached AI text to avoid repeat calls.
+//  - Uses `@AppStorage` to format weight units consistently.
+//
+//  Safe to change:
+//  - Text layout, spacing, or fallback copy for missing summaries.
+//
+//  NOT safe to change:
+//  - Removing the cache check before calling AI; it would trigger unnecessary network calls.
+//  - Formatting lines without keeping kg/lb conversions; totals rely on both units.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to handle empty `aiPostSummaryJSON` leaves the screen in a loading state.
+//  - Fetch predicates must stay in sync with stored session IDs or summaries will not load.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → Post-Workout Summary (AI)
+//
 import SwiftUI
 import SwiftData
 
@@ -8,11 +36,11 @@ struct PostWorkoutSummaryView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
 
-    @State private var session: WorkoutSession?
-    @State private var payload: PostWorkoutSummaryPayload?
-    @State private var isLoading = false
+    @State private var session: WorkoutSession? // Loaded SwiftData session to display.
+    @State private var payload: PostWorkoutSummaryPayload? // Decoded AI JSON payload.
+    @State private var isLoading = false // Controls loading state text.
     @State private var errorMessage: String?
-    @State private var renderedText: String = ""
+    @State private var renderedText: String = "" // Cached formatted summary text.
 
     /// VISUAL TWEAK: Change `bodyLineSpacing` to make the text tighter/looser.
     private let bodyLineSpacing: CGFloat = 6

@@ -2,7 +2,29 @@
 //  AtlasControls.swift
 //  Atlas
 //
-//  Overview: Unified control system for header icons, pills, and glass menus.
+//  What this file is:
+//  - Shared controls and sizing tokens for headers, pills, and glass menus.
+//
+//  Where it’s used:
+//  - Buttons and pill rows across Home, Settings, routines, and history screens.
+//
+//  Key concepts:
+//  - View modifiers like `atlasGlassPill()` apply consistent glass styling.
+//  - Central token structs keep tap targets and icon sizes consistent app-wide.
+//
+//  Safe to change:
+//  - Sizing tokens, padding, or styling values when adjusting visuals.
+//
+//  NOT safe to change:
+//  - Remove modifiers or token names without updating all controls; many views depend on them.
+//
+//  Common bugs / gotchas:
+//  - Shrinking `headerButtonSize` below `tapTarget` makes icons harder to tap.
+//  - Forgetting `.buttonStyle(.plain)` can reintroduce default blue button tint.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → E) Design System / UI Consistency
+//
 
 import SwiftUI
 
@@ -185,6 +207,7 @@ struct AtlasCompactCenterMenu<Content: View>: View {
     var body: some View {
         if isPresented {
             ZStack {
+                // Transparent overlay to catch taps for dismissal without dimming the background.
                 Color.black.opacity(0.001)
                     .ignoresSafeArea()
                     .onTapGesture { onDismiss() }

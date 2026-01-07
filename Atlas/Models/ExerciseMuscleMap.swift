@@ -1,3 +1,28 @@
+//
+//  ExerciseMuscleMap.swift
+//  Atlas
+//
+//  What this file is:
+//  - Simple lookup that maps exercise names to primary/secondary muscle groups for summaries.
+//
+//  Where it’s used:
+//  - Called by AI summary views to label exercises when AI responses are missing or sparse.
+//
+//  Key concepts:
+//  - Uses string contains checks to pick a muscle group; runs locally with no network calls.
+//
+//  Safe to change:
+//  - Add new keyword matches or adjust muscle labels to improve summary accuracy.
+//
+//  NOT safe to change:
+//  - Removing keyword coverage without replacing it; summaries could show generic labels.
+//
+//  Common bugs / gotchas:
+//  - Order matters: earlier checks match first; place more specific keywords before generic ones.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → Post-Workout Summary (AI)
+//
 import Foundation
 
 /// VISUAL TWEAK: To change muscle labels shown in Summary, edit `ExerciseMuscleMap` keywords.

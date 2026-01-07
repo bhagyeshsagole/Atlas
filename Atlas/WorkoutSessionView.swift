@@ -2,7 +2,29 @@
 //  WorkoutSessionView.swift
 //  Atlas
 //
-//  Overview: Live workout session logger with AI coaching and set tracking.
+//  What this file is:
+//  - Live workout logger that records sets, shows AI coaching, and ends sessions with a summary.
+//
+//  Where it’s used:
+//  - Presented from `RoutinePreStartView` when a user starts a workout.
+//
+//  Key concepts:
+//  - Combines local `@State` for UI drafts with SwiftData models via `HistoryStore` to persist sets.
+//  - Uses sheets and safe area insets for bottom controls.
+//
+//  Safe to change:
+//  - UI copy, spacing, or the look of set rows and coaching text.
+//
+//  NOT safe to change:
+//  - Draft/session state wiring that writes through `HistoryStore`; altering it risks duplicate or missing sets.
+//  - Dismissing summary sheet before `completedSessionId` is set; summary relies on the stored session.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to clear focus when switching exercises can leave the keyboard on the wrong field.
+//  - Switching units without converting values will show inconsistent weight text.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → C) Workout Sessions / History (real performance logs)
 //
 
 import SwiftUI
@@ -31,28 +53,28 @@ struct WorkoutSessionView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
 
-    @State private var exerciseIndex: Int = 0
-    @State private var sessionExercises: [SessionExercise]
-    @State private var session: WorkoutSession?
-    @State private var exerciseLogs: [UUID: ExerciseLog] = [:]
-    @State private var loggedSets: [UUID: [SetLog]] = [:]
-    @State private var setDraft = SetLogDraft(tag: "W")
-    @State private var suggestions: [UUID: RoutineAIService.ExerciseSuggestion] = [:]
-    @State private var lastSessionLines: [String] = []
+    @State private var exerciseIndex: Int = 0 // Tracks which exercise the user is editing.
+    @State private var sessionExercises: [SessionExercise] // Ordered exercise list built from the routine.
+    @State private var session: WorkoutSession? // SwiftData session persisted via HistoryStore.
+    @State private var exerciseLogs: [UUID: ExerciseLog] = [:] // Cached SwiftData exercise rows per routine workout.
+    @State private var loggedSets: [UUID: [SetLog]] = [:] // Sets already stored for each exercise ID.
+    @State private var setDraft = SetLogDraft(tag: "W") // Current set entry fields.
+    @State private var suggestions: [UUID: RoutineAIService.ExerciseSuggestion] = [:] // Cached AI coaching per exercise.
+    @State private var lastSessionLines: [String] = [] // Formatted lines from the previous session for this exercise.
     @State private var lastSessionDate: Date?
-    @State private var isLoadingCoaching = false
-    @State private var isAddingSet = false
-    @State private var showAltPopup = false
-    @State private var alternateButtonFrame: CGRect = .zero
-    @State private var popupSize: CGSize = .zero
+    @State private var isLoadingCoaching = false // Indicates in-flight AI request.
+    @State private var isAddingSet = false // Blocks duplicate set submissions.
+    @State private var showAltPopup = false // Shows alternate tag popup when true.
+    @State private var alternateButtonFrame: CGRect = .zero // Anchor frame for the alternate popup arrow.
+    @State private var popupSize: CGSize = .zero // Helps position the popup relative to the button.
     @Environment(\.colorScheme) private var colorScheme
     @State private var completedSessionId: UUID?
-    @State private var showSummary = false
+    @State private var showSummary = false // Triggers the post-workout summary sheet.
     private let menuBackgroundOpacity: Double = 0.96
     private let menuBackgroundColorDark = Color.black
     private let menuBackgroundColorLight = Color.white
-    @State private var newExerciseName: String = ""
-    @FocusState private var focusedField: Field?
+    @State private var newExerciseName: String = "" // For adding ad-hoc exercises mid-session.
+    @FocusState private var focusedField: Field? // Keeps keyboard on weight or reps field.
 
     init(routine: Routine) {
         self.routine = routine
@@ -407,7 +429,7 @@ struct WorkoutSessionView: View {
     }
 
     private var preferredUnit: WorkoutUnits {
-        WorkoutUnits(from: weightUnit)
+        WorkoutUnits(from: weightUnit) // AppStorage stores a string; convert to enum for conversions.
     }
 
     private func addSet() {
@@ -419,6 +441,7 @@ struct WorkoutSessionView: View {
         let parsedWeight = Double(trimmedWeight)
         let weightKg: Double?
         if let parsedWeight {
+            // Convert to kg before storing so all history uses a single unit.
             weightKg = preferredUnit == .kg ? parsedWeight : parsedWeight / WorkoutSessionFormatter.kgToLb
         } else {
             weightKg = nil

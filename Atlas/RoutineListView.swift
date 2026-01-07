@@ -2,9 +2,31 @@
 //  RoutineListView.swift
 //  Atlas
 //
-//  Overview: Lists routines with edit/start menus and navigation into editor views.
+//  What this file is:
+//  - Lists saved routines and provides entry points to start, edit, or delete them.
 //
-//  Update: Hardening pass to align header hit areas, popup sizing, haptics, and truncation.
+//  Where it’s used:
+//  - Pushed from `ContentView` when the user taps Start Workout on Home.
+//  - Presents edit and pre-start flows for the selected routine.
+//
+//  Key concepts:
+//  - Uses `@EnvironmentObject` to read `RoutineStore` so changes propagate automatically.
+//  - Centered glass menu shows actions for each routine without leaving the list.
+//
+//  Safe to change:
+//  - Copy text, spacing, or which actions appear in the menu.
+//
+//  NOT safe to change:
+//  - Deleting routines without calling `routineStore.save()` through store methods; keep mutations via the store.
+//  - Navigation destinations tied to `routineToEdit`/`selectedRoutine`; removing them blocks flows.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to reset `routineMenuTarget` when dismissing leaves stale menus onscreen.
+//  - Navigating directly without updating `path` from ContentView can desync the stack.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → B) Routines (templates)
+//
 
 import SwiftUI
 #if canImport(UIKit)
@@ -13,10 +35,10 @@ import UIKit
 
 struct RoutineListView: View {
     @EnvironmentObject private var routineStore: RoutineStore
-    @State private var routineToEdit: Routine?
-    @State private var routineMenuTarget: Routine?
-    @State private var isMenuPresented = false
-    @State private var selectedRoutine: Routine?
+    @State private var routineToEdit: Routine? // Drives navigation into the Edit screen.
+    @State private var routineMenuTarget: Routine? // The routine currently showing the action menu.
+    @State private var isMenuPresented = false // Controls visibility of the center popup menu.
+    @State private var selectedRoutine: Routine? // Drives navigation into the pre-start flow.
 
     let onAddRoutine: () -> Void
 

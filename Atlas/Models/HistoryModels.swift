@@ -2,7 +2,33 @@
 //  HistoryModels.swift
 //  Atlas
 //
-//  Overview: SwiftData history models for performed workout sessions.
+//  What this file is:
+//  - SwiftData models for stored workout sessions, exercises, and sets.
+//
+//  Where it’s used:
+//  - Persisted by `HistoryStore` and queried across HomeView and history screens.
+//  - Shapes the schema of the on-device history database.
+//
+//  Key concepts:
+//  - `@Model` marks types that SwiftData persists automatically.
+//  - `@Relationship(deleteRule: .cascade)` means deleting a session also deletes its exercises/sets.
+//
+//  Safe to change:
+//  - Add optional fields for new stats (with defaults) while handling migrations.
+//
+//  NOT safe to change:
+//  - Removing properties or changing types without migration; users could lose stored history.
+//  - Unique identifiers (`@Attribute(.unique)`) which keep rows from duplicating.
+//
+//  Common bugs / gotchas:
+//  - Storing weights in lb will skew volume; weights are stored in kg and converted for display.
+//  - Changing tag values without updating `SetTag` will desync tag handling in the UI.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → C) Workout Sessions / History (real performance logs)
+//
+// FLOW SUMMARY:
+// WorkoutSession holds exercises → ExerciseLog holds sets → SetLog stores weight/reps; HistoryStore reads/writes these models via SwiftData.
 //
 
 import Foundation

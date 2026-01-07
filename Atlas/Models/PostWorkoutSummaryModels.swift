@@ -1,3 +1,28 @@
+//
+//  PostWorkoutSummaryModels.swift
+//  Atlas
+//
+//  What this file is:
+//  - Codable models that define the JSON shape of AI post-workout summaries.
+//
+//  Where it’s used:
+//  - Decoded from OpenAI responses in `RoutineAIService` and displayed in `PostWorkoutSummaryView`.
+//
+//  Key concepts:
+//  - Optional fields keep compatibility with older AI responses so decoding doesn’t crash.
+//
+//  Safe to change:
+//  - Add optional fields when expanding the summary schema while updating prompts accordingly.
+//
+//  NOT safe to change:
+//  - Remove or rename fields without updating prompts and decoding; existing cached summaries could fail to load.
+//
+//  Common bugs / gotchas:
+//  - Keep legacy nested structs optional; making them non-optional will break older cache entries.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → Post-Workout Summary (AI)
+//
 import Foundation
 
 /// DEV NOTE: This is the single source of truth for post-workout summary JSON models.

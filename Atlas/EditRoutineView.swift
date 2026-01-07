@@ -1,9 +1,34 @@
+//
+//  EditRoutineView.swift
+//  Atlas
+//
+//  What this file is:
+//  - Simple form to edit a saved routine’s name and workouts.
+//
+//  Where it’s used:
+//  - Presented from `RoutineListView` when the user chooses Edit on a routine.
+//
+//  Key concepts:
+//  - Uses `@State` to hold an editable draft and `@Environment(\\.dismiss)` to close after saving.
+//
+//  Safe to change:
+//  - Form layout, labels, or validation messaging.
+//
+//  NOT safe to change:
+//  - The call to `onSave` with the edited draft; skipping it prevents persistence updates.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to trim empty workout names allows blank entries; guard against empty strings.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → B) Routines (templates)
+//
 import SwiftUI
 
 struct EditRoutineView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var draft: Routine
+    @State private var draft: Routine // Local copy to edit before saving back.
     @State private var newWorkoutName: String = ""
     @State private var newWorkoutWts: String = ""
     @State private var newWorkoutReps: String = ""
@@ -77,4 +102,3 @@ struct EditRoutineView: View {
         }
     }
 }
-

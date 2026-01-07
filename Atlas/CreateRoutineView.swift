@@ -2,7 +2,29 @@
 //  CreateRoutineView.swift
 //  Atlas
 //
-//  Overview: Routine creation form feeding AI parsing/generation into the review flow.
+//  What this file is:
+//  - Routine creation form where users type workouts and trigger AI parsing/generation.
+//
+//  Where it’s used:
+//  - Navigated from `ContentView` and `RoutineListView` to start building a new routine.
+//
+//  Key concepts:
+//  - `@State` stores form text and loading flags; `@FocusState` moves focus between fields.
+//  - AI flow sets `isParsing`/`isGenerating` while waiting for OpenAI responses.
+//
+//  Safe to change:
+//  - Placeholder text, button labels, or spacing; validation copy.
+//
+//  NOT safe to change:
+//  - Removing trims or duplicate `focusedField` resets; errors rely on clearing focus before showing alerts.
+//  - Skipping `isGenerating` guard; without it users can fire multiple overlapping AI calls.
+//
+//  Common bugs / gotchas:
+//  - If you forget to clear `alertMessage`, the alert will keep reappearing.
+//  - Empty input still triggers parsing unless you guard for it.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → B) Routines (templates)
 //
 
 import SwiftUI
@@ -10,10 +32,10 @@ import SwiftUI
 struct CreateRoutineView: View {
     @State private var title: String = ""
     @State private var rawWorkouts: String = ""
-    @State private var isParsing = false
-    @State private var isGenerating = false
+    @State private var isParsing = false // Shows loading state while AI is working.
+    @State private var isGenerating = false // Prevents duplicate AI calls.
     @State private var alertMessage: String?
-    @FocusState private var focusedField: Field?
+    @FocusState private var focusedField: Field? // Moves the caret between title and workout text.
 
     let onGenerate: (String, [ParsedWorkout]) -> Void
 

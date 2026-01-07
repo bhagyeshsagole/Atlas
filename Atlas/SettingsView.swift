@@ -2,17 +2,38 @@
 //  SettingsView.swift
 //  Atlas
 //
-//  Overview: Full-screen settings for appearance selection and weight units.
+//  What this file is:
+//  - Full-screen settings page for appearance mode and weight unit preferences.
+//
+//  Where it’s used:
+//  - Presented as a fullScreenCover from Home/ContentView when the gear icon is tapped.
+//
+//  Key concepts:
+//  - `@AppStorage` saves choices in UserDefaults so the app remembers them next launch.
+//  - Uses dropdown state to toggle open/closed option lists.
+//
+//  Safe to change:
+//  - Copy, spacing, or add new rows/options.
+//
+//  NOT safe to change:
+//  - Removing the dismiss callbacks; Home relies on this view closing itself when selections change.
+//
+//  Common bugs / gotchas:
+//  - Leaving `activeDropdown` non-nil traps taps; always close dropdowns on background tap.
+//  - Forgetting to sync `weightUnit` with other screens will desync unit conversions.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → F) Popups / Menus / Haptics
 //
 
 import SwiftUI
 
 struct SettingsView: View {
     let onDismiss: () -> Void
-    @AppStorage("appearanceMode") private var appearanceMode = "light"
-    @AppStorage("weightUnit") private var weightUnit: String = "lb"
+    @AppStorage("appearanceMode") private var appearanceMode = "light" // Saved user preference for light/dark.
+    @AppStorage("weightUnit") private var weightUnit: String = "lb" // Shared across screens for weight formatting.
     @Environment(\.dismiss) private var dismiss
-    @State private var activeDropdown: DropdownType?
+    @State private var activeDropdown: DropdownType? // Tracks which dropdown is open.
 
     /// Builds the full-screen settings page with monochrome appearance controls.
     /// Change impact: Adjusting layout, card fills, or typography changes the calm, premium feel of the settings experience.

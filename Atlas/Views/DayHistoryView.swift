@@ -2,7 +2,26 @@
 //  DayHistoryView.swift
 //  Atlas
 //
-//  Overview: Minimal list of sessions for a given day (glass, monochrome).
+//  What this file is:
+//  - Shows all sessions completed on a specific day with basic stats.
+//
+//  Where it’s used:
+//  - Navigated from the Home calendar when tapping a marked day.
+//
+//  Key concepts:
+//  - Filters a live `@Query` of all sessions down to those ending within the tapped day.
+//
+//  Safe to change:
+//  - Visual styling, wording, or which stats display.
+//
+//  NOT safe to change:
+//  - The date filter window (start to start+1 day); altering it can include the wrong sessions.
+//
+//  Common bugs / gotchas:
+//  - Sessions with `totalSets == 0` are intentionally hidden to avoid draft clutter.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → Session History v1 — Pass 2
 //
 
 import SwiftUI
@@ -10,7 +29,7 @@ import SwiftData
 
 struct DayHistoryView: View {
     let day: Date
-    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var allSessions: [WorkoutSession]
+    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var allSessions: [WorkoutSession] // Live feed of all sessions; filtered per day below.
 
     private var sessionsForDay: [WorkoutSession] {
         let start = Calendar.current.startOfDay(for: day)

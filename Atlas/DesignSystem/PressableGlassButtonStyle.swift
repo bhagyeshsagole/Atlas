@@ -2,7 +2,26 @@
 //  PressableGlassButtonStyle.swift
 //  Atlas
 //
-//  Overview: Button style for glass CTA pills shared across the app.
+//  What this file is:
+//  - Shared glass button style that gives CTA pills their press animation and frosted look.
+//
+//  Where it’s used:
+//  - Applied to primary buttons like “Start Workout” for consistent styling.
+//
+//  Key concepts:
+//  - A custom `ButtonStyle` lets you centralize padding, strokes, and press scaling for all buttons that adopt it.
+//
+//  Safe to change:
+//  - Padding, corner radius, or scale factors to adjust button feel.
+//
+//  NOT safe to change:
+//  - Removing overlays or material without updating `GlassStyle`; it would break the visual consistency.
+//
+//  Common bugs / gotchas:
+//  - Forgetting `.contentShape` can make tap areas feel smaller than the visual pill.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → E) Design System / UI Consistency
 //
 
 import SwiftUI

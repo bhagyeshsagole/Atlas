@@ -2,7 +2,26 @@
 //  WorkoutView.swift
 //  Atlas
 //
-//  Overview: Simple workout completion screen that logs today's session.
+//  What this file is:
+//  - Simple screen that marks a workout as complete for today and returns home.
+//
+//  Where it’s used:
+//  - Pushed from navigation flows when logging a quick “workout done” entry.
+//
+//  Key concepts:
+//  - Uses `ModelContext` to insert a `Workout` model and `@Environment(\\.dismiss)` to pop the screen.
+//
+//  Safe to change:
+//  - Copy, button styling, or haptic choice.
+//
+//  NOT safe to change:
+//  - Removing date normalization (`startOfDay`) can create duplicate calendar entries for the same day.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to save the context after insert means the workout won’t persist.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → A) App Entry + Navigation
 //
 
 import SwiftUI

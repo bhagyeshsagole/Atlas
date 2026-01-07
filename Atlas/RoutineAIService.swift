@@ -2,9 +2,33 @@
 //  RoutineAIService.swift
 //  Atlas
 //
-//  Overview: AI pipeline for parsing workouts, generating summaries, and coaching suggestions.
+//  What this file is:
+//  - High-level AI pipeline that parses user workout requests, generates/repairs routines, and fetches coaching/summary text.
 //
-//  Update: Rebuilt AI pipeline (generate → repair → parse) with auto-repair and local salvage to avoid user-facing format errors.
+//  Where it’s used:
+//  - Called from routine creation flows and workout screens to turn free-form text into structured workouts and coaching tips.
+//
+//  Key concepts:
+//  - Uses staged calls (generate → repair → parse) to coerce AI output into valid JSON.
+//  - Caches exercise coaching by routine/exercise to avoid repeat network calls in a session.
+//
+//  Safe to change:
+//  - Prompt strings or defaults (sets/reps) as long as you handle empty or failed responses gracefully.
+//
+//  NOT safe to change:
+//  - Removing error handling around API key presence; callers rely on predictable fallback errors.
+//  - The staged repair pipeline without updating parsing; skipping repair can surface malformed JSON to the UI.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to trim inputs results in empty requests and skipped AI calls.
+//  - Changing cache keys can make suggestions stale or re-request too often.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → D) AI / OpenAI
+//
+// FLOW SUMMARY:
+// User enters routine text → detect request vs explicit list → if request, call OpenAIChatClient generate → repair JSON → decode to ParsedWorkout → UI saves via RoutineStore; coaching/summaries use similar request/repair/parse cycle.
+//
 
 import Foundation
 
@@ -43,7 +67,7 @@ struct RoutineAIService {
         let lastSessionDate: Date?
     }
 
-    private static var coachingCache: [CoachingCacheKey: ExerciseSuggestion] = [:]
+    private static var coachingCache: [CoachingCacheKey: ExerciseSuggestion] = [:] // Prevent duplicate AI calls within a session for the same exercise context.
 
     struct RoutineConstraints {
         enum PreferredSplit: String {

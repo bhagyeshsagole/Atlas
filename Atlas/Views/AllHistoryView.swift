@@ -2,15 +2,35 @@
 //  AllHistoryView.swift
 //  Atlas
 //
-//  Overview: Minimal list of all SwiftData sessions (completed + in-progress).
+//  What this file is:
+//  - Full list of saved workout sessions with expandable set details.
+//
+//  Where it’s used:
+//  - Navigated from Home/ContentView when users view all history.
+//
+//  Key concepts:
+//  - `@Query` pulls SwiftData sessions and updates automatically when data changes.
+//  - Expand/collapse per session reveals stored sets.
+//
+//  Safe to change:
+//  - Layout, fonts, or how many stats show in the header line.
+//
+//  NOT safe to change:
+//  - Removing the `@Query` sort or predicate without updating history expectations; ordering matters for recency.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to guard empty data leads to a blank screen without feedback; keep the “No history” card.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → Session History v1 — Pass 2
 //
 
 import SwiftUI
 import SwiftData
 
 struct AllHistoryView: View {
-    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var sessions: [WorkoutSession]
-    @State private var expanded: Set<UUID> = []
+    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var sessions: [WorkoutSession] // Live SwiftData feed sorted newest first.
+    @State private var expanded: Set<UUID> = [] // Tracks which rows show their set details.
 
     var body: some View {
         ScrollView(showsIndicators: false) {

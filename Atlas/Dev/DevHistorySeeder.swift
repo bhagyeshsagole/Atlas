@@ -2,7 +2,26 @@
 //  DevHistorySeeder.swift
 //  Atlas
 //
-//  DEBUG-only helper to seed backdated workout sessions for testing calendar/history flows.
+//  What this file is:
+//  - DEBUG-only helper that seeds sample workout sessions for calendar/history testing.
+//
+//  Where it’s used:
+//  - Can be called during development to populate SwiftData with fake sessions.
+//
+//  Key concepts:
+//  - Uses a UserDefaults flag to seed only once per install to avoid duplicate entries.
+//
+//  Safe to change:
+//  - Seed dates, exercises, or counts for testing; keep inside `#if DEBUG`.
+//
+//  NOT safe to change:
+//  - Running this in release builds; seeding real users would pollute their history.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to reset the UserDefaults key will prevent reseeding after changes.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → Session History v1 — Pass 2
 //
 
 #if DEBUG

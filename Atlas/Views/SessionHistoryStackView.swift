@@ -2,7 +2,26 @@
 //  SessionHistoryStackView.swift
 //  Atlas
 //
-//  Overview: Minimal stacked history deck under the calendar with expandable list.
+//  What this file is:
+//  - Compact stack of recent sessions shown under the Home calendar, expandable on tap/drag.
+//
+//  Where it’s used:
+//  - Embedded in `HomeView` to preview recent workouts.
+//
+//  Key concepts:
+//  - Uses `@GestureState` to track drag distance and toggle between collapsed/expanded layouts.
+//
+//  Safe to change:
+//  - Stack limit, spacing, or animation feel.
+//
+//  NOT safe to change:
+//  - Removing haptic guard without considering double-fire; haptics could trigger repeatedly on drags.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to reset `hapticArmed` after a drag can disable future haptics.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → Session History v1 — Pass 2
 //
 
 import SwiftUI
@@ -11,9 +30,9 @@ import SwiftData
 struct SessionHistoryStackView: View {
     let sessions: [WorkoutSession]
 
-    @State private var isExpanded = false
-    @GestureState private var dragOffsetY: CGFloat = 0
-    @State private var hapticArmed = true
+    @State private var isExpanded = false // Controls whether cards are stacked or listed.
+    @GestureState private var dragOffsetY: CGFloat = 0 // Tracks drag distance to decide toggle.
+    @State private var hapticArmed = true // Prevents repeated haptic triggers during a drag.
 
     private let stackLimit = 3
     private let dragThreshold: CGFloat = 48

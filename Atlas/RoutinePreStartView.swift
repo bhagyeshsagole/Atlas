@@ -1,9 +1,34 @@
+//
+//  RoutinePreStartView.swift
+//  Atlas
+//
+//  What this file is:
+//  - Pre-start screen that shows a routine summary and lets the user jump into a workout session.
+//
+//  Where it’s used:
+//  - Pushed from `RoutineListView` when the user taps a routine to begin.
+//
+//  Key concepts:
+//  - Uses `@Environment(\\.dismiss)` to close the screen and `@State` to trigger navigation into a session.
+//
+//  Safe to change:
+//  - UI copy, spacing, or card heights to adjust how the summary reads.
+//
+//  NOT safe to change:
+//  - Navigation trigger `showSession`; removing it prevents starting a workout from this screen.
+//
+//  Common bugs / gotchas:
+//  - Forgetting to keep `safeAreaInset` background opaque can make bottom buttons blend with content.
+//
+//  DEV MAP:
+//  - See: DEV_MAP.md → B) Routines (templates)
+//
 import SwiftUI
 
 struct RoutinePreStartView: View {
     let routine: Routine
     @Environment(\.dismiss) private var dismiss
-    @State private var showSession = false
+    @State private var showSession = false // When true, navigates to the live WorkoutSessionView.
 
     /// VISUAL TWEAK: Adjust the summary card height by changing `summaryCardMaxHeight`.
     private let summaryCardMaxHeight: CGFloat = 480
