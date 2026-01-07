@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Included in the project template; not referenced by current screens.
 //
+//  Called from:
+//  - Only present in previews/tests if you choose to use it; listed in `AtlasApp.modelTypes`.
+//
 //  Key concepts:
 //  - Demonstrates `@Model` usage for SwiftData with a single stored property.
 //

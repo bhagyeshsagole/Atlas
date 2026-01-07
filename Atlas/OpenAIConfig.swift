@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Read by `RoutineAIService` and `OpenAIChatClient` before any network call.
 //
+//  Called from:
+//  - `RoutineAIService` and `OpenAIChatClient` access `apiKey`/`model` before sending requests.
+//
 //  Key concepts:
 //  - API key is pulled from `LocalSecrets` at call time so the app can start without a key present.
 //

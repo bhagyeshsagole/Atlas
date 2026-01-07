@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Pushed from `ContentView` after CreateRoutineView finishes parsing a routine.
 //
+//  Called from:
+//  - Receives drafts from `CreateRoutineView` via navigation in `ContentView`, saves through `RoutineStore`, then returns via `onComplete`.
+//
 //  Key concepts:
 //  - Uses `@State` arrays of `ParsedWorkout` so edits update the list live.
 //  - Generates a summary via AI before saving to `RoutineStore`.

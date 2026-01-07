@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Applied to primary buttons like “Start Workout” for consistent styling.
 //
+//  Called from:
+//  - Used by pills in `HomeView`, `RoutinePreStartView`, and other CTA buttons adopting this style.
+//
 //  Key concepts:
 //  - A custom `ButtonStyle` lets you centralize padding, strokes, and press scaling for all buttons that adopt it.
 //

@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Called by buttons and controls (e.g., Home gear button, start workout) to provide tap feedback.
 //
+//  Called from:
+//  - Used throughout controls in `AtlasControls`, `HomeView`, `RoutineListView`, `WorkoutSessionView`, and other taps.
+//
 //  Key concepts:
 //  - `UIImpactFeedbackGenerator` triggers the vibration patterns; style controls intensity.
 //

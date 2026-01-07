@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Presented from `RoutinePreStartView` when a user starts a workout.
 //
+//  Called from:
+//  - Launched via navigation from `RoutinePreStartView`; writes history through `HistoryStore` and presents `PostWorkoutSummaryView` on completion.
+//
 //  Key concepts:
 //  - Combines local `@State` for UI drafts with SwiftData models via `HistoryStore` to persist sets.
 //  - Uses sheets and safe area insets for bottom controls.

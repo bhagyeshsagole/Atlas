@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Referenced by buttons, cards, and overlays for consistent spring motion.
 //
+//  Called from:
+//  - Used in `ContentView`, `SettingsView`, `AtlasControls`, and other views when applying shared animations.
+//
 //  Key concepts:
 //  - Returning `Animation` statics keeps timing consistent; swapping values tweaks all animations at once.
 //

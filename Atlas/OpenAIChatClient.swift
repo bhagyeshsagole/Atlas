@@ -9,6 +9,9 @@
 //  - Called by `RoutineAIService` to build/repair routine JSON and create post-workout summaries.
 //  - Provides request builders and response parsing helpers shared across AI flows.
 //
+//  Called from:
+//  - `RoutineAIService` generate/repair/summary/coaching functions invoke these helpers before parsing responses.
+//
 //  Key concepts:
 //  - Each OpenAI request is built from `ChatMessage` arrays and executed via URLSession.
 //  - Responses may include code fences; we strip them before decoding JSON.

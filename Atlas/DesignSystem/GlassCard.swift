@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Home calendar card, history cards, and other glass sections across the app.
 //
+//  Called from:
+//  - Used by `HomeView`, `AllHistoryView`, `DayHistoryView`, `RoutinePreStartView`, and `SessionHistoryStackView` to wrap content.
+//
 //  Key concepts:
 //  - Uses SwiftUI generics to accept any `Content` view while applying the same background/overlay.
 //

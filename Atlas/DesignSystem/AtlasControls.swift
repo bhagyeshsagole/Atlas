@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Buttons and pill rows across Home, Settings, routines, and history screens.
 //
+//  Called from:
+//  - Adopted by views like `HomeView`, `RoutineListView`, `SettingsView`, and `WorkoutSessionView` for consistent controls.
+//
 //  Key concepts:
 //  - View modifiers like `atlasGlassPill()` apply consistent glass styling.
 //  - Central token structs keep tap targets and icon sizes consistent app-wide.

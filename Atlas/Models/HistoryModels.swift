@@ -9,6 +9,9 @@
 //  - Persisted by `HistoryStore` and queried across HomeView and history screens.
 //  - Shapes the schema of the on-device history database.
 //
+//  Called from:
+//  - Referenced in `AtlasApp.modelTypes`, `HistoryStore`, `WorkoutSessionView`, `AllHistoryView`, `DayHistoryView`, and `PostWorkoutSummaryView`.
+//
 //  Key concepts:
 //  - `@Model` marks types that SwiftData persists automatically.
 //  - `@Relationship(deleteRule: .cascade)` means deleting a session also deletes its exercises/sets.

@@ -9,6 +9,9 @@
 //  - Pushed from `ContentView` when the user taps Start Workout on Home.
 //  - Presents edit and pre-start flows for the selected routine.
 //
+//  Called from:
+//  - Navigated to via `ContentView` (Start Workout) and pushes `CreateRoutineView`, `EditRoutineView`, and `RoutinePreStartView`.
+//
 //  Key concepts:
 //  - Uses `@EnvironmentObject` to read `RoutineStore` so changes propagate automatically.
 //  - Centered glass menu shows actions for each routine without leaving the list.

@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Pushed from navigation flows when logging a quick “workout done” entry.
 //
+//  Called from:
+//  - Can be navigated to from `ContentView` routes when a simple workout log is needed; writes to SwiftData for `HomeView` to read.
+//
 //  Key concepts:
 //  - Uses `ModelContext` to insert a `Workout` model and `@Environment(\\.dismiss)` to pop the screen.
 //

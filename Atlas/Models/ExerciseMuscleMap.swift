@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Called by AI summary views to label exercises when AI responses are missing or sparse.
 //
+//  Called from:
+//  - Used inside `RoutineAIService` when constructing fallback summary data for `PostWorkoutSummaryView`.
+//
 //  Key concepts:
 //  - Uses string contains checks to pick a muscle group; runs locally with no network calls.
 //

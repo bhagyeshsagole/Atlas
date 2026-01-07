@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Navigated from `ContentView` and `RoutineListView` to start building a new routine.
 //
+//  Called from:
+//  - Pushed by `ContentView`/`RoutineListView`, then hands results to `ReviewRoutineView` via `onGenerate`.
+//
 //  Key concepts:
 //  - `@State` stores form text and loading flags; `@FocusState` moves focus between fields.
 //  - AI flow sets `isParsing`/`isGenerating` while waiting for OpenAI responses.

@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Injected from `AtlasApp` and called by logging screens (WorkoutSessionView), home calendar, and history lists.
 //
+//  Called from:
+//  - `ContentView` runs repair on appear; `WorkoutSessionView` uses it to start/end sessions and add sets; `DevHistorySeeder` seeds via this store.
+//
 //  Key concepts:
 //  - `ModelContext` is the SwiftData connection for reading/writing persisted models.
 //  - Methods here mutate data and then save; SwiftUI views observing the data update automatically.

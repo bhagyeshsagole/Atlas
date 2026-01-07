@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Queried in `HomeView` to underline days on the calendar.
 //
+//  Called from:
+//  - Inserted in `WorkoutView` and referenced by `HomeView` `@Query`; listed in `AtlasApp` modelTypes.
+//
 //  Key concepts:
 //  - Minimal `@Model` with a single `Date` property stored in SwiftData.
 //

@@ -9,6 +9,9 @@
 //  - Injected as an environment object in `AtlasApp` and read/written by routine views.
 //  - Saves to `routines.json` in the app Documents directory unless a custom URL is injected (tests).
 //
+//  Called from:
+//  - Used by `RoutineListView`, `CreateRoutineView`, `ReviewRoutineView`, `EditRoutineView`, and `RoutinePreStartView` via environment injection.
+//
 //  Key concepts:
 //  - Uses `Codable` structs to turn routine data into JSON on disk.
 //  - `@Published` array notifies SwiftUI views whenever routines change.

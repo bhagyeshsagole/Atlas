@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Presented from `WorkoutSessionView` after ending a session.
 //
+//  Called from:
+//  - Shown as a sheet when `WorkoutSessionView` finishes and passes the completed `sessionID`.
+//
 //  Key concepts:
 //  - Fetches the stored session by ID using SwiftData and reuses cached AI text to avoid repeat calls.
 //  - Uses `@AppStorage` to format weight units consistently.

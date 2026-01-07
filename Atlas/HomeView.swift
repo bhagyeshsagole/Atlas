@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Root view inside `ContentView` NavigationStack; drives navigation to routines and history.
 //
+//  Called from:
+//  - Instantiated in `ContentView` as the root screen; navigates to `RoutineListView`, `AllHistoryView`, and `DayHistoryView`.
+//
 //  Key concepts:
 //  - `@Query` reads SwiftData models directly into the view and updates when data changes.
 //  - Animations reveal calendar/start controls on appear for smoother entry.

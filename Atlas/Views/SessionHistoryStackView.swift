@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Embedded in `HomeView` to preview recent workouts.
 //
+//  Called from:
+//  - Rendered inside `HomeView` just below the calendar using the recent sessions array.
+//
 //  Key concepts:
 //  - Uses `@GestureState` to track drag distance and toggle between collapsed/expanded layouts.
 //

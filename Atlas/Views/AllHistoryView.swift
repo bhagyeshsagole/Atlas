@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Navigated from Home/ContentView when users view all history.
 //
+//  Called from:
+//  - Pushed via `ContentView` route `.history` and from `HomeView` history navigation.
+//
 //  Key concepts:
 //  - `@Query` pulls SwiftData sessions and updates automatically when data changes.
 //  - Expand/collapse per session reveals stored sets.

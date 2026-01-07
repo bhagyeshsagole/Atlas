@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Presented as a fullScreenCover from Home/ContentView when the gear icon is tapped.
 //
+//  Called from:
+//  - Shown via `ContentView` fullScreenCover when the Home gear button triggers `openSettings`.
+//
 //  Key concepts:
 //  - `@AppStorage` saves choices in UserDefaults so the app remembers them next launch.
 //  - Uses dropdown state to toggle open/closed option lists.

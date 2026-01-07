@@ -9,6 +9,9 @@
 //  - Entry for the NavigationStack that routes into routines, history, and settings.
 //  - Sits under `AtlasApp` and wraps most screens the user sees.
 //
+//  Called from:
+//  - Constructed in `AtlasApp` and shown in the main WindowGroup.
+//
 //  Key concepts:
 //  - `NavigationStack` uses a `path` array to push/pop screens by value.
 //  - `@AppStorage` keeps appearance choice in UserDefaults so it persists between launches.

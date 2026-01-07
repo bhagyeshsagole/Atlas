@@ -9,6 +9,9 @@
 //  - Runs at launch and wraps `ContentView` with environment objects for routines and history.
 //  - Builds the SwiftData container that every screen depends on for persistence.
 //
+//  Called from:
+//  - iOS app entry (main target) instantiates this `App` type; it then presents `ContentView`.
+//
 //  Key concepts:
 //  - SwiftData `ModelContainer` is the on-device database; `ModelContext` is the handle we use to read/write it.
 //  - `@StateObject` keeps shared stores alive for the whole app session instead of recreating them per view.

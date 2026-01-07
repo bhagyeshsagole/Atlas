@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Decoded from OpenAI responses in `RoutineAIService` and displayed in `PostWorkoutSummaryView`.
 //
+//  Called from:
+//  - `RoutineAIService` decodes/encodes these models; `PostWorkoutSummaryView` renders their fields.
+//
 //  Key concepts:
 //  - Optional fields keep compatibility with older AI responses so decoding doesn’t crash.
 //

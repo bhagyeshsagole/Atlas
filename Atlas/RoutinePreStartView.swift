@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Pushed from `RoutineListView` when the user taps a routine to begin.
 //
+//  Called from:
+//  - `RoutineListView` navigationDestination presents this; it then pushes `WorkoutSessionView` when Start is tapped.
+//
 //  Key concepts:
 //  - Uses `@Environment(\\.dismiss)` to close the screen and `@State` to trigger navigation into a session.
 //

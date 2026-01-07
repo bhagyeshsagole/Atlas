@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Navigated from the Home calendar when tapping a marked day.
 //
+//  Called from:
+//  - `HomeView` navigationDestination presents this when a day cell is tapped.
+//
 //  Key concepts:
 //  - Filters a live `@Query` of all sessions down to those ending within the tapped day.
 //

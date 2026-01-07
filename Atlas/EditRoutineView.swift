@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Presented from `RoutineListView` when the user chooses Edit on a routine.
 //
+//  Called from:
+//  - `RoutineListView` opens this view via navigationDestination when the user selects Edit.
+//
 //  Key concepts:
 //  - Uses `@State` to hold an editable draft and `@Environment(\\.dismiss)` to close after saving.
 //

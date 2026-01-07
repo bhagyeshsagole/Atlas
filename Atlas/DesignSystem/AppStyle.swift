@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Referenced by most views for consistent sizing of text, cards, and spacing.
 //
+//  Called from:
+//  - All screens import these tokens (e.g., HomeView, SettingsView, WorkoutSessionView) to size text, padding, and cards.
+//
 //  Key concepts:
 //  - Static constants act like a style guide; changing one value updates every view that uses it.
 //

@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Can be called during development to populate SwiftData with fake sessions.
 //
+//  Called from:
+//  - Intended to be triggered from app boot in DEBUG (e.g., `AtlasApp`) when you want seeded data.
+//
 //  Key concepts:
 //  - Uses a UserDefaults flag to seed only once per install to avoid duplicate entries.
 //

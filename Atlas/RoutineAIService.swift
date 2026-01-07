@@ -8,6 +8,9 @@
 //  Where it’s used:
 //  - Called from routine creation flows and workout screens to turn free-form text into structured workouts and coaching tips.
 //
+//  Called from:
+//  - `CreateRoutineView` (parsing), `ReviewRoutineView` (summary), and `WorkoutSessionView` (coaching + summaries) trigger these APIs.
+//
 //  Key concepts:
 //  - Uses staged calls (generate → repair → parse) to coerce AI output into valid JSON.
 //  - Caches exercise coaching by routine/exercise to avoid repeat network calls in a session.
