@@ -531,7 +531,15 @@ struct WorkoutSessionView: View {
         let hasAnySets = session.exercises.contains { !$0.sets.isEmpty }
         if !hasAnySets {
             modelContext.delete(session)
-            try? modelContext.save()
+            do {
+                if modelContext.hasChanges {
+                    try modelContext.save()
+                }
+            } catch {
+                #if DEBUG
+                print("[HISTORY][ERROR] endSession delete save failed: \(error)")
+                #endif
+            }
             dismiss()
             return
         }
@@ -541,9 +549,17 @@ struct WorkoutSessionView: View {
         if let end = session.endedAt {
             session.durationSeconds = Int(end.timeIntervalSince(session.startedAt))
         }
-        try? modelContext.save()
-        completedSessionId = session.id
-        showSummary = true
+        do {
+            if modelContext.hasChanges {
+                try modelContext.save()
+            }
+            completedSessionId = session.id
+            showSummary = true
+        } catch {
+            #if DEBUG
+            print("[HISTORY][ERROR] endSession save failed: \(error)")
+            #endif
+        }
     }
 
     private func loadCoachingAndHistory() {

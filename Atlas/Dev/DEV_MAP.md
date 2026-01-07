@@ -12,8 +12,8 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - Templates vs History: `RoutineStore` (Codable + JSON) powers routine builder screens; `HistoryStore` (SwiftData) powers session logging, calendar underlines, and summaries.
 - Single shared `ModelContainer`: built once in `AtlasApp` and reused everywhere so `@Query` and manual fetches see the same data; avoid creating extra containers.
 - Navigation: `ContentView.Route` drives flows (Home → RoutineList → Create/Review/PreStart → WorkoutSession → PostWorkoutSummary; Home → AllHistory/DayHistory; Home → Settings).
-- AI pipeline: `RoutineAIService` orchestrates generate → repair → parse using `OpenAIChatClient`; prompts and schemas live in `OpenAIChatClient` + `Models/PostWorkoutSummaryModels`.
-
+- AI pipeline: `RoutineAIService` orchestrates generate → repair → parse using `OpenAIChatClient`; prompts and schemas live in `OpenAIChatClient` + `Models/PostWorkoutSummaryModels`..
+. . 
 ## Every File / Folder Inventory
 
 ### Root app + navigation
@@ -82,6 +82,8 @@ Update Protocol: When you add/edit features, update this map with what changed a
 ## Debugging Guide
 - Boot logs: `[BOOT]` printed from `AtlasApp`/`AtlasPersistence` when the SwiftData container initializes (shows persistence mode and session count).
 - History logs: `[HISTORY]` messages from `HistoryStore` (start/addSet/endSession/repairs) help confirm writes and totals.
+- Persistence flush: DEBUG logs print the SwiftData store URL on boot, verify saved sessions after `endSession`, log the most recent ended session on first appear, and log `[HISTORY] flush ok` when the scene goes inactive/background.
+- Persistence QA: On device, run without the debugger attached (Xcode Run > “Wait for the executable to be launched”), start and end a session, force-quit, relaunch, and confirm the session remains. Repeat with an archived/installed Release build.
 - AI logs: `[AI]`, `[AI][SUMMARY]`, `[AI][COACH]` from `RoutineAIService` + `OpenAIChatClient` show request stages, status codes, and timing; missing API key logs `[AI] Key present: false` before throwing.
 - Routine logs: `[ROUTINE]` debug prints in routine list/menu actions.
-- Where to view: Xcode console while running on device/simulator. If summaries fail, check `errorMessage` in `PostWorkoutSummaryView` and OpenAI status codes. If SwiftData queries look empty, verify `modelContainer` is shared and inspect Application Support for `Atlas.sqlite`.
+- Where to view: Xcode console while running on device/simulator. If summaries fail, check `errorMessage` in `PostWorkoutSummaryView` and OpenAI status codes. If SwiftData queries look empty, verify `modelContainer` is shared and inspect Application Support for `Atlas.store`.

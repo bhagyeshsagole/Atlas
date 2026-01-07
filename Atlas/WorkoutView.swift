@@ -73,7 +73,15 @@ struct WorkoutView: View {
         let normalizedDate = calendar.startOfDay(for: Date())
         let workout = Workout(date: normalizedDate)
         modelContext.insert(workout)
-        try? modelContext.save()
+        do {
+            if modelContext.hasChanges {
+                try modelContext.save()
+            }
+        } catch {
+            #if DEBUG
+            print("[WORKOUT][ERROR] save failed: \(error)")
+            #endif
+        }
         dismiss()
     }
 }

@@ -192,11 +192,11 @@ struct PostWorkoutSummaryView: View {
         await MainActor.run {
             isLoading = true
         }
-        let descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.id == sessionID },
+        var descriptor = FetchDescriptor<WorkoutSession>(
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        let loadedSession = try? modelContext.fetch(descriptor).first
+        descriptor.fetchLimit = 30
+        let loadedSession = (try? modelContext.fetch(descriptor))?.first(where: { $0.id == sessionID })
         await MainActor.run {
             self.session = loadedSession
         }
@@ -230,19 +230,23 @@ struct PostWorkoutSummaryView: View {
                 payload = storedPayload
                 renderedText = text
                 session.aiPostSummaryText = text
-                try? modelContext.save()
+                saveContext(reason: "post summary cached text from stored JSON")
                 isLoading = false
             }
             return
         }
 
-        let previousLogs = try? modelContext.fetch(FetchDescriptor<ExerciseLog>(
-            predicate: #Predicate { log in
-                log.session?.isCompleted == true && log.session?.id != sessionID
-            },
+        var previousDescriptor = FetchDescriptor<ExerciseLog>(
             sortBy: [SortDescriptor(\ExerciseLog.session?.startedAt, order: .reverse)]
-        ))
-        let previousByExercise: [String: ExerciseLog?] = (previousLogs ?? []).reduce(into: [:]) { dict, log in
+        )
+        previousDescriptor.fetchLimit = 80
+        let previousLogs = (try? modelContext.fetch(previousDescriptor)) ?? []
+        let previousByExercise: [String: ExerciseLog?] = previousLogs
+            .filter { log in
+                guard let session = log.session else { return false }
+                return session.isCompleted && session.id != sessionID
+            }
+            .reduce(into: [:]) { dict, log in
             let key = log.name.lowercased()
             if dict[key] == nil {
                 dict[key] = log
@@ -259,7 +263,7 @@ struct PostWorkoutSummaryView: View {
                 session.aiPostSummaryText = text
                 session.aiPostSummaryGeneratedAt = Date()
                 session.aiPostSummaryModel = result.model
-                try? modelContext.save()
+                saveContext(reason: "post summary AI write")
                 isLoading = false
             }
         } else {
@@ -267,10 +271,23 @@ struct PostWorkoutSummaryView: View {
             await MainActor.run {
                 renderedText = fallbackText
                 session.aiPostSummaryText = fallbackText
-                try? modelContext.save()
+                saveContext(reason: "post summary fallback write")
                 isLoading = false
                 errorMessage = "Unable to generate summary."
             }
+        }
+    }
+
+    @MainActor
+    private func saveContext(reason: String) {
+        do {
+            if modelContext.hasChanges {
+                try modelContext.save()
+            }
+        } catch {
+            #if DEBUG
+            print("[HISTORY][ERROR] \(reason) save failed: \(error)")
+            #endif
         }
     }
 }

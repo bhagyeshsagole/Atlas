@@ -60,7 +60,15 @@ enum DevHistorySeeder {
 
             _ = historyStore.endSession(session: session)
             session.endedAt = end
-            try? modelContext.save()
+            do {
+                if modelContext.hasChanges {
+                    try modelContext.save()
+                }
+            } catch {
+                #if DEBUG
+                print("[DEV][ERROR] history seed save failed: \(error)")
+                #endif
+            }
         }
 
         UserDefaults.standard.set(true, forKey: seedFlagKey)

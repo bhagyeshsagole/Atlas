@@ -42,10 +42,12 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
 #endif
     @EnvironmentObject private var historyStore: HistoryStore
+    @Environment(\.scenePhase) private var scenePhase
     /// DEV MAP: Root navigation stack and settings presentation live here.
     @State private var path: [Route] = [] // Value-based navigation stack entries.
     @State private var showSettings = false // Drives the full-screen settings sheet.
     @State private var showIntro = true // Controls the launch overlay visibility.
+    @State private var didLogBootPersistenceCheck = false
     @AppStorage("appearanceMode") private var appearanceMode = "light" // Persists appearance choice in UserDefaults.
 
     private enum Route: Hashable {
@@ -106,10 +108,21 @@ struct ContentView: View {
         }
         .onAppear {
             historyStore.repairZeroTotalSessionsIfNeeded()
+            #if DEBUG
+            if !didLogBootPersistenceCheck {
+                didLogBootPersistenceCheck = true
+                historyStore.logMostRecentEndedSessionForDebug()
+            }
+            #endif
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                 withAnimation(.spring(response: 0.6, dampingFraction: 0.9)) {
                     showIntro = false
                 }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .inactive || phase == .background {
+                historyStore.flush()
             }
         }
     }

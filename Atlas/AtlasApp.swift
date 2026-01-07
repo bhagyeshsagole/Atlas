@@ -77,7 +77,6 @@ struct AtlasApp: App {
 
 enum AtlasPersistence {
     /// DEV NOTE: Add/remove SwiftData @Model types in `modelTypes`.
-    /// DEV NOTE: This intentionally avoids `url:` because it breaks compilation in current SwiftData API.
     static let modelTypes: [any PersistentModel.Type] = [
         Workout.self,
         WorkoutSession.self,
@@ -87,13 +86,33 @@ enum AtlasPersistence {
 
     static var isInMemory: Bool = false
 
+    private static func persistentStoreURL() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let directory = base.appendingPathComponent("AtlasData", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            #if DEBUG
+            print("[BOOT][ERROR] Failed to create store directory: \(error)")
+            #endif
+        }
+        return directory.appendingPathComponent("Atlas.store")
+    }
+
     static func makeContainer() -> ModelContainer {
         let schema = Schema(modelTypes)
+        let storeURL = persistentStoreURL()
         do {
-            let config = ModelConfiguration("Atlas", schema: schema)
+            let config = ModelConfiguration(
+                "Atlas",
+                schema: schema,
+                url: storeURL
+            )
             let container = try ModelContainer(for: schema, configurations: config)
             #if DEBUG
             print("[BOOT] SwiftData container initialized (persistent default).")
+            print("[BOOT] SwiftData store url=\(storeURL.path)")
             print("[BOOT] SwiftData schema includes: WorkoutSession, ExerciseLog, SetLog")
             #endif
             isInMemory = config.isStoredInMemoryOnly

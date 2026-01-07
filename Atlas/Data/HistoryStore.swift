@@ -76,7 +76,7 @@ final class HistoryStore: ObservableObject {
         }
 
         modelContext.insert(session)
-        saveContext()
+        saveContext(reason: "startSession")
 
         #if DEBUG
         let exerciseList = exercises.joined(separator: ", ")
@@ -99,7 +99,7 @@ final class HistoryStore: ObservableObject {
         let set = SetLog(tag: tag.rawValue, weightKg: weightKg, reps: reps, createdAt: Date(), exercise: exerciseLog)
         exerciseLog.sets.append(set)
 
-        saveContext()
+        saveContext(reason: "addSet")
 
         #if DEBUG
         let weightDisplay = weightKg.map { String(format: "%.2f", $0) } ?? "nil"
@@ -121,20 +121,23 @@ final class HistoryStore: ObservableObject {
         // Drop drafts with zero sets so empty sessions do not clutter history.
         guard totals.sets > 0 else {
             modelContext.delete(liveSession)
-            saveContext()
+            saveContext(reason: "endSession discard zero-set")
             return false
         }
 
         liveSession.endedAt = Date()
         liveSession.isCompleted = true
 
-        saveContext()
+        let saved = saveContext(reason: "endSession")
 
         #if DEBUG
-        print("[HISTORY] end session id=\(liveSession.id) stored=true sets=\(totals.sets) reps=\(totals.reps) volumeKg=\(String(format: "%.2f", totals.volumeKg))")
+        logPersistenceCheck(for: liveSession.id)
+        if saved {
+            print("[HISTORY] end session id=\(liveSession.id) stored=true sets=\(totals.sets) reps=\(totals.reps) volumeKg=\(String(format: "%.2f", totals.volumeKg))")
+        }
         #endif
 
-        return true
+        return saved
     }
 
     func recentSessions(limit: Int) -> [WorkoutSession] {
@@ -250,7 +253,7 @@ final class HistoryStore: ObservableObject {
             }
         }
         if repaired > 0 {
-            saveContext()
+            saveContext(reason: "repairZeroTotalSessionsIfNeeded")
             #if DEBUG
             print("[HISTORY] repaired \(repaired) sessions with missing totals")
             #endif
@@ -265,13 +268,62 @@ final class HistoryStore: ObservableObject {
         return sessions.first { $0.id == id }
     }
 
-    private func saveContext() {
+    func flush() {
+        guard modelContext.hasChanges else { return }
         do {
             try modelContext.save()
+            #if DEBUG
+            print("[HISTORY] flush ok")
+            #endif
         } catch {
             #if DEBUG
-            print("[HISTORY][ERROR] save failed: \(error)")
+            print("[HISTORY][ERROR] flush failed: \(error)")
             #endif
         }
     }
+
+    #if DEBUG
+    func logMostRecentEndedSessionForDebug() {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 5
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+        if let latest = sessions.first(where: { $0.endedAt != nil && $0.totalSets > 0 }) {
+            let endedAt = latest.endedAt?.ISO8601Format() ?? "nil"
+            print("[HISTORY] last ended session id=\(latest.id) endedAt=\(endedAt) sets=\(latest.totalSets) reps=\(latest.totalReps) volumeKg=\(String(format: "%.2f", latest.volumeKg))")
+        } else {
+            print("[HISTORY] no ended sessions found for persistence sanity check")
+        }
+    }
+    #endif
+
+    @discardableResult
+    private func saveContext(reason: String) -> Bool {
+        guard modelContext.hasChanges else { return true }
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            #if DEBUG
+            print("[HISTORY][ERROR] save failed (\(reason)): \(error)")
+            #endif
+            return false
+        }
+    }
+
+    #if DEBUG
+    private func logPersistenceCheck(for id: UUID) {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 20
+        if let match = try? modelContext.fetch(descriptor).first(where: { $0.id == id }) {
+            let ended = match.endedAt?.ISO8601Format() ?? "nil"
+            print("[HISTORY] verify session id=\(match.id) endedAt=\(ended) sets=\(match.totalSets) reps=\(match.totalReps) volumeKg=\(String(format: "%.2f", match.volumeKg))")
+        } else {
+            print("[HISTORY][ERROR] verify failed: session id=\(id) not found after save")
+        }
+    }
+    #endif
 }
