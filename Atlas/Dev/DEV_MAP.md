@@ -45,7 +45,7 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `PostWorkoutSummaryView.swift` — Shows AI or cached summaries for a completed session. Loads session by ID, reuses cached JSON/text. Keep cache-first logic to avoid repeat calls. Example: adjust line spacing or add a share button without touching fetch logic.
 - `Dev/DevHistorySeeder.swift` — DEBUG-only seeder for fake sessions. Controlled by a UserDefaults flag. Do not enable in release builds. Example: add more seed days for UI testing.
 
-- Auth/Supabase files are currently unused; core app flow does not depend on them.
+- Auth/Supabase files are currently unused; core app flow does not depend on them. Minimal stubs exist (`AuthStore`, `SupabaseClientProvider`) but are not wired into UI yet.
 
 ### AI prompts, summaries, and models
 - `Models/PostWorkoutSummaryModels.swift` — Codable schema for AI summary JSON. Add optional fields when expanding prompts; keep compatibility with cached data.

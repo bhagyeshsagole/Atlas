@@ -42,6 +42,7 @@ struct AtlasApp: App {
     /// DEV MAP: App entry + shared model container wiring lives here.
     @StateObject private var routineStore = RoutineStore()
     @StateObject private var historyStore: HistoryStore
+    @StateObject private var authStore = AuthStore()
 
     /// Builds the shared SwiftData container with all app models.
     /// Change impact: Adding or removing models here changes which data persists across launches.
@@ -67,8 +68,11 @@ struct AtlasApp: App {
             ContentView()
                 .environmentObject(routineStore)
                 .environmentObject(historyStore)
+                .environmentObject(authStore)
                 .task {
                     routineStore.load()
+                    await authStore.restoreSessionIfNeeded()
+                    authStore.startAuthListener()
                 }
         }
         .modelContainer(Self.sharedModelContainer)

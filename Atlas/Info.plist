@@ -2,6 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Supabase linker/config (read via Info.plist) -->
+	<key>SUPABASE_URL</key>
+	<string>https://nqaodudipodgtrnxcknv.supabase.co</string>
+	<key>SUPABASE_ANON_KEY</key>
+	<string>sb_publishable_3NfePwDCJaZUdCSu4Gw_TQ_bffgXhQW</string>
+	<key>SUPABASE_REDIRECT_URL</key>
+	<string>atlas://auth-callback</string>
+
+	<!-- Your existing URL scheme -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -11,6 +20,8 @@
 			</array>
 		</dict>
 	</array>
+
+	<!-- Your existing background modes (currently none enabled) -->
 	<key>UIBackgroundModes</key>
 	<array/>
 </dict>
