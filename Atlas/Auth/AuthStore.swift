@@ -5,16 +5,25 @@ import Supabase
 @MainActor
 final class AuthStore: ObservableObject {
     @Published var isAuthenticated: Bool = false
-    @Published var userId: String? = nil
-    @Published var email: String? = nil
+    @Published var userId: String?
+    @Published var email: String?
 
     private let client: SupabaseClient?
-    private var hasBootstrapped = false
-    private var hasStartedListener = false
+    private let profileService: ProfileService?
+    private var didStart = false
+    private var isRestoring = false
+    private var listenerTask: Task<Void, Never>?
+    private var profileEnsureTask: Task<Void, Never>?
+    private var lastEnsuredProfileId: UUID?
 
     init(client: SupabaseClient? = nil) {
         let resolvedClient = client ?? SupabaseClientProvider.makeClient()
         self.client = resolvedClient
+        if let resolvedClient {
+            profileService = ProfileService(client: resolvedClient)
+        } else {
+            profileService = nil
+        }
         if let current = resolvedClient?.auth.currentSession, current.isExpired == false {
             isAuthenticated = true
             userId = current.user.id.uuidString
@@ -25,6 +34,21 @@ final class AuthStore: ObservableObject {
         #endif
     }
 
+    deinit {
+        listenerTask?.cancel()
+        profileEnsureTask?.cancel()
+    }
+
+    func startIfNeeded() {
+        guard didStart == false else { return }
+        didStart = true
+        #if DEBUG
+        print("[AUTH] startIfNeeded")
+        #endif
+        kickoffRestore()
+        kickoffListener()
+    }
+
     func sendMagicLink(email: String, redirectURL: URL?) async throws {
         guard let client else {
             throw AuthError.missingClient
@@ -32,26 +56,10 @@ final class AuthStore: ObservableObject {
         try await client.auth.signInWithOTP(email: email, redirectTo: redirectURL)
     }
 
-    func restoreSessionIfNeeded() async {
-        guard hasBootstrapped == false else { return }
-        hasBootstrapped = true
-
-        guard let client else {
-            #if DEBUG
-            print("[AUTH] restore skipped (Supabase client unavailable)")
-            #endif
-            await updateState(with: nil)
-            return
-        }
-
-        let session = client.auth.currentSession
-        await handleSessionUpdate(session)
-        #if DEBUG
-        print("[AUTH] restored authenticated=\(isAuthenticated)")
-        #endif
-    }
-
     func handleAuthRedirect(_ url: URL) {
+        #if DEBUG
+        print("[AUTH] handled deep link url=\(url.absoluteString)")
+        #endif
         guard let client else {
             #if DEBUG
             print("[AUTH] handle redirect skipped (client unavailable)")
@@ -59,7 +67,14 @@ final class AuthStore: ObservableObject {
             return
         }
         client.handle(url)
-        Task { await restoreSessionIfNeeded() }
+    }
+
+    func restoreSessionIfNeeded() async {
+        if didStart == false {
+            startIfNeeded()
+            return
+        }
+        kickoffRestore()
     }
 
     func signOut() async {
@@ -70,12 +85,41 @@ final class AuthStore: ObservableObject {
             print("[AUTH][WARN] signOut failed: \(error)")
             #endif
         }
-        await updateState(with: nil)
+        apply(session: nil, event: nil)
     }
 
-    func startAuthListener() {
-        guard hasStartedListener == false else { return }
-        hasStartedListener = true
+    private func kickoffRestore() {
+        guard isRestoring == false else { return }
+        isRestoring = true
+        #if DEBUG
+        print("[AUTH] restore begin")
+        #endif
+        guard let client else {
+            #if DEBUG
+            print("[AUTH] restore end authenticated=false (client unavailable)")
+            #endif
+            isRestoring = false
+            apply(session: nil, event: nil)
+            return
+        }
+
+        Task.detached(priority: .utility) { [weak self, client] in
+            let session = client.auth.currentSession
+            let expired = session?.isExpired ?? false
+            let authenticated = session != nil && expired == false
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                defer { self.isRestoring = false }
+                self.apply(session: session, event: nil)
+                #if DEBUG
+                print("[AUTH] restore end authenticated=\(authenticated)")
+                #endif
+            }
+        }
+    }
+
+    private func kickoffListener() {
+        guard listenerTask == nil else { return }
         guard let client else {
             #if DEBUG
             print("[AUTH] listener skipped (Supabase client unavailable)")
@@ -83,42 +127,90 @@ final class AuthStore: ObservableObject {
             return
         }
 
-        Task { [weak self] in
-            guard let self else { return }
+        listenerTask = Task.detached(priority: .utility) { [weak self, client] in
+            #if DEBUG
+            print("[AUTH] listener started")
+            #endif
             for await (event, session) in client.auth.authStateChanges {
-                await self.handleSessionUpdate(session)
+                let expired = session?.isExpired ?? false
+                let authenticated = session != nil && expired == false
                 #if DEBUG
-                print("[AUTH] state changed event=\(event) authenticated=\(self.isAuthenticated)")
+                print("[AUTH] event=\(event) authenticated=\(authenticated) expired=\(expired)")
                 #endif
+                await MainActor.run { [weak self] in
+                    self?.apply(session: session, event: event)
+                }
             }
         }
     }
 
-    private func handleSessionUpdate(_ session: Session?) async {
-        if let session, session.isExpired {
-            do {
-                try await client?.auth.signOut()
-            } catch {
-                #if DEBUG
-                print("[AUTH][WARN] signOut failed for expired session: \(error)")
-                #endif
+    private func apply(session: Session?, event: AuthChangeEvent?) {
+        _ = event
+        let expired = session?.isExpired ?? false
+        let authenticated = session != nil && expired == false
+        let newUserId = session?.user.id.uuidString
+        let newEmail = session?.user.email
+
+        if authenticated == isAuthenticated {
+            if authenticated == false {
+                if userId != nil || email != nil {
+                    userId = nil
+                    email = nil
+                    lastEnsuredProfileId = nil
+                    profileEnsureTask?.cancel()
+                }
+                return
             }
-            await updateState(with: nil)
+            if newUserId == userId && newEmail == email {
+                return
+            }
+        }
+
+        if authenticated, let newUserId, let newEmail {
+            isAuthenticated = true
+            userId = newUserId
+            email = newEmail
+            if let session {
+                ensureProfile(for: session)
+            }
+        } else {
+            isAuthenticated = false
+            userId = nil
+            email = nil
+            lastEnsuredProfileId = nil
+            profileEnsureTask?.cancel()
+        }
+    }
+
+    private func ensureProfile(for session: Session) {
+        guard let profileService else { return }
+        let userId = session.user.id
+        if lastEnsuredProfileId == userId {
             return
         }
-        await updateState(with: session)
-    }
 
-    private func updateState(with session: Session?) async {
-        await MainActor.run {
-            if let session, session.isExpired == false {
-                isAuthenticated = true
-                userId = session.user.id.uuidString
-                email = session.user.email
-            } else {
-                isAuthenticated = false
-                userId = nil
-                email = nil
+        profileEnsureTask?.cancel()
+        profileEnsureTask = Task.detached(priority: .utility) { [weak self] in
+            #if DEBUG
+            print("[AUTH] ensureProfile start id=\(userId.uuidString) email=\(session.user.email ?? "")")
+            #endif
+            do {
+                try await profileService.ensureProfile(userId: userId, email: session.user.email)
+                #if DEBUG
+                print("[AUTH] ensureProfile ok")
+                #endif
+                await MainActor.run { [weak self] in
+                    self?.lastEnsuredProfileId = userId
+                }
+            } catch {
+                #if DEBUG
+                print("[AUTH][ERROR] ensureProfile failed: \(error)")
+                #endif
+                await MainActor.run { [weak self] in
+                    if self?.lastEnsuredProfileId == userId {
+                        self?.lastEnsuredProfileId = nil
+                    }
+                }
             }
         }
     }

@@ -136,7 +136,7 @@ struct SettingsView: View {
         }
         .tint(.primary)
         .fullScreenCover(isPresented: $showingAccount) {
-            AuthDebugView()
+            AccountView()
                 .environmentObject(authStore)
         }
         .contentShape(Rectangle())

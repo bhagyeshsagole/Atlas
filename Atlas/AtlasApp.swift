@@ -71,11 +71,11 @@ struct AtlasApp: App {
                 .environmentObject(authStore)
                 .task {
                     routineStore.load()
-                    await authStore.restoreSessionIfNeeded()
-                    authStore.startAuthListener()
+                    authStore.startIfNeeded()
                 }
                 .onOpenURL { url in
                     authStore.handleAuthRedirect(url)
+                    Task { await authStore.restoreSessionIfNeeded() }
                 }
         }
         .modelContainer(Self.sharedModelContainer)
