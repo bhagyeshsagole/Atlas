@@ -25,6 +25,13 @@ final class AuthStore: ObservableObject {
         #endif
     }
 
+    func sendMagicLink(email: String, redirectURL: URL?) async throws {
+        guard let client else {
+            throw AuthError.missingClient
+        }
+        try await client.auth.signInWithOTP(email: email, redirectTo: redirectURL)
+    }
+
     func restoreSessionIfNeeded() async {
         guard hasBootstrapped == false else { return }
         hasBootstrapped = true
@@ -42,6 +49,28 @@ final class AuthStore: ObservableObject {
         #if DEBUG
         print("[AUTH] restored authenticated=\(isAuthenticated)")
         #endif
+    }
+
+    func handleAuthRedirect(_ url: URL) {
+        guard let client else {
+            #if DEBUG
+            print("[AUTH] handle redirect skipped (client unavailable)")
+            #endif
+            return
+        }
+        client.handle(url)
+        Task { await restoreSessionIfNeeded() }
+    }
+
+    func signOut() async {
+        do {
+            try await client?.auth.signOut()
+        } catch {
+            #if DEBUG
+            print("[AUTH][WARN] signOut failed: \(error)")
+            #endif
+        }
+        await updateState(with: nil)
     }
 
     func startAuthListener() {
@@ -93,4 +122,8 @@ final class AuthStore: ObservableObject {
             }
         }
     }
+}
+
+enum AuthError: Error {
+    case missingClient
 }

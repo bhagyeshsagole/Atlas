@@ -74,6 +74,9 @@ struct AtlasApp: App {
                     await authStore.restoreSessionIfNeeded()
                     authStore.startAuthListener()
                 }
+                .onOpenURL { url in
+                    authStore.handleAuthRedirect(url)
+                }
         }
         .modelContainer(Self.sharedModelContainer)
     }

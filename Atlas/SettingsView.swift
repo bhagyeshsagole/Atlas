@@ -36,7 +36,9 @@ struct SettingsView: View {
     @AppStorage("appearanceMode") private var appearanceMode = "light" // Saved user preference for light/dark.
     @AppStorage("weightUnit") private var weightUnit: String = "lb" // Shared across screens for weight formatting.
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var authStore: AuthStore
     @State private var activeDropdown: DropdownType? // Tracks which dropdown is open.
+    @State private var showingAccount = false
 
     /// Builds the full-screen settings page with monochrome appearance controls.
     /// Change impact: Adjusting layout, card fills, or typography changes the calm, premium feel of the settings experience.
@@ -114,6 +116,17 @@ struct SettingsView: View {
                         )
                     }
 
+                    // Account / auth debug entry point.
+                    SettingsSectionLabel(text: "ACCOUNT")
+                    SettingsGroupCard {
+                        SettingsRow(
+                            title: "Account (Beta)",
+                            value: authStore.isAuthenticated ? "Signed in" : "Not signed in",
+                            showsChevron: true,
+                            action: { showingAccount = true }
+                        )
+                    }
+
                     Spacer(minLength: AppStyle.settingsBottomPadding)
                 }
                 .padding(.horizontal, AppStyle.screenHorizontalPadding)
@@ -122,6 +135,10 @@ struct SettingsView: View {
             }
         }
         .tint(.primary)
+        .fullScreenCover(isPresented: $showingAccount) {
+            AuthDebugView()
+                .environmentObject(authStore)
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             if activeDropdown != nil {

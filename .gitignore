@@ -1,5 +1,6 @@
 # Local secrets (not committed)
 Atlas/Secrets.plist
+Atlas/Info.plist
 
 # Xcode user-specific state
 *.xcuserstate
