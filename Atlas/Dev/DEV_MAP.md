@@ -5,21 +5,21 @@ Update Protocol: When you add/edit features, update this map with what changed a
 ## Start Here
 - Atlas is a minimalist “liquid-glass” iOS workout logger: routines live in JSON, history in SwiftData, and AI helps parse routines + summarize sessions.
 - Boot path: `AtlasApp` builds a single SwiftData `ModelContainer`, injects `RoutineStore` + `HistoryStore`, then shows `ContentView`.
-- UI start: `ContentView` roots a `NavigationStack` with `HomeView` (calendar + session deck) and presents Settings as a full-screen cover.
+- UI start: `ContentView` roots a `NavigationStack` with `HomeView` (calendar only for history access) and presents Settings as a full-screen cover.
 - Data storage: routines/templates persist to `Documents/routines.json` via `RoutineStore`; performed sessions/sets persist in SwiftData models (`WorkoutSession`, `ExerciseLog`, `SetLog`, `Workout` for calendar dots).
 
 ## Big Picture Architecture
 - Templates vs History: `RoutineStore` (Codable + JSON) powers routine builder screens; `HistoryStore` (SwiftData) powers session logging, calendar underlines, and summaries.
 - Single shared `ModelContainer`: built once in `AtlasApp` and reused everywhere so `@Query` and manual fetches see the same data; avoid creating extra containers.
-- Navigation: `ContentView.Route` drives flows (Home → RoutineList → Create/Review/PreStart → WorkoutSession → PostWorkoutSummary; Home → AllHistory/DayHistory; Home → Settings).
+- Navigation: `ContentView.Route` drives flows (Home → RoutineList → Create/Review/PreStart → WorkoutSession → PostWorkoutSummary; Home → DayHistory via calendar; Home → Settings).
 - AI pipeline: `RoutineAIService` orchestrates generate → repair → parse using `OpenAIChatClient`; prompts and schemas live in `OpenAIChatClient` + `Models/PostWorkoutSummaryModels`..
 . . 
 ## Every File / Folder Inventory
 
 ### Root app + navigation
-- `AtlasApp.swift` — Launch entry; builds SwiftData container, creates `RoutineStore`/`HistoryStore`, injects into `ContentView`. Change when adding models or new environment objects. Do not drop models from `modelTypes` without migration (data loss). Example: add a new `@Model` type to `modelTypes` to persist new data.
+- `AtlasApp.swift` — Launch entry; builds SwiftData container, creates `RoutineStore`/`HistoryStore`/`AuthStore`, injects into `AuthGateView` which chooses Landing vs Content. Change when adding models or new environment objects. Do not drop models from `modelTypes` without migration (data loss). Example: add a new `@Model` type to `modelTypes` to persist new data.
 - `ContentView.swift` — Root `NavigationStack` and settings cover. Manages intro overlay and routes into routines/history. Change to add routes or adjust path handling. Avoid removing Route cases without updating destinations. Example: add `.history` navigation to push `AllHistoryView`.
-- `HomeView.swift` — Calendar, session deck entry, Start Workout pill. Reads SwiftData via `@Query` for calendar marks and session deck. Change for calendar logic or entry points. Keep filters `endedAt != nil && totalSets > 0` so drafts stay hidden. Example: adjust `activeSessionDays` if you want to include in-progress sessions.
+- `HomeView.swift` — Calendar and Start Workout pill. Reads SwiftData via `@Query` for calendar marks and history underlines. Keep filters `endedAt != nil && totalSets > 0` so drafts stay hidden. Example: adjust `activeSessionDays` if you want to include in-progress sessions.
 - `SettingsView.swift` — Appearance + weight unit selectors stored in `@AppStorage`. Runs as fullScreenCover from `ContentView`. Change to add new settings rows. Keep dismiss callbacks so Home can close settings. Example: add a “Reset intro” toggle by extending `DropdownType` and the card rows.
 - `Item.swift` — Template SwiftData model from Xcode; currently unused. Remove or repurpose only if you also adjust `modelTypes` in `AtlasApp`.
 - `Workout.swift` — SwiftData model marking completed workout days for calendar dots. Change only if you handle migrations; normalize dates to start-of-day when saving.
@@ -38,12 +38,14 @@ Update Protocol: When you add/edit features, update this map with what changed a
 ### Workout sessions & history (SwiftData)
 - `Models/HistoryModels.swift` — SwiftData models (`WorkoutSession`, `ExerciseLog`, `SetLog`, `SetTag`, format helpers). Deleting fields breaks stored data; add new optionals with defaults. Example: add `mood` to `WorkoutSession` with a default value and migrate.
 - `Data/HistoryStore.swift` — Single source of truth for history CRUD + queries. All writes go through here. Keep `saveContext()` calls and zero-set discard logic. Example: change `computeTotals` if volume rules need to ignore warm-ups.
-- `Views/SessionHistoryStackView.swift` — Collapsed/expanded stack of recent sessions on Home. Change spacing/animation; keep drag thresholds to avoid jitter.
+- `Views/SessionHistoryStackView.swift` — Collapsed/expanded stack of recent sessions (not currently shown on Home).
 - `Views/AllHistoryView.swift` — Full history list with expand/collapse sets. Uses `@Query` sorted newest first. Example: add a filter to hide in-progress sessions by checking `endedAt`.
 - `Views/DayHistoryView.swift` — Sessions for a specific day; filters `endedAt` within day window and hides zero-set drafts. Example: add navigation to open a session detail screen.
 - `WorkoutSessionView.swift` — Live logger for sets + coaching + summary sheet. Writes via `HistoryStore`, stores sets in kg, and handles alternate set tags. Avoid breaking `isAddingSet` guard or `completedSessionId` summary trigger. Example: add a “Bodyweight” quick-fill that sets weight to nil.
 - `PostWorkoutSummaryView.swift` — Shows AI or cached summaries for a completed session. Loads session by ID, reuses cached JSON/text. Keep cache-first logic to avoid repeat calls. Example: adjust line spacing or add a share button without touching fetch logic.
 - `Dev/DevHistorySeeder.swift` — DEBUG-only seeder for fake sessions. Controlled by a UserDefaults flag. Do not enable in release builds. Example: add more seed days for UI testing.
+
+- Auth/Supabase files are currently unused; core app flow does not depend on them.
 
 ### AI prompts, summaries, and models
 - `Models/PostWorkoutSummaryModels.swift` — Codable schema for AI summary JSON. Add optional fields when expanding prompts; keep compatibility with cached data.
@@ -87,3 +89,9 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - AI logs: `[AI]`, `[AI][SUMMARY]`, `[AI][COACH]` from `RoutineAIService` + `OpenAIChatClient` show request stages, status codes, and timing; missing API key logs `[AI] Key present: false` before throwing.
 - Routine logs: `[ROUTINE]` debug prints in routine list/menu actions.
 - Where to view: Xcode console while running on device/simulator. If summaries fail, check `errorMessage` in `PostWorkoutSummaryView` and OpenAI status codes. If SwiftData queries look empty, verify `modelContainer` is shared and inspect Application Support for `Atlas.store`.
+
+## Supabase setup (dashboard)
+- Enable Apple, Google, and Email providers in Supabase Auth.
+- Add redirect URL `atlas://auth-callback` to each provider and to the project-wide Redirect URLs list.
+- Apply `supabase/schema.sql` to create `public.profiles` with RLS (self-read/update) and unique lower(email) index.
+- Add the Supabase Swift package to the Xcode project and fill `LocalSecrets.supabaseURLString`, `supabaseAnonKey`, and `supabaseRedirectURLString` (match the URL scheme in Info.plist).

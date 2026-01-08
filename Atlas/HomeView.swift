@@ -3,13 +3,13 @@
 //  Atlas
 //
 //  What this file is:
-//  - Home screen that shows the calendar, recent history cards, and Start Workout entry point.
+//  - Home screen that shows the calendar with history underlines and the Start Workout entry point.
 //
 //  Where it’s used:
 //  - Root view inside `ContentView` NavigationStack; drives navigation to routines and history.
 //
 //  Called from:
-//  - Instantiated in `ContentView` as the root screen; navigates to `RoutineListView`, `AllHistoryView`, and `DayHistoryView`.
+//  - Instantiated in `ContentView` as the root screen; navigates to `RoutineListView` and `DayHistoryView`.
 //
 //  Key concepts:
 //  - `@Query` reads SwiftData models directly into the view and updates when data changes.
@@ -30,7 +30,7 @@
 //  - See: DEV_MAP.md → A) App Entry + Navigation
 //
 // FLOW SUMMARY:
-// HomeView renders calendar + session deck → tapping day goes to DayHistoryView; Start Workout → RoutineListView; gear opens SettingsView.
+// HomeView renders calendar with underlines for completed sessions → tapping an underlined day goes to DayHistoryView; Start Workout → RoutineListView; gear opens SettingsView.
 //
 
 import SwiftUI
@@ -47,7 +47,6 @@ struct HomeView: View {
 
     @State private var showCalendarCard = false // Drives initial reveal animation.
     @State private var showStartButton = false // Keeps CTA hidden until animation triggers.
-    @State private var isHistoryPresented = false // Navigation flag into AllHistoryView.
     @State private var isDayHistoryPresented = false // Navigation flag into DayHistoryView.
     @State private var selectedDayForHistory: Date = Date() // Which day the drill-down should show.
 
@@ -119,9 +118,6 @@ struct HomeView: View {
                     .padding(.top, AppStyle.screenTopPadding)
                     .animation(AppMotion.primary, value: showCalendarCard)
 
-                    sessionDeckSection
-                        .padding(.top, AppStyle.cardContentSpacing)
-
                     Spacer(minLength: AppStyle.homeBottomSpacer)
                 }
                 .padding(.horizontal, AppStyle.screenHorizontalPadding)
@@ -151,9 +147,6 @@ struct HomeView: View {
             withAnimation(AppMotion.primary.delay(0.05)) {
                 showStartButton = true
             }
-        }
-        .navigationDestination(isPresented: $isHistoryPresented) {
-            AllHistoryView()
         }
         .navigationDestination(isPresented: $isDayHistoryPresented) {
             DayHistoryView(day: selectedDayForHistory)
@@ -247,92 +240,6 @@ struct HomeView: View {
         return calendar.isDateInToday(date)
     }
 
-    private var activitySessions: [WorkoutSession] {
-        historySessions
-            .filter { $0.totalSets > 0 }
-            .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
-    }
-
-    private var lastDisplaySession: WorkoutSession? {
-        activitySessions.first ?? historySessions.first
-    }
-
-    @ViewBuilder
-    private var sessionDeckSection: some View {
-        VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
-            lastSessionPreview
-        }
-        .onAppear {
-            #if DEBUG
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            let monthDays = historySessions
-                .filter { $0.totalSets > 0 && $0.endedAt != nil }
-                .filter { session in
-                    guard let ended = session.endedAt else { return false }
-                    return calendar.isDate(ended, equalTo: currentMonthStart, toGranularity: .month)
-                }
-                .map { session -> String in
-                    guard let ended = session.endedAt else { return "nil" }
-                    return formatter.string(from: calendar.startOfDay(for: ended))
-                }
-            let today = calendar.startOfDay(for: Date())
-            print("[HOME][DEBUG] today=\(formatter.string(from: today)) sessions total=\(historySessions.count) completedMonth=\(monthDays) todayActive=\(activeSessionDays.contains(today))")
-            #endif
-        }
-    }
-
-    @ViewBuilder
-    private var lastSessionPreview: some View {
-        if let last = lastDisplaySession {
-            lastSessionCard(last)
-        } else {
-            noSessionsCard
-        }
-    }
-
-    private func lastSessionCard(_ session: WorkoutSession) -> some View {
-        Button {
-            Haptics.playLightTap()
-            isHistoryPresented = true
-        } label: {
-            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(session.routineTitle)
-                        .appFont(.title3, weight: .semibold)
-                        .foregroundStyle(.primary)
-                    Text(dayLabel(for: session.endedAt ?? session.startedAt))
-                        .appFont(.footnote, weight: .regular)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(AppStyle.glassContentPadding)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var noSessionsCard: some View {
-        Button {
-            Haptics.playLightTap()
-            isHistoryPresented = true
-        } label: {
-            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("No sessions yet")
-                        .appFont(.title3, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                    Text("Tap to view history")
-                        .appFont(.footnote, weight: .regular)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(AppStyle.glassContentPadding)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
     private static let monthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "LLLL yyyy"
@@ -341,6 +248,10 @@ struct HomeView: View {
 
     private func handleDaySelection(_ date: Date) {
         let day = calendar.startOfDay(for: date)
+        guard activeSessionDays.contains(day) else {
+            Haptics.playLightTap()
+            return
+        }
         selectedDayForHistory = day
         Haptics.playLightTap()
         #if DEBUG
@@ -350,31 +261,6 @@ struct HomeView: View {
         print("[HOME][DEBUG] tappedDay=\(formatter.string(from: day)) sessionsForDay=\(count)")
         #endif
         isDayHistoryPresented = true
-    }
-
-    private func dayLabel(for date: Date) -> String {
-        let start = calendar.startOfDay(for: date)
-        let today = calendar.startOfDay(for: Date())
-        if start == today { return "Today" }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: today), start == yesterday {
-            return "Yesterday"
-        }
-        let day = calendar.component(.day, from: start)
-        let monthYearFormatter = DateFormatter()
-        monthYearFormatter.dateFormat = "MMMM yyyy"
-        let suffix: String
-        let tens = day % 100
-        if tens >= 11 && tens <= 13 {
-            suffix = "th"
-        } else {
-            switch day % 10 {
-            case 1: suffix = "st"
-            case 2: suffix = "nd"
-            case 3: suffix = "rd"
-            default: suffix = "th"
-            }
-        }
-        return "\(day)\(suffix) \(monthYearFormatter.string(from: start))"
     }
 
     private func onAtlasTap() {

@@ -127,6 +127,9 @@ final class HistoryStore: ObservableObject {
 
         liveSession.endedAt = Date()
         liveSession.isCompleted = true
+        if let end = liveSession.endedAt {
+            liveSession.durationSeconds = Int(end.timeIntervalSince(liveSession.startedAt))
+        }
 
         let saved = saveContext(reason: "endSession")
 

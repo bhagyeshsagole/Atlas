@@ -54,6 +54,7 @@ struct WorkoutSessionView: View {
     let routine: Routine
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var historyStore: HistoryStore
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
 
     @State private var exerciseIndex: Int = 0 // Tracks which exercise the user is editing.
@@ -451,67 +452,50 @@ struct WorkoutSessionView: View {
         }
 
         isAddingSet = true
-        Task {
-            await MainActor.run {
-                ensureSession()
-            }
+        ensureSession()
 
-            guard let session else {
-                isAddingSet = false
-                return
-            }
-
-            let exerciseLog = ensureExerciseLog(for: currentExercise, in: session)
-            let set = SetLog(
-                tag: setDraft.tag,
-                weightKg: weightKg,
-                reps: reps,
-                exercise: exerciseLog
-            )
-            exerciseLog.sets.append(set)
-            do {
-                try modelContext.save()
-                await MainActor.run {
-                    loggedSets[currentExercise.id, default: []].append(set)
-                    setDraft = SetLogDraft(weight: "", reps: "", tag: setDraft.tag)
-                    /// UX TWEAK: Dismiss keyboard after successfully adding a set by clearing focus.
-                    focusedField = nil
-                    /// UX TWEAK: Bottom action pills hide while typing (keyboard up) and reappear after Add/dismiss.
-                    isAddingSet = false
-                }
-            } catch {
-                #if DEBUG
-                print("Save set error: \(error)")
-                #endif
-                await MainActor.run {
-                    isAddingSet = false
-                }
-            }
+        guard let session else {
+            isAddingSet = false
+            return
         }
+
+        let tag = SetTag(rawValue: setDraft.tag) ?? .S
+        historyStore.addSet(
+            session: session,
+            exerciseName: currentExercise.name,
+            orderIndex: currentExercise.orderIndex,
+            tag: tag,
+            weightKg: weightKg,
+            reps: reps
+        )
+
+        if let exerciseLog = session.exercises.first(where: { $0.orderIndex == currentExercise.orderIndex }) {
+            exerciseLogs[currentExercise.id] = exerciseLog
+            loggedSets[currentExercise.id] = exerciseLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
+        }
+
+        setDraft = SetLogDraft(weight: "", reps: "", tag: setDraft.tag)
+        focusedField = nil
+        isAddingSet = false
     }
 
     private func ensureSession() {
         guard session == nil else { return }
-        let newSession = WorkoutSession(
+        let exerciseNames = sessionExercises
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .map { $0.name }
+        let started = historyStore.startSession(
             routineId: routine.id,
             routineTitle: routine.name,
-            startedAt: Date(),
-            endedAt: nil,
-            isCompleted: false
+            exercises: exerciseNames
         )
-        modelContext.insert(newSession)
-        session = newSession
-    }
-
-    private func ensureExerciseLog(for exercise: SessionExercise, in session: WorkoutSession) -> ExerciseLog {
-        if let cached = exerciseLogs[exercise.id] {
-            return cached
+        session = started
+        for exerciseLog in started.exercises {
+            if let match = sessionExercises.first(where: { $0.orderIndex == exerciseLog.orderIndex }) {
+                exerciseLogs[match.id] = exerciseLog
+                loggedSets[match.id] = exerciseLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
+            }
         }
-        let log = ExerciseLog(name: exercise.name, orderIndex: exercise.orderIndex, session: session)
-        modelContext.insert(log)
-        exerciseLogs[exercise.id] = log
-        session.exercises.append(log)
-        return log
     }
 
     private func goToNextExercise() {
@@ -528,37 +512,12 @@ struct WorkoutSessionView: View {
             return
         }
 
-        let hasAnySets = session.exercises.contains { !$0.sets.isEmpty }
-        if !hasAnySets {
-            modelContext.delete(session)
-            do {
-                if modelContext.hasChanges {
-                    try modelContext.save()
-                }
-            } catch {
-                #if DEBUG
-                print("[HISTORY][ERROR] endSession delete save failed: \(error)")
-                #endif
-            }
-            dismiss()
-            return
-        }
-
-        session.isCompleted = true
-        session.endedAt = Date()
-        if let end = session.endedAt {
-            session.durationSeconds = Int(end.timeIntervalSince(session.startedAt))
-        }
-        do {
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
+        let didStore = historyStore.endSession(session: session)
+        if didStore {
             completedSessionId = session.id
             showSummary = true
-        } catch {
-            #if DEBUG
-            print("[HISTORY][ERROR] endSession save failed: \(error)")
-            #endif
+        } else {
+            dismiss()
         }
     }
 
@@ -617,6 +576,10 @@ struct WorkoutSessionView: View {
 }
 
 #Preview {
+    let schema = Schema([Workout.self, WorkoutSession.self, ExerciseLog.self, SetLog.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: schema, configurations: config)
+    let context = ModelContext(container)
     NavigationStack {
         WorkoutSessionView(
             routine: Routine(
@@ -630,8 +593,10 @@ struct WorkoutSessionView: View {
                 summary: "Focus: Push\nVolume: 6 exercises"
             )
         )
-        .modelContainer(for: [Workout.self, WorkoutSession.self, ExerciseLog.self, SetLog.self], inMemory: true)
+        .environment(\.modelContext, context)
+        .environmentObject(HistoryStore(modelContext: context))
     }
+    .modelContainer(container)
 }
 
 private struct ViewFrameKey: PreferenceKey {
