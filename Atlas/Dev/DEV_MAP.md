@@ -91,7 +91,12 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - Where to view: Xcode console while running on device/simulator. If summaries fail, check `errorMessage` in `PostWorkoutSummaryView` and OpenAI status codes. If SwiftData queries look empty, verify `modelContainer` is shared and inspect Application Support for `Atlas.store`.
 
 ## Supabase setup (dashboard)
-- Enable Apple, Google, and Email providers in Supabase Auth.
-- Add redirect URL `atlas://auth-callback` to each provider and to the project-wide Redirect URLs list.
-- Apply `supabase/schema.sql` to create `public.profiles` with RLS (self-read/update) and unique lower(email) index.
-- Add the Supabase Swift package to the Xcode project and fill `LocalSecrets.supabaseURLString`, `supabaseAnonKey`, and `supabaseRedirectURLString` (match the URL scheme in Info.plist).
+- Auth providers: Enable Apple, Google, and Email. Add redirect URL `atlas://auth-callback` to each provider and to the project-wide Redirect URLs list.
+- Profiles SQL: Apply `supabase/schema.sql` in the Supabase SQL Editor (or via `supabase db push`). It creates `public.profiles` (id/email/display_name/avatar_url/created_at/updated_at), enables RLS, adds select/insert/update self policies, auto-updates `updated_at` via trigger, lowers emails via trigger, and adds an auth.users trigger to upsert the profile row on signup.
+- App config: Add the Supabase Swift package to the Xcode project and fill `LocalSecrets.supabaseURLString`, `supabaseAnonKey`, and `supabaseRedirectURLString` (match the URL scheme in Info.plist).
+- Profile service: `Auth/ProfileService.swift` upserts `public.profiles` via the shared Supabase client. `AuthStore` calls it after auth changes or session restores (guarded, idempotent). DEBUG logs: `[AUTH] ensureProfile begin userId=...`, `[AUTH] ensureProfile ok`, `[AUTH][ERROR] ensureProfile failed: ...`.
+- Verify: After applying SQL, sign up and confirm `public.profiles` has the user id/email; log out/in and see the row persists; on fresh install with a valid session, ensure restore triggers profile ensure.
+- Profiles RLS SQL: `supabase/atlas_profiles.sql` creates `public.profiles` (id/email/display_name/avatar_url + timestamps), enables RLS, and adds self-only select/insert/update policies, email lowercase trigger, and an `updated_at` trigger. Apply via Supabase SQL editor. Table/columns match the iOS `ProfileService` upsert target. Friends/broader access will be added later.
+- Friends backend: `supabase/friends.sql` provisions profiles (with normalization triggers), friend_requests + friends tables, RLS policies, and RPCs (`lookup_profile_by_email`, `send_friend_request`, `respond_friend_request`, `profiles_public_lookup`). Run in Supabase SQL editor to enable the friends graph.
+- Cloud sync: `Data/HistoryStore.endSession` triggers a best-effort Supabase upsert of a workout summary via `CloudSyncService` (RPC `upsert_workout_session`, table `public.workout_sessions`). Wiring happens in `AtlasApp.init` using the shared `AuthStore.supabaseClient`. Offline errors are logged only.
+- Cloud sync params: RPC encodable params live in `CloudSyncRPCParams.swift` (top-level, non-@MainActor). Adjust the upsert payload there to match Supabase `upsert_workout_session`.

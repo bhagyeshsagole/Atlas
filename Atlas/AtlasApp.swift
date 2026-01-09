@@ -40,9 +40,10 @@ import SwiftData
 @main
 struct AtlasApp: App {
     /// DEV MAP: App entry + shared model container wiring lives here.
-    @StateObject private var routineStore = RoutineStore()
+    @StateObject private var routineStore: RoutineStore
     @StateObject private var historyStore: HistoryStore
-    @StateObject private var authStore = AuthStore()
+    @StateObject private var authStore: AuthStore
+    @StateObject private var friendsStore: FriendsStore
 
     /// Builds the shared SwiftData container with all app models.
     /// Change impact: Adding or removing models here changes which data persists across launches.
@@ -57,20 +58,31 @@ struct AtlasApp: App {
     }()
 
     init() {
+        let authStore = AuthStore()
+        let routineStore = RoutineStore()
         let context = ModelContext(Self.sharedModelContainer)
-        _historyStore = StateObject(wrappedValue: HistoryStore(modelContext: context))
+        let historyStore = HistoryStore(modelContext: context)
+        let friendsStore = FriendsStore(authStore: authStore)
+        if let client = authStore.supabaseClient {
+            historyStore.setCloudSyncService(CloudSyncService(client: client))
+        }
+
+        _authStore = StateObject(wrappedValue: authStore)
+        _routineStore = StateObject(wrappedValue: routineStore)
+        _historyStore = StateObject(wrappedValue: historyStore)
+        _friendsStore = StateObject(wrappedValue: friendsStore)
     }
 
     /// Builds the main scene and injects the shared model container.
     /// Change impact: Changing the root view or container wiring alters navigation and data availability across the app.
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AuthGateView()
                 .environmentObject(routineStore)
                 .environmentObject(historyStore)
                 .environmentObject(authStore)
+                .environmentObject(friendsStore)
                 .task {
-                    routineStore.load()
                     authStore.startIfNeeded()
                 }
                 .onOpenURL { url in

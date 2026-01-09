@@ -2,64 +2,40 @@
 //  HomeView.swift
 //  Atlas
 //
-//  What this file is:
-//  - Home screen that shows the calendar with history underlines and the Start Workout entry point.
-//
-//  Where it’s used:
-//  - Root view inside `ContentView` NavigationStack; drives navigation to routines and history.
-//
-//  Called from:
-//  - Instantiated in `ContentView` as the root screen; navigates to `RoutineListView` and `DayHistoryView`.
-//
-//  Key concepts:
-//  - `@Query` reads SwiftData models directly into the view and updates when data changes.
-//  - Animations reveal calendar/start controls on appear for smoother entry.
-//
-//  Safe to change:
-//  - UI spacing, animations, or copy; adding new navigation buttons.
-//
-//  NOT safe to change:
-//  - Filters that hide sessions with `endedAt == nil` or `totalSets == 0`, which keep history clean.
-//  - Calendar day taps feeding `handleDaySelection`, which drives navigation to day history.
-//
-//  Common bugs / gotchas:
-//  - Forgetting to normalize dates (start-of-day) can mark the wrong days as active.
-//  - Hiding the start button accidentally makes the app feel unresponsive.
-//
-//  DEV MAP:
-//  - See: DEV_MAP.md → A) App Entry + Navigation
-//
-// FLOW SUMMARY:
-// HomeView renders calendar with underlines for completed sessions → tapping an underlined day goes to DayHistoryView; Start Workout → RoutineListView; gear opens SettingsView.
+//  Home screen showing calendar, history underlines, friends tray, and Start Workout CTA.
 //
 
 import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @AppStorage("appearanceMode") private var appearanceMode = "light" // Persists light/dark preference across launches.
-    @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout] // SwiftData-driven calendar marks.
-    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var historySessions: [WorkoutSession] // Live session history for deck + calendar.
+    @AppStorage("appearanceMode") private var appearanceMode = "light"
+    @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var friendsStore: FriendsStore
+    @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
+    @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var historySessions: [WorkoutSession]
     private let calendar = Calendar.current
 
     let startWorkout: () -> Void
     let openSettings: () -> Void
 
-    @State private var showCalendarCard = false // Drives initial reveal animation.
-    @State private var showStartButton = false // Keeps CTA hidden until animation triggers.
-    @State private var isDayHistoryPresented = false // Navigation flag into DayHistoryView.
-    @State private var selectedDayForHistory: Date = Date() // Which day the drill-down should show.
+    @State private var showCalendarCard = false
+    @State private var showStartButton = false
+    @State private var isDayHistoryPresented = false
+    @State private var selectedDayForHistory: Date = Date()
+    @State private var showFriendsSheet = false
 
-    /// Builds the Home screen with the glass calendar, settings toggle, and Start Workout pill.
+    private let friendsSpring: Animation = {
+        .interactiveSpring(response: 0.35, dampingFraction: 0.8)
+    }()
+
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                     // Top bar
                     HStack {
-                        Button {
-                            onAtlasTap()
-                        } label: {
+                        Button { onAtlasTap() } label: {
                             Text("Atlas")
                                 .appFont(.brand)
                                 .foregroundStyle(.primary)
@@ -126,20 +102,46 @@ struct HomeView: View {
             }
             .scrollIndicators(.hidden)
 
-            // Start Workout pill
-            AtlasPillButton("Start Workout") {
-                Haptics.playLightTap()
-                startWorkout()
+            VStack(spacing: 56) {
+                FriendsPill(isVisible: showStartButton && showFriendsSheet == false) {
+                    withAnimation(friendsSpring) {
+                        showFriendsSheet = true
+                    }
+                }
+                .offset(y: showFriendsSheet ? 400 : 0)
+                .opacity(showFriendsSheet ? 0 : (showStartButton ? 1 : 0))
+                .animation(friendsSpring, value: showFriendsSheet)
+                .padding(.horizontal, 16)
+
+                // Start Workout pill
+                AtlasPillButton("Start Workout") {
+                    Haptics.playLightTap()
+                    startWorkout()
+                }
+                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                .padding(.bottom, AppStyle.startButtonBottomPadding)
+                .opacity(showStartButton ? 1 : 0)
+                .offset(y: showStartButton ? 0 : AppStyle.startButtonHiddenOffset)
+                .animation(AppMotion.primary.delay(0.06), value: showStartButton)
             }
-            .padding(.horizontal, AppStyle.screenHorizontalPadding)
-            .padding(.bottom, AppStyle.startButtonBottomPadding)
-            .opacity(showStartButton ? 1 : 0)
-            .offset(y: showStartButton ? 0 : AppStyle.startButtonHiddenOffset)
-            .animation(AppMotion.primary.delay(0.06), value: showStartButton)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(backgroundGradient)
         .tint(.primary)
+        .overlay(alignment: .bottom) {
+            if showFriendsSheet {
+                FriendsSheet(
+                    store: friendsStore,
+                    onDismiss: {
+                        withAnimation(friendsSpring) {
+                            showFriendsSheet = false
+                        }
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(2)
+            }
+        }
         .onAppear {
             withAnimation(AppMotion.primary) {
                 showCalendarCard = true
@@ -178,7 +180,6 @@ struct HomeView: View {
 
     private var activeSessionDays: Set<Date> {
         let days = historySessions
-            // Only count sessions that actually finished with sets so empty drafts do not underline the calendar.
             .filter { $0.totalSets > 0 && $0.endedAt != nil }
             .map { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) }
         return Set(days)

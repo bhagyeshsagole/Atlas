@@ -41,7 +41,10 @@ struct ContentView: View {
 #if DEBUG
     @Environment(\.modelContext) private var modelContext
 #endif
+    @EnvironmentObject private var routineStore: RoutineStore
     @EnvironmentObject private var historyStore: HistoryStore
+    @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var friendsStore: FriendsStore
     @Environment(\.scenePhase) private var scenePhase
     /// DEV MAP: Root navigation stack and settings presentation live here.
     @State private var path: [Route] = [] // Value-based navigation stack entries.
@@ -105,6 +108,11 @@ struct ContentView: View {
         .preferredColorScheme(resolvedColorScheme)
         .fullScreenCover(isPresented: $showSettings) {
             SettingsView(onDismiss: { showSettings = false })
+        }
+        .task {
+            authStore.startIfNeeded()
+            routineStore.load()
+            await friendsStore.startIfNeeded()
         }
         .onAppear {
             historyStore.repairZeroTotalSessionsIfNeeded()

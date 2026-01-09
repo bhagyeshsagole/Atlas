@@ -7,6 +7,10 @@ final class AuthStore: ObservableObject {
     @Published var isAuthenticated: Bool = false
     @Published var userId: String?
     @Published var email: String?
+    @Published var username: String?
+    @Published var isProfileLoaded: Bool = false
+    @Published private(set) var session: Session?
+    @Published var authErrorMessage: String?
 
     private let client: SupabaseClient?
     private let profileService: ProfileService?
@@ -16,6 +20,23 @@ final class AuthStore: ObservableObject {
     private var profileEnsureTask: Task<Void, Never>?
     private var lastEnsuredProfileId: UUID?
 
+    var supabaseClient: SupabaseClient? { client }
+    var currentUserId: UUID? {
+        if let id = session?.user.id {
+            return id
+        }
+        if let idString = userId, let id = UUID(uuidString: idString) {
+            return id
+        }
+        return nil
+    }
+    var isReadyForFriends: Bool {
+        client != nil && isAuthenticated && (session?.isExpired == false) && currentUserId != nil
+    }
+    var isProfileComplete: Bool {
+        isAuthenticated && (username?.isEmpty == false)
+    }
+
     init(client: SupabaseClient? = nil) {
         let resolvedClient = client ?? SupabaseClientProvider.makeClient()
         self.client = resolvedClient
@@ -24,10 +45,16 @@ final class AuthStore: ObservableObject {
         } else {
             profileService = nil
         }
+        #if DEBUG
+        print("[AUTH] supabase configured=\(resolvedClient != nil)")
+        #endif
         if let current = resolvedClient?.auth.currentSession, current.isExpired == false {
             isAuthenticated = true
+            session = current
             userId = current.user.id.uuidString
             email = current.user.email
+            isProfileLoaded = false
+            Task { await refreshProfile() }
         }
         #if DEBUG
         print("[AUTH] boot session present=\(isAuthenticated)")
@@ -49,11 +76,56 @@ final class AuthStore: ObservableObject {
         kickoffListener()
     }
 
-    func sendMagicLink(email: String, redirectURL: URL?) async throws {
-        guard let client else {
-            throw AuthError.missingClient
+    func signIn(email rawEmail: String, password rawPassword: String) async -> String? {
+        guard let client else { return "Supabase not configured." }
+        let email = rawEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let password = rawPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard email.isEmpty == false else { return "Enter an email." }
+        guard password.isEmpty == false else { return "Enter a password." }
+
+        do {
+            #if DEBUG
+            print("[AUTH][UI] signIn begin email=\(email)")
+            #endif
+            _ = try await client.auth.signIn(email: email, password: password)
+            authErrorMessage = nil
+            apply(session: client.auth.currentSession, event: nil)
+            await refreshProfile()
+            #if DEBUG
+            let uid = client.auth.currentSession?.user.id.uuidString ?? "nil"
+            print("[AUTH][UI] signIn ok user=\(uid)")
+            #endif
+            return nil
+        } catch {
+            let friendly = friendlyAuthMessage(for: error)
+            authErrorMessage = friendly
+            #if DEBUG
+            print("[AUTH][UI] signIn failed: \(friendly)")
+            #endif
+            return authErrorMessage
         }
-        try await client.auth.signInWithOTP(email: email, redirectTo: redirectURL)
+    }
+
+    func signUp(email rawEmail: String, password rawPassword: String, username rawUsername: String?) async -> String? {
+        guard let client else { return "Supabase not configured." }
+        let email = rawEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let password = rawPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard email.isEmpty == false else { return "Enter an email." }
+        guard password.count >= 6 else { return "Password must be at least 6 characters." }
+
+        do {
+            _ = try await client.auth.signUp(email: email, password: password)
+            authErrorMessage = nil
+            apply(session: client.auth.currentSession, event: nil)
+            await refreshProfile()
+            return nil
+        } catch {
+            authErrorMessage = friendlyAuthMessage(for: error)
+            #if DEBUG
+            print("[AUTH][ERROR] signUp failed: \(error)")
+            #endif
+            return authErrorMessage
+        }
     }
 
     func handleAuthRedirect(_ url: URL) {
@@ -150,12 +222,15 @@ final class AuthStore: ObservableObject {
         let authenticated = session != nil && expired == false
         let newUserId = session?.user.id.uuidString
         let newEmail = session?.user.email
+        self.session = authenticated ? session : nil
 
         if authenticated == isAuthenticated {
             if authenticated == false {
                 if userId != nil || email != nil {
                     userId = nil
                     email = nil
+                    username = nil
+                    isProfileLoaded = false
                     lastEnsuredProfileId = nil
                     profileEnsureTask?.cancel()
                 }
@@ -170,16 +245,27 @@ final class AuthStore: ObservableObject {
             isAuthenticated = true
             userId = newUserId
             email = newEmail
+            authErrorMessage = nil
+            isProfileLoaded = false
             if let session {
                 ensureProfile(for: session)
+                Task { await refreshProfile() }
             }
         } else {
             isAuthenticated = false
             userId = nil
             email = nil
+            username = nil
+            isProfileLoaded = false
+            authErrorMessage = nil
             lastEnsuredProfileId = nil
             profileEnsureTask?.cancel()
         }
+        #if DEBUG
+        let readyUser = currentUserId?.uuidString ?? "nil"
+        let expiredFlag = self.session?.isExpired ?? true
+        print("[AUTH] ready client=\(client != nil) authed=\(isAuthenticated) userId=\(readyUser) expired=\(expiredFlag)")
+        #endif
     }
 
     private func ensureProfile(for session: Session) {
@@ -191,20 +277,17 @@ final class AuthStore: ObservableObject {
 
         profileEnsureTask?.cancel()
         profileEnsureTask = Task.detached(priority: .utility) { [weak self] in
-            #if DEBUG
-            print("[AUTH] ensureProfile start id=\(userId.uuidString) email=\(session.user.email ?? "")")
-            #endif
             do {
                 try await profileService.ensureProfile(userId: userId, email: session.user.email)
                 #if DEBUG
-                print("[AUTH] ensureProfile ok")
+                print("[PROFILE] ensured id=\(userId.uuidString)")
                 #endif
                 await MainActor.run { [weak self] in
                     self?.lastEnsuredProfileId = userId
                 }
             } catch {
                 #if DEBUG
-                print("[AUTH][ERROR] ensureProfile failed: \(error)")
+                print("[PROFILE][ERROR] ensure failed: \(error)")
                 #endif
                 await MainActor.run { [weak self] in
                     if self?.lastEnsuredProfileId == userId {
@@ -212,6 +295,83 @@ final class AuthStore: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    private func friendlyAuthMessage(for error: Error) -> String {
+        let message = error.localizedDescription.lowercased()
+        if message.contains("invalid login") || message.contains("invalid email or password") {
+            return "Email not found, try creating account."
+        }
+        if message.contains("email not confirmed") {
+            return "Email not found, try creating account."
+        }
+        if message.contains("password") {
+            return "Check your password and try again."
+        }
+        if message.contains("network") || message.contains("timeout") {
+            return "Network error. Try again."
+        }
+        if message.contains("supabase") && message.contains("config") {
+            return "Supabase config missing."
+        }
+        return "Authentication failed. Try again."
+    }
+
+    func refreshProfile() async {
+        guard let profileService, let userId = currentUserId else {
+            isProfileLoaded = true
+            return
+        }
+        #if DEBUG
+        print("[PROFILE] refresh begin")
+        #endif
+        isProfileLoaded = false
+        do {
+            let profile = try await profileService.fetchMyProfile(userId: userId)
+            await MainActor.run {
+                username = profile.username
+            }
+            #if DEBUG
+            print("[PROFILE] refresh ok username=\(profile.username ?? "nil")")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[PROFILE][WARN] refresh failed: \(error)")
+            #endif
+        }
+        isProfileLoaded = true
+    }
+
+    func setUsername(_ newUsername: String) async -> String? {
+        guard let profileService, let userId = currentUserId else {
+            return "Not signed in."
+        }
+        do {
+            try await profileService.setUsername(userId: userId, username: newUsername)
+            await MainActor.run {
+                self.username = newUsername
+            }
+            #if DEBUG
+            print("[PROFILE] setUsername success")
+            #endif
+            await refreshProfile()
+            return nil
+        } catch {
+            #if DEBUG
+            print("[PROFILE][ERROR] setUsername failed: \(error)")
+            #endif
+            if let err = error as? ProfileServiceError {
+                switch err {
+                case .duplicateUsername:
+                    return "Username is taken."
+                case .invalidUsername:
+                    return "Usernames are 3–20 chars: a–z, 0–9, underscore."
+                case .notFound:
+                    return "Profile not found."
+                }
+            }
+            return "Couldn't save username. Try again."
         }
     }
 }

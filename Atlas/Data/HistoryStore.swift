@@ -36,6 +36,7 @@
 import Foundation
 import Combine
 import SwiftData
+import Supabase
 
 /// DEV MAP: History writes/reads live here (queries, discard rules, calendar data).
 /// DEV NOTE: ALL history writes go through HistoryStore so UI + AI always agree.
@@ -44,9 +45,14 @@ import SwiftData
 final class HistoryStore: ObservableObject {
     private let modelContext: ModelContext // Shared SwiftData context injected at app boot.
     private let calendar = Calendar.current
+    private var cloudSyncService: CloudSyncService?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+    }
+
+    func setCloudSyncService(_ service: CloudSyncService?) {
+        cloudSyncService = service
     }
 
     func startSession(routineId: UUID?, routineTitle: String, exercises: [String]) -> WorkoutSession {
@@ -139,6 +145,33 @@ final class HistoryStore: ObservableObject {
             print("[HISTORY] end session id=\(liveSession.id) stored=true sets=\(totals.sets) reps=\(totals.reps) volumeKg=\(String(format: "%.2f", totals.volumeKg))")
         }
         #endif
+
+        if saved, let endedAt = liveSession.endedAt, let service = cloudSyncService {
+            let summary = WorkoutSessionCloudSummary(
+                sessionId: liveSession.id,
+                routineTitle: liveSession.routineTitle,
+                startedAt: liveSession.startedAt,
+                endedAt: endedAt,
+                totalSets: totals.sets,
+                totalReps: totals.reps,
+                volumeKg: totals.volumeKg
+            )
+            Task.detached(priority: .utility) {
+                #if DEBUG
+                print("[SYNC] attempt authenticated=\(true) session=\(summary.sessionId) sets=\(summary.totalSets) reps=\(summary.totalReps) volumeKg=\(String(format: "%.2f", summary.volumeKg))")
+                #endif
+                do {
+                    try await service.upsertWorkoutSessionSummary(summary)
+                    #if DEBUG
+                    print("[SYNC] upsert ok session=\(summary.sessionId)")
+                    #endif
+                } catch {
+                    #if DEBUG
+                    print("[SYNC][ERROR] session=\(summary.sessionId) error=\(error)")
+                    #endif
+                }
+            }
+        }
 
         return saved
     }
