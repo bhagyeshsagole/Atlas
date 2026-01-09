@@ -3,7 +3,11 @@ import SwiftUI
 struct FriendDetailView: View {
     let friend: AtlasFriend
     @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var friendsStore: FriendsStore
     @StateObject private var model: FriendDetailModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var showRemoveConfirm = false
+    @State private var removalSuccessMessage: String?
 
     private var title: String {
         if let username = friend.username, username.isEmpty == false {
@@ -21,20 +25,73 @@ struct FriendDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                if let error = model.errorMessage {
-                    Text(error)
-                        .appFont(.footnote)
-                        .foregroundStyle(.red)
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    if let error = model.errorMessage {
+                        Text(error)
+                            .appFont(.footnote)
+                            .foregroundStyle(.red)
+                    } else if let success = removalSuccessMessage {
+                        Text(success)
+                            .appFont(.footnote, weight: .semibold)
+                            .foregroundStyle(.green)
+                    }
+                    statsCard
+                    calendarCard
+                    sessionsList
                 }
-                statsCard
-                calendarCard
-                sessionsList
+                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                .padding(.top, 20)
             }
-            .padding(.horizontal, AppStyle.screenHorizontalPadding)
-            .padding(.top, 20)
+            .disabled(showRemoveConfirm)
+
+            if showRemoveConfirm {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        Haptics.playLightTap()
+                        withAnimation(AppMotion.primary) { showRemoveConfirm = false }
+                    }
+                VStack {
+                    Spacer()
+                    GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                        VStack(alignment: .center, spacing: 12) {
+                            Text("Remove friend?")
+                                .appFont(.body, weight: .semibold)
+                                .foregroundStyle(.primary)
+                            Text("This removes you from each other’s friends list.")
+                                .appFont(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            HStack(spacing: 12) {
+                                Button {
+                                    Haptics.playLightTap()
+                                    withAnimation(AppMotion.primary) { showRemoveConfirm = false }
+                                } label: {
+                                    Text("Cancel")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(PressableGlassButtonStyle())
+
+                                Button(role: .destructive) {
+                                    Haptics.playMediumImpact()
+                                    Task { await removeFriend() }
+                                } label: {
+                                    Text("Remove")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(PressableGlassButtonStyle())
+                            }
+                        }
+                        .padding()
+                    }
+                    .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                    .padding(.bottom, 24)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .refreshable {
             await refresh()
@@ -109,6 +166,17 @@ struct FriendDetailView: View {
             Text("Sessions")
                 .appFont(.body, weight: .semibold)
                 .foregroundStyle(.primary)
+            if authStore.isReadyForFriends {
+                Button(role: .destructive) {
+                    Haptics.playLightTap()
+                    withAnimation(AppMotion.primary) {
+                        showRemoveConfirm = true
+                    }
+                } label: {
+                    Text("Remove Friend")
+                        .appFont(.footnote, weight: .semibold)
+                }
+            }
             if model.sessionsForSelectedDay.isEmpty {
                 Text(model.isLoading ? "Loading…" : "No sessions on this day.")
                     .appFont(.footnote)
@@ -142,21 +210,19 @@ struct FriendDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Button {
-                        withAnimation(AppMotion.primary) {
-                            model.selectDay(Calendar.current.date(byAdding: .month, value: -1, to: model.selectedDay) ?? model.selectedDay)
-                        }
+                        Haptics.playLightTap()
+                        Task { await model.goPrevMonth() }
                     } label: {
                         Image(systemName: "chevron.left")
                     }
                     Spacer()
-                    Text(monthTitle(model.selectedDay))
+                    Text(monthTitle(model.selectedMonth))
                         .appFont(.body, weight: .semibold)
                         .foregroundStyle(.primary)
                     Spacer()
                     Button {
-                        withAnimation(AppMotion.primary) {
-                            model.selectDay(Calendar.current.date(byAdding: .month, value: 1, to: model.selectedDay) ?? model.selectedDay)
-                        }
+                        Haptics.playLightTap()
+                        Task { await model.goNextMonth() }
                     } label: {
                         Image(systemName: "chevron.right")
                     }
@@ -181,7 +247,7 @@ struct FriendDetailView: View {
     }
 
     private var calendarGrid: some View {
-        let days = daysInMonth(model.selectedDay)
+        let days = daysInMonth(model.selectedMonth)
         let counts = Dictionary(grouping: model.sessions) { Calendar.current.startOfDay(for: $0.endedAt) }.mapValues { $0.count }
         let firstWeekday = Calendar.current.component(.weekday, from: days.first ?? Date())
         let leading = (firstWeekday - Calendar.current.firstWeekday + 7) % 7
@@ -195,9 +261,10 @@ struct FriendDetailView: View {
                     Text("\(Calendar.current.component(.day, from: day))")
                         .appFont(.footnote)
                         .foregroundStyle(.primary)
-                    if let count = counts[Calendar.current.startOfDay(for: day)], count > 0 {
+                    let dayKey = Calendar.current.startOfDay(for: day)
+                    if let count = counts[dayKey], count > 0 {
                         Circle()
-                            .fill(isSelected(day) ? Color.white : Color.white.opacity(0.9))
+                            .fill(isSelected(day) ? Color.green : Color.green.opacity(0.9))
                             .frame(width: 6, height: 6)
                             .overlay(
                                 count > 1 ? Text("\(count)").appFont(.footnote).foregroundStyle(.primary) : nil
@@ -238,6 +305,24 @@ struct FriendDetailView: View {
         return fmt.string(from: date)
     }
 
+    private func removeFriend() async {
+        let success = await friendsStore.remove(friendIdString: friend.id)
+        if success {
+            await MainActor.run {
+                removalSuccessMessage = "Friend removed."
+                withAnimation(AppMotion.primary) {
+                    showRemoveConfirm = false
+                }
+                dismiss()
+            }
+        } else {
+            await MainActor.run {
+                removalSuccessMessage = nil
+                model.errorMessage = friendsStore.lastErrorMessage ?? "Could not remove friend."
+            }
+        }
+    }
+
     private func refresh() async {
         await loadIfNeeded(force: true)
     }
@@ -253,12 +338,13 @@ struct FriendDetailView: View {
         }
         model.setService(FriendHistoryService(client: client))
         if force || model.sessions.isEmpty || model.stats == nil {
-            await model.load()
+            await model.refresh()
         }
     }
 
     private func isSelected(_ day: Date) -> Bool {
-        Calendar.current.isDate(model.selectedDay, inSameDayAs: day)
+        guard let selected = model.selectedDay else { return false }
+        return Calendar.current.isDate(selected, inSameDayAs: day)
     }
 }
 

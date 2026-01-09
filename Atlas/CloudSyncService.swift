@@ -41,13 +41,5 @@ struct CloudSyncService {
         #endif
     }
 
-    func upsertWorkoutSessionBundle(_ bundle: CloudWorkoutSessionBundle) async throws {
-        let params = CloudSyncRPC_UpsertWorkoutSessionBundleParams(bundle: bundle)
-        _ = try await client
-            .rpc("upsert_workout_session_bundle", params: params)
-            .execute()
-        #if DEBUG
-        print("[CLOUDSYNC] upsert bundle ok session=\(bundle.session_id)")
-        #endif
-    }
+    // Bundle upload temporarily disabled; summary upsert remains the stable path.
 }

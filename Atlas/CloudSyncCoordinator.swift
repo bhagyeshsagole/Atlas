@@ -114,11 +114,7 @@ final class CloudSyncCoordinator: ObservableObject {
                 volumeKg: session.volumeKg
             )
             do {
-                if let userId = authStore.currentUserId ?? UUID(uuidString: authStore.userId ?? ""), let bundle = session.cloudBundle(userId: userId) {
-                    try await service.upsertWorkoutSessionBundle(bundle)
-                } else {
-                    try await service.upsertWorkoutSessionSummary(summary)
-                }
+                try await service.upsertWorkoutSessionSummary(summary)
                 state.markSynced(sessionId: session.id, endedAt: ended)
                 #if DEBUG
                 print("[CLOUDSYNC] upsert ok session=\(session.id)")

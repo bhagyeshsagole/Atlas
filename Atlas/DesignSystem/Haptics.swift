@@ -43,4 +43,9 @@ enum Haptics {
         let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.impactOccurred()
     }
+
+    /// Medium impact wrapper for compatibility with existing call sites.
+    static func playMediumImpact() {
+        playMediumTap()
+    }
 }

@@ -34,8 +34,6 @@ struct FriendsSheet: View {
     let onDismiss: () -> Void
     @State private var dragOffset: CGFloat = 0
     @State private var usernameInput: String = ""
-    @State private var friendToRemove: AtlasFriend?
-    @State private var showRemoveConfirm = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -116,28 +114,6 @@ struct FriendsSheet: View {
             .navigationDestination(for: AtlasFriend.self) { friend in
                 FriendDetailView(friend: friend)
             }
-        }
-        .confirmationDialog(
-            "Remove friend?",
-            isPresented: $showRemoveConfirm,
-            presenting: friendToRemove
-        ) { friend in
-            Button(role: .destructive) {
-                Task {
-                    let success = await store.remove(friendIdString: friend.id)
-                    if success {
-                        Haptics.playLightTap()
-                        friendToRemove = nil
-                    }
-                }
-            } label: {
-                Text("Remove \(friend.username.map { "@\($0)" } ?? friend.email)")
-            }
-            Button("Cancel", role: .cancel) {
-                friendToRemove = nil
-            }
-        } message: { friend in
-            Text("Remove \(friend.username.map { "@\($0)" } ?? friend.email) from friends?")
         }
         .task {
             if authStore.isReadyForFriends {
@@ -313,7 +289,7 @@ struct FriendsSheet: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(store.friends) { friend in
-                    NavigationLink(value: friend) {
+                    NavigationLink(destination: FriendDetailView(friend: friend)) {
                         HStack {
                             Text(friend.username.map { "@\($0)" } ?? friend.email)
                                 .appFont(.body, weight: .semibold)
@@ -327,18 +303,10 @@ struct FriendsSheet: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.secondary)
                         }
-                        .contentShape(Rectangle())
-                        .simultaneousGesture(TapGesture().onEnded { Haptics.playLightTap() })
                     }
+                    .contentShape(Rectangle())
                     .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            friendToRemove = friend
-                            showRemoveConfirm = true
-                        } label: {
-                            Label("Remove Friend", systemImage: "person.fill.xmark")
-                        }
-                    }
+                    .simultaneousGesture(TapGesture().onEnded { Haptics.playLightTap() })
                 }
             }
         }
