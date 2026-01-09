@@ -46,13 +46,22 @@ final class HistoryStore: ObservableObject {
     private let modelContext: ModelContext // Shared SwiftData context injected at app boot.
     private let calendar = Calendar.current
     private var cloudSyncService: CloudSyncService?
+    weak var cloudSyncCoordinator: CloudSyncCoordinator?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
 
-    func setCloudSyncService(_ service: CloudSyncService?) {
-        cloudSyncService = service
+    func configureCloudSync(client: SupabaseClient?) {
+        guard let client else {
+            cloudSyncService = nil
+            return
+        }
+        cloudSyncService = CloudSyncService(client: client)
+    }
+
+    func configureCloudSyncCoordinator(_ coordinator: CloudSyncCoordinator?) {
+        cloudSyncCoordinator = coordinator
     }
 
     func startSession(routineId: UUID?, routineTitle: String, exercises: [String]) -> WorkoutSession {
@@ -146,34 +155,26 @@ final class HistoryStore: ObservableObject {
         }
         #endif
 
-        if saved, let endedAt = liveSession.endedAt, let service = cloudSyncService {
-            let summary = WorkoutSessionCloudSummary(
-                sessionId: liveSession.id,
-                routineTitle: liveSession.routineTitle,
-                startedAt: liveSession.startedAt,
-                endedAt: endedAt,
-                totalSets: totals.sets,
-                totalReps: totals.reps,
-                volumeKg: totals.volumeKg
-            )
-            Task.detached(priority: .utility) {
-                #if DEBUG
-                print("[SYNC] attempt authenticated=\(true) session=\(summary.sessionId) sets=\(summary.totalSets) reps=\(summary.totalReps) volumeKg=\(String(format: "%.2f", summary.volumeKg))")
-                #endif
-                do {
-                    try await service.upsertWorkoutSessionSummary(summary)
-                    #if DEBUG
-                    print("[SYNC] upsert ok session=\(summary.sessionId)")
-                    #endif
-                } catch {
-                    #if DEBUG
-                    print("[SYNC][ERROR] session=\(summary.sessionId) error=\(error)")
-                    #endif
-                }
-            }
+        if saved, let coordinator = cloudSyncCoordinator {
+            Task { await coordinator.syncEndedSessionsIfNeeded() }
         }
 
         return saved
+    }
+
+    func endedSessions(after date: Date?, limit: Int = 50) -> [WorkoutSession] {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.endedAt, order: .forward)]
+        )
+        descriptor.fetchLimit = limit * 2
+        let fetched = (try? modelContext.fetch(descriptor)) ?? []
+        let filtered = fetched.filter {
+            guard let ended = $0.endedAt else { return false }
+            guard $0.totalSets > 0 else { return false }
+            if let date { return ended > date }
+            return true
+        }
+        return Array(filtered.prefix(limit))
     }
 
     func recentSessions(limit: Int) -> [WorkoutSession] {

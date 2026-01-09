@@ -36,5 +36,8 @@ struct CloudSyncService {
         _ = try await client
             .rpc("upsert_workout_session", params: params)
             .execute()
+        #if DEBUG
+        print("[CLOUDSYNC] upsert ok session=\(summary.sessionId)")
+        #endif
     }
 }

@@ -44,6 +44,9 @@ struct AtlasApp: App {
     @StateObject private var historyStore: HistoryStore
     @StateObject private var authStore: AuthStore
     @StateObject private var friendsStore: FriendsStore
+    @StateObject private var friendHistoryStore: FriendHistoryStore
+    @StateObject private var cloudSyncCoordinator: CloudSyncCoordinator
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Builds the shared SwiftData container with all app models.
     /// Change impact: Adding or removing models here changes which data persists across launches.
@@ -63,14 +66,17 @@ struct AtlasApp: App {
         let context = ModelContext(Self.sharedModelContainer)
         let historyStore = HistoryStore(modelContext: context)
         let friendsStore = FriendsStore(authStore: authStore)
-        if let client = authStore.supabaseClient {
-            historyStore.setCloudSyncService(CloudSyncService(client: client))
-        }
+        historyStore.configureCloudSync(client: authStore.supabaseClient)
+        let friendHistoryStore = FriendHistoryStore(authStore: authStore)
+        let cloudSyncCoordinator = CloudSyncCoordinator(historyStore: historyStore, authStore: authStore)
+        historyStore.configureCloudSyncCoordinator(cloudSyncCoordinator)
 
         _authStore = StateObject(wrappedValue: authStore)
         _routineStore = StateObject(wrappedValue: routineStore)
         _historyStore = StateObject(wrappedValue: historyStore)
         _friendsStore = StateObject(wrappedValue: friendsStore)
+        _friendHistoryStore = StateObject(wrappedValue: friendHistoryStore)
+        _cloudSyncCoordinator = StateObject(wrappedValue: cloudSyncCoordinator)
     }
 
     /// Builds the main scene and injects the shared model container.
@@ -82,12 +88,20 @@ struct AtlasApp: App {
                 .environmentObject(historyStore)
                 .environmentObject(authStore)
                 .environmentObject(friendsStore)
+                .environmentObject(friendHistoryStore)
+                .environmentObject(cloudSyncCoordinator)
                 .task {
                     authStore.startIfNeeded()
+                    await cloudSyncCoordinator.startIfNeeded()
                 }
                 .onOpenURL { url in
                     authStore.handleAuthRedirect(url)
                     Task { await authStore.restoreSessionIfNeeded() }
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active {
+                        Task { await cloudSyncCoordinator.syncNow(reason: "foreground") }
+                    }
                 }
         }
         .modelContainer(Self.sharedModelContainer)
