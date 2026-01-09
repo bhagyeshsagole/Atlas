@@ -9,3 +9,7 @@ struct UpsertWorkoutSessionParams: Encodable, Sendable {
     let total_reps: Int
     let volume_kg: Double
 }
+
+struct CloudSyncRPC_UpsertWorkoutSessionBundleParams: Encodable, Sendable {
+    let bundle: CloudWorkoutSessionBundle
+}

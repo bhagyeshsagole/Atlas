@@ -98,9 +98,9 @@ struct AtlasApp: App {
                     authStore.handleAuthRedirect(url)
                     Task { await authStore.restoreSessionIfNeeded() }
                 }
-                .onChange(of: scenePhase) { _, phase in
+                .onChange(of: scenePhase) { phase in
                     if phase == .active {
-                        Task { await cloudSyncCoordinator.syncNow(reason: "foreground") }
+                        Task { await cloudSyncCoordinator.syncIfNeeded(reason: "foreground") }
                     }
                 }
         }

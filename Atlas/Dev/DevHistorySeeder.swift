@@ -31,10 +31,11 @@
 import Foundation
 import SwiftData
 
+@MainActor
 enum DevHistorySeeder {
     private static let seedFlagKey = "DevHistorySeederJan2to4Seeded"
 
-    static func seedIfNeeded(modelContext: ModelContext, historyStore: HistoryStore) {
+    static func seedIfNeeded(modelContext: ModelContext, historyStore: HistoryStore) async {
         guard !UserDefaults.standard.bool(forKey: seedFlagKey) else { return }
 
         let calendar = Calendar.current

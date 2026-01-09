@@ -12,13 +12,15 @@ final class CloudSyncCoordinator: ObservableObject {
     private let historyStore: HistoryStore
     private let authStore: AuthStore
     private var service: CloudSyncService?
-    private var state: CloudSyncState
+    private var state: CloudSyncStateStore
     private var didStart = false
+    private var inflight: Set<UUID> = []
+    private var lastAttempt: [UUID: Date] = [:]
 
     init(historyStore: HistoryStore, authStore: AuthStore) {
         self.historyStore = historyStore
         self.authStore = authStore
-        self.state = CloudSyncState.load()
+        self.state = CloudSyncStateStore()
         if let client = authStore.supabaseClient {
             self.service = CloudSyncService(client: client)
         }
@@ -28,11 +30,27 @@ final class CloudSyncCoordinator: ObservableObject {
         guard didStart == false else { return }
         didStart = true
         configureService()
-        await syncNow(reason: "startup")
+        await syncIfNeeded(reason: "startup")
     }
 
     func syncEndedSessionsIfNeeded() async {
-        await syncNow(reason: "manual")
+        await syncIfNeeded(reason: "endSession")
+    }
+
+    func sync(summary: WorkoutSessionCloudSummary) async {
+        guard let service else { return }
+        guard authStore.isAuthenticated else { return }
+        do {
+            try await service.upsertWorkoutSessionSummary(summary)
+            #if DEBUG
+            print("[CLOUDSYNC] upsert ok session=\(summary.sessionId)")
+            #endif
+        } catch {
+            lastError = error.localizedDescription
+            #if DEBUG
+            print("[CLOUDSYNC][ERROR] session=\(summary.sessionId) error=\(error)")
+            #endif
+        }
     }
 
     private func configureService() {
@@ -43,20 +61,49 @@ final class CloudSyncCoordinator: ObservableObject {
         service = CloudSyncService(client: client)
     }
 
-    func syncNow(reason: String) async {
+    func syncIfNeeded(reason: String) async {
         guard isSyncing == false else { return }
         guard let service else { return }
         guard authStore.isAuthenticated else { return }
         isSyncing = true
         lastError = nil
         #if DEBUG
-        print("[CLOUDSYNC] syncing reason=\(reason)")
+        print("[CLOUDSYNC] start reason=\(reason)")
         #endif
         defer { isSyncing = false }
-        let sessions = historyStore.endedSessions(after: state.lastSyncedEndedAt, limit: 200)
-        let ordered = sessions.sorted { ($0.endedAt ?? .distantPast) < ($1.endedAt ?? .distantPast) }
-        for session in ordered {
-            guard let ended = session.endedAt, session.totalSets > 0 else { continue }
+        let sessions = historyStore.endedSessions(after: nil, limit: 500)
+        let ordered = sessions
+            .filter { $0.endedAt != nil && $0.totalSets > 0 }
+            .sorted { ($0.endedAt ?? .distantPast) < ($1.endedAt ?? .distantPast) }
+
+        let filtered = ordered.filter { session in
+            guard let ended = session.endedAt else { return false }
+            if state.isSynced(sessionId: session.id, endedAt: ended) { return false }
+            return true
+        }
+
+        #if DEBUG
+        let lastSyncedDesc = state.lastSyncedEndedAt?.description ?? "nil"
+        print("[CLOUDSYNC] candidates=\(ordered.count) uploading=\(filtered.count) lastSyncedEndedAt=\(lastSyncedDesc)")
+        #endif
+
+        for session in filtered {
+            guard let ended = session.endedAt else { continue }
+            if inflight.contains(session.id) {
+                #if DEBUG
+                print("[CLOUDSYNC] skip duplicate inflight session=\(session.id)")
+                #endif
+                continue
+            }
+            if let last = lastAttempt[session.id], Date().timeIntervalSince(last) < 2 {
+                #if DEBUG
+                print("[CLOUDSYNC] skip recent duplicate session=\(session.id)")
+                #endif
+                continue
+            }
+            inflight.insert(session.id)
+            lastAttempt[session.id] = Date()
+            defer { inflight.remove(session.id) }
             let summary = WorkoutSessionCloudSummary(
                 sessionId: session.id,
                 routineTitle: session.routineTitle.isEmpty ? "Untitled" : session.routineTitle,
@@ -67,7 +114,11 @@ final class CloudSyncCoordinator: ObservableObject {
                 volumeKg: session.volumeKg
             )
             do {
-                try await service.upsertWorkoutSessionSummary(summary)
+                if let userId = authStore.currentUserId ?? UUID(uuidString: authStore.userId ?? ""), let bundle = session.cloudBundle(userId: userId) {
+                    try await service.upsertWorkoutSessionBundle(bundle)
+                } else {
+                    try await service.upsertWorkoutSessionSummary(summary)
+                }
                 state.markSynced(sessionId: session.id, endedAt: ended)
                 #if DEBUG
                 print("[CLOUDSYNC] upsert ok session=\(session.id)")
@@ -77,10 +128,12 @@ final class CloudSyncCoordinator: ObservableObject {
                 #if DEBUG
                 print("[CLOUDSYNC][ERROR] session=\(session.id) error=\(error)")
                 #endif
-                return
             }
         }
         lastSyncAt = Date()
+        #if DEBUG
+        print("[CLOUDSYNC] done")
+        #endif
     }
 
     #if DEBUG

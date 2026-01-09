@@ -156,7 +156,11 @@ final class HistoryStore: ObservableObject {
         #endif
 
         if saved, let coordinator = cloudSyncCoordinator {
-            Task { await coordinator.syncEndedSessionsIfNeeded() }
+            if let summary = liveSession.cloudSummary {
+                Task.detached {
+                    await coordinator.sync(summary: summary)
+                }
+            }
         }
 
         return saved
