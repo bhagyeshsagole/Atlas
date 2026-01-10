@@ -359,7 +359,7 @@ final class AuthStore: ObservableObject {
             return nil
         } catch {
             #if DEBUG
-            print("[PROFILE][ERROR] setUsername failed: \(error)")
+            print("[PROFILE][ERROR] setUsername failed: \(error.localizedDescription)")
             #endif
             if let err = error as? ProfileServiceError {
                 switch err {
@@ -370,10 +370,21 @@ final class AuthStore: ObservableObject {
                 case .notFound:
                     return "Profile not found."
                 }
+            } else if isUniqueViolation(error) {
+                return "Username is taken."
             }
             return "Couldn't save username. Try again."
         }
     }
+}
+
+private func isUniqueViolation(_ error: Error) -> Bool {
+    if let pg = error as? PostgrestError {
+        if pg.code == "23505" { return true }
+        let msg = (pg.message ?? "").lowercased()
+        if msg.contains("duplicate key") || msg.contains("unique") { return true }
+    }
+    return false
 }
 
 enum AuthError: Error {

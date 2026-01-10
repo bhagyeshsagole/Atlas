@@ -214,6 +214,26 @@ Return 2-5 short lines, plain text only. No markdown, no bullets.
         return (cleaned, response.statusCode, elapsed)
     }
 
+    static func cleanExerciseName(raw: String) async throws -> (text: String, status: Int, elapsedMs: Int) {
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: "You are an expert exercise name editor. Return only the corrected, concise exercise title in Title Case. Do not add quotes or commentary."),
+            .init(role: "user", content: raw)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: nil)
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, response.statusCode, elapsed)
+    }
+
     /// Generates coaching tips and session targets for a specific exercise.
     static func generateExerciseCoaching(
         routineTitle: String,

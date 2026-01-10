@@ -47,14 +47,18 @@ struct ParsedWorkout: Identifiable, Codable, Hashable {
         self.wtsText = wtsText
         self.repsText = repsText
     }
+
+    static func cleanExerciseName(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        let parts = trimmed
+            .components(separatedBy: CharacterSet.whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        return parts.joined(separator: " ")
+    }
 }
 
 struct RoutineAIService {
     /// DEV MAP: AI pipeline (routine parsing/generation, summaries, coaching) lives here.
-    enum RoutineAIError: Error {
-        case missingAPIKey
-        case openAIRequestFailed(status: Int?, message: String)
-    }
 
     struct ExerciseSuggestion: Hashable {
         var techniqueTips: String
@@ -114,9 +118,9 @@ struct RoutineAIService {
             let trimmed = summary.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "Summary unavailable. Try again." : trimmed
         } catch let error as OpenAIError {
-            throw RoutineAIError.openAIRequestFailed(status: error.statusCode, message: error.message)
+            throw RoutineAIError.httpStatus(error.statusCode ?? -1, body: nil)
         } catch {
-            throw RoutineAIError.openAIRequestFailed(status: nil, message: error.localizedDescription)
+            throw RoutineAIError.requestFailed(underlying: error.localizedDescription)
         }
     }
 
@@ -200,7 +204,7 @@ struct RoutineAIService {
             } catch let error as RoutineAIError {
                 throw error
             } catch {
-                throw RoutineAIError.openAIRequestFailed(status: nil, message: error.localizedDescription)
+                throw RoutineAIError.requestFailed(underlying: error.localizedDescription)
             }
         } else {
             #if DEBUG
@@ -236,9 +240,10 @@ struct RoutineAIService {
                 return parsed
             }
         } catch let error as OpenAIError {
-            throw RoutineAIError.openAIRequestFailed(status: error.statusCode, message: error.message)
+            let bodyString: String? = nil
+            throw RoutineAIError.httpStatus(error.statusCode ?? -1, body: bodyString)
         } catch {
-            throw RoutineAIError.openAIRequestFailed(status: nil, message: error.localizedDescription)
+            throw RoutineAIError.requestFailed(underlying: error.localizedDescription)
         }
 
         let salvaged = salvageWorkouts(from: lastRaw, requestId: requestId)
@@ -246,7 +251,7 @@ struct RoutineAIService {
             return salvaged
         }
 
-        throw RoutineAIError.openAIRequestFailed(status: nil, message: "Unable to generate routine. Please try again.")
+        throw RoutineAIError.requestFailed(underlying: "Unable to generate routine. Please try again.")
     }
 
     /// VISUAL TWEAK: Change splitting/regex rules here to reshape fallback parsing when AI is unavailable.
@@ -542,5 +547,15 @@ struct RoutineAIService {
 
     private static func makeRequestId() -> String {
         String(UUID().uuidString.prefix(4)).uppercased()
+    }
+}
+
+extension RoutineAIService {
+    static func cleanExerciseName(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        let parts = trimmed
+            .components(separatedBy: CharacterSet.whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        return parts.joined(separator: " ")
     }
 }

@@ -142,21 +142,22 @@ struct CreateRoutineView: View {
                 await MainActor.run {
                     onGenerate(name, workouts)
                 }
-            } catch let error as RoutineAIService.RoutineAIError {
+            } catch let error as RoutineAIError {
                 await MainActor.run { focusedField = nil }
                 switch error {
                 case .missingAPIKey:
                     DispatchQueue.main.async {
                         alertMessage = "Missing API key. Add it in LocalSecrets.openAIAPIKey."
                     }
-                case .openAIRequestFailed(let status, let message):
+                case .httpStatus(let status, let body):
                     DispatchQueue.main.async {
-                        if let status {
-                            alertMessage = "OpenAI error (\(status)). \(message)"
-                        } else {
-                            alertMessage = message
-                        }
+                        let detail = body ?? "Request failed."
+                        alertMessage = "OpenAI error (\(status)). \(detail)"
                     }
+                case .requestFailed(let underlying):
+                    DispatchQueue.main.async { alertMessage = underlying }
+                default:
+                    DispatchQueue.main.async { alertMessage = error.localizedDescription }
                 }
             } catch {
                 await MainActor.run { focusedField = nil }

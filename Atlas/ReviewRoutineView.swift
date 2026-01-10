@@ -134,7 +134,7 @@ struct ReviewRoutineView: View {
                     routineTitle: routineName,
                     workouts: routineWorkouts
                 )
-            } catch let error as RoutineAIService.RoutineAIError {
+            } catch let error as RoutineAIError {
                 summaryText = "Summary unavailable. Try again."
                 await MainActor.run {
                     alertMessage = summaryErrorMessage(for: error)
@@ -166,16 +166,25 @@ struct ReviewRoutineView: View {
         }
     }
 
-    private func summaryErrorMessage(for error: RoutineAIService.RoutineAIError) -> String {
+    private func summaryErrorMessage(for error: RoutineAIError) -> String {
         switch error {
         case .missingAPIKey:
             return "Missing API key. Add it in LocalSecrets.openAIAPIKey."
-        case .openAIRequestFailed(let status, let message):
-            if let status {
-                return "OpenAI error (\(status)). \(message)"
-            } else {
-                return "OpenAI error: \(message)"
-            }
+        case .httpStatus(let status, let body):
+            let safeBody = body ?? ""
+            return "OpenAI error (\(status)). \(safeBody)"
+        case .requestFailed(let underlying):
+            return underlying
+        case .decodeFailed:
+            return "Could not parse the response."
+        case .emptyResponse:
+            return "Empty response."
+        case .rateLimited:
+            return "Rate limited."
+        case .cancelled:
+            return "Request cancelled."
+        case .invalidURL:
+            return "Invalid request URL."
         }
     }
 }

@@ -2,16 +2,13 @@
 //  HomeView.swift
 //  Atlas
 //
-//  Home screen showing calendar, history underlines, friends tray, and Start Workout CTA.
+//  Home screen showing calendar and history underlines.
 //
 
 import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @AppStorage("appearanceMode") private var appearanceMode = "light"
-    @EnvironmentObject private var authStore: AuthStore
-    @EnvironmentObject private var friendsStore: FriendsStore
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var historySessions: [WorkoutSession]
     private let calendar = Calendar.current
@@ -20,139 +17,119 @@ struct HomeView: View {
     let openSettings: () -> Void
 
     @State private var showCalendarCard = false
-    @State private var showStartButton = false
     @State private var isDayHistoryPresented = false
     @State private var selectedDayForHistory: Date = Date()
-    @State private var showFriendsSheet = false
-
-    private let friendsSpring: Animation = {
-        .interactiveSpring(response: 0.35, dampingFraction: 0.8)
-    }()
+    @State private var monthOffset: Int = 0
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                    // Top bar
+        VStack(alignment: .leading, spacing: 24) {
+            // Header
+            HStack {
+                Text("Atlas")
+                    .font(.system(size: 34, weight: .bold))
+                    .italic()
+                    .foregroundStyle(.primary)
+                Spacer()
+                Button {
+                    assert(Thread.isMainThread, "openSettings should run on main thread")
+                    Haptics.playLightTap()
+                    openSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 24, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .tint(.primary)
+
+            // Calendar card
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
                     HStack {
-                        Button { onAtlasTap() } label: {
-                            Text("Atlas")
-                                .appFont(.brand)
+                        Button {
+                            withAnimation(AppMotion.primary) { shiftMonth(-1) }
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.primary)
-                                .padding(.horizontal, AppStyle.brandPaddingHorizontal)
-                                .padding(.vertical, AppStyle.brandPaddingVertical)
+                                .padding(8)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+
                         Spacer()
-                        AtlasHeaderIconButton(systemName: "gearshape") {
-                            assert(Thread.isMainThread, "openSettings should run on main thread")
-                            Haptics.playLightTap()
-                            openSettings()
+
+                        VStack(alignment: .center, spacing: 4) {
+                            Text(currentMonthTitle)
+                                .appFont(.title, weight: .semibold)
+                                .foregroundStyle(.primary)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            withAnimation(AppMotion.primary) { shiftMonth(1) }
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .padding(8)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    HStack {
+                        ForEach(shortWeekdays, id: \.self) { symbol in
+                            Text(symbol)
+                                .appFont(.body, weight: .medium)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
                         }
                     }
-                    .padding(.top, AppStyle.headerTopPadding)
-                    .tint(.primary)
 
-                    // Calendar card
-                    GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                        VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
-                            HStack(spacing: AppStyle.calendarHeaderSpacing) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(currentMonthTitle)
-                                        .appFont(.title, weight: .semibold)
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-
-                            HStack {
-                                ForEach(shortWeekdays, id: \.self) { symbol in
-                                    Text(symbol)
-                                        .appFont(.body, weight: .medium)
-                                        .foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity)
-                                }
-                            }
-
-                            LazyVGrid(columns: gridColumns, spacing: AppStyle.calendarGridSpacing) {
-                                ForEach(Array(monthGrid.enumerated()), id: \.offset) { _, date in
-                                    DayCell(
-                                        date: date,
-                                        calendar: calendar,
-                                        isToday: isToday(date),
-                                        hasWorkout: hasWorkout(on: date),
-                                        hasSession: hasSession(on: date)
-                                    ) { tappedDate in
-                                        handleDaySelection(tappedDate)
-                                    }
-                                }
+                    LazyVGrid(columns: gridColumns, spacing: AppStyle.calendarGridSpacing) {
+                        ForEach(Array(monthGrid.enumerated()), id: \.offset) { _, date in
+                            DayCell(
+                                date: date,
+                                calendar: calendar,
+                                isToday: isToday(date),
+                                hasWorkout: hasWorkout(on: date),
+                                hasSession: hasSession(on: date)
+                            ) { tappedDate in
+                                handleDaySelection(tappedDate)
                             }
                         }
                     }
-                    .opacity(showCalendarCard ? 1 : 0)
-                    .offset(y: showCalendarCard ? 0 : AppStyle.cardRevealOffset)
-                    .padding(.top, AppStyle.screenTopPadding)
-                    .animation(AppMotion.primary, value: showCalendarCard)
-
-                    Spacer(minLength: AppStyle.homeBottomSpacer)
                 }
-                .padding(.horizontal, AppStyle.screenHorizontalPadding)
-                .padding(.top, AppStyle.screenTopPadding)
-                .padding(.bottom, AppStyle.homeBottomInset)
             }
-            .scrollIndicators(.hidden)
+            .opacity(showCalendarCard ? 1 : 0)
+            .offset(y: showCalendarCard ? 0 : AppStyle.cardRevealOffset)
+            .animation(AppMotion.primary, value: showCalendarCard)
 
-            VStack(spacing: 56) {
-                FriendsPill(isVisible: showStartButton && showFriendsSheet == false) {
-                    withAnimation(friendsSpring) {
-                        showFriendsSheet = true
-                    }
-                }
-                .offset(y: showFriendsSheet ? 400 : 0)
-                .opacity(showFriendsSheet ? 0 : (showStartButton ? 1 : 0))
-                .animation(friendsSpring, value: showFriendsSheet)
-                .padding(.horizontal, 16)
-
-                // Start Workout pill
-                AtlasPillButton("Start Workout") {
-                    Haptics.playLightTap()
-                    startWorkout()
-                }
-                .padding(.horizontal, AppStyle.screenHorizontalPadding)
-                .padding(.bottom, AppStyle.startButtonBottomPadding)
-                .opacity(showStartButton ? 1 : 0)
-                .offset(y: showStartButton ? 0 : AppStyle.startButtonHiddenOffset)
-                .animation(AppMotion.primary.delay(0.06), value: showStartButton)
+            // Start button under calendar
+            StartWorkoutPillButton {
+                startWorkout()
             }
+
+            Spacer()
         }
+        .padding(.horizontal, 24)
+        .padding(.top, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(backgroundGradient)
+        .background(Color.black.ignoresSafeArea())
         .tint(.primary)
-        .overlay(alignment: .bottom) {
-            if showFriendsSheet {
-                FriendsSheet(
-                    store: friendsStore,
-                    onDismiss: {
-                        withAnimation(friendsSpring) {
-                            showFriendsSheet = false
-                        }
-                    }
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(2)
-            }
-        }
         .onAppear {
             withAnimation(AppMotion.primary) {
                 showCalendarCard = true
-            }
-            withAnimation(AppMotion.primary.delay(0.05)) {
-                showStartButton = true
             }
         }
         .navigationDestination(isPresented: $isDayHistoryPresented) {
             DayHistoryView(day: selectedDayForHistory)
         }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var gridColumns: [GridItem] {
@@ -190,29 +167,32 @@ struct HomeView: View {
     }
 
     private var currentMonthStart: Date {
-        calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+        let base = calendar.date(byAdding: .month, value: monthOffset, to: Date()) ?? Date()
+        return calendar.date(from: calendar.dateComponents([.year, .month], from: base)) ?? base
+    }
+
+    private func shiftMonth(_ delta: Int) {
+        monthOffset += delta
+        let daysInMonth = calendar.range(of: .day, in: .month, for: currentMonthStart)?.count ?? 30
+        let currentDay = calendar.component(.day, from: selectedDayForHistory)
+        let clampedDay = min(max(1, currentDay), daysInMonth)
+        if let adjusted = calendar.date(bySetting: .day, value: clampedDay, of: currentMonthStart) {
+            selectedDayForHistory = adjusted
+        }
+        #if DEBUG
+        print("[HOME][MONTH] offset=\(monthOffset) title=\(currentMonthTitle)")
+        #endif
     }
 
     private var backgroundGradient: LinearGradient {
-        if appearanceMode == "dark" {
-            return LinearGradient(
-                colors: [
-                    Color.black.opacity(0.92),
-                    Color.black.opacity(0.86)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        } else {
-            return LinearGradient(
-                colors: [
-                    Color.white.opacity(0.96),
-                    Color.white.opacity(0.9)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+        LinearGradient(
+            colors: [
+                Color.black.opacity(0.92),
+                Color.black.opacity(0.86)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     private var shortWeekdays: [String] {
@@ -331,9 +311,6 @@ struct DayCell: View {
 }
 
 #Preview {
-    HomeView(
-        startWorkout: {},
-        openSettings: {}
-    )
+    HomeView(startWorkout: {}, openSettings: {})
     .modelContainer(for: Workout.self, inMemory: true)
 }

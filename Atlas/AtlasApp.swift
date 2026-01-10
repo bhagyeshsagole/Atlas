@@ -46,6 +46,7 @@ struct AtlasApp: App {
     @StateObject private var friendsStore: FriendsStore
     @StateObject private var friendHistoryStore: FriendHistoryStore
     @StateObject private var cloudSyncCoordinator: CloudSyncCoordinator
+    @StateObject private var usernameStore: UsernameStore
     @Environment(\.scenePhase) private var scenePhase
 
     /// Builds the shared SwiftData container with all app models.
@@ -70,6 +71,7 @@ struct AtlasApp: App {
         let friendHistoryStore = FriendHistoryStore(authStore: authStore)
         let cloudSyncCoordinator = CloudSyncCoordinator(historyStore: historyStore, authStore: authStore)
         historyStore.configureCloudSyncCoordinator(cloudSyncCoordinator)
+        let usernameStore = UsernameStore()
 
         _authStore = StateObject(wrappedValue: authStore)
         _routineStore = StateObject(wrappedValue: routineStore)
@@ -77,6 +79,7 @@ struct AtlasApp: App {
         _friendsStore = StateObject(wrappedValue: friendsStore)
         _friendHistoryStore = StateObject(wrappedValue: friendHistoryStore)
         _cloudSyncCoordinator = StateObject(wrappedValue: cloudSyncCoordinator)
+        _usernameStore = StateObject(wrappedValue: usernameStore)
     }
 
     /// Builds the main scene and injects the shared model container.
@@ -90,6 +93,7 @@ struct AtlasApp: App {
                 .environmentObject(friendsStore)
                 .environmentObject(friendHistoryStore)
                 .environmentObject(cloudSyncCoordinator)
+                .environmentObject(usernameStore)
                 .task {
                     authStore.startIfNeeded()
                     await cloudSyncCoordinator.startIfNeeded()

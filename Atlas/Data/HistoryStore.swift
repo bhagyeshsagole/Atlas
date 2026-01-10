@@ -124,6 +124,17 @@ final class HistoryStore: ObservableObject {
         #endif
     }
 
+    func deleteSet(_ set: SetLog, from session: WorkoutSession) {
+        guard let exercise = set.exercise else { return }
+        exercise.sets.removeAll { $0.id == set.id }
+        modelContext.delete(set)
+        saveContext(reason: "deleteSet")
+        #if DEBUG
+        let totalSetCount = session.exercises.reduce(0) { $0 + $1.sets.count }
+        print("[HISTORY] deleteSet session=\(session.id) ex=\(exercise.name) remainingSets=\(exercise.sets.count) totalSessionSets=\(totalSetCount)")
+        #endif
+    }
+
     /// Returns true if the session was stored, false if discarded for zero sets.
     func endSession(session: WorkoutSession) -> Bool {
         let liveSession = resolvedSession(for: session.id) ?? session

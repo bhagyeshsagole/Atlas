@@ -1,0 +1,276 @@
+import SwiftUI
+
+struct FriendsView: View {
+    @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var friendsStore: FriendsStore
+    @State private var usernameInput: String = ""
+    private let primaryColor = Color.white
+    private let secondaryColor = Color.white.opacity(0.72)
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    header
+                    if authStore.isReadyForFriends {
+                        statusMessages
+                        addFriendCard
+                        requestsCard
+                        friendsCard
+                    } else {
+                        unauthenticatedCard
+                    }
+                }
+                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                .padding(.top, AppStyle.screenTopPadding + AppStyle.headerTopPadding)
+                .padding(.bottom, AppStyle.settingsBottomPadding)
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(primaryColor)
+        .task {
+            await refreshIfReady()
+        }
+        .refreshable {
+            await refreshIfReady()
+        }
+        .onChange(of: authStore.isReadyForFriends) { _, isReady in
+            if isReady {
+                Task { await friendsStore.refreshAll() }
+            } else {
+                setNotReadyMessage()
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("Friends")
+                .appFont(.title, weight: .semibold)
+                .foregroundStyle(primaryColor)
+            Spacer()
+            if friendsStore.isLoading {
+                ProgressView()
+                    .tint(primaryColor)
+            } else {
+                AtlasHeaderIconButton(systemName: "arrow.clockwise", isGlassBackplate: true) {
+                    Haptics.playLightTap()
+                    Task { await refreshIfReady() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusMessages: some View {
+        if let success = friendsStore.successMessage {
+            Text(success)
+                .appFont(.footnote, weight: .semibold)
+                .foregroundStyle(.green)
+        } else if let message = friendsStore.lastErrorMessage ?? friendsStore.errorMessage ?? friendsStore.uiError {
+            Text(message)
+                .appFont(.footnote)
+                .foregroundStyle(.red)
+        }
+    }
+
+    private var addFriendCard: some View {
+        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Add friend")
+                    .appFont(.body, weight: .semibold)
+                    .foregroundStyle(primaryColor)
+                HStack(spacing: 10) {
+                    TextField("username or email", text: $usernameInput)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .foregroundStyle(primaryColor)
+                        .tint(primaryColor)
+                        .padding(12)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(12)
+                    Button {
+                        sendRequest()
+                    } label: {
+                        Text("Send")
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(12)
+                    }
+                    .buttonStyle(PressableGlassButtonStyle())
+                    .disabled(friendsStore.isLoading)
+                }
+            }
+        }
+    }
+
+    private var requestsCard: some View {
+        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Requests")
+                    .appFont(.body, weight: .semibold)
+                    .foregroundStyle(primaryColor)
+                if friendsStore.incomingRequests.isEmpty && friendsStore.outgoingRequests.isEmpty {
+                    Text("No requests")
+                        .appFont(.footnote)
+                        .foregroundStyle(secondaryColor)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(friendsStore.incomingRequests) { request in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(request.fromUsername.map { "@\($0)" } ?? (request.fromEmail ?? "Unknown"))
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(primaryColor)
+                                    if let date = request.createdAt {
+                                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                                            .appFont(.footnote)
+                                            .foregroundStyle(secondaryColor)
+                                    }
+                                }
+                                Spacer()
+                                HStack(spacing: 8) {
+                                    Button {
+                                        Haptics.playLightTap()
+                                        Task { await friendsStore.accept(requestIdString: request.id) }
+                                    } label: {
+                                        Text("Accept")
+                                    }
+                                    .buttonStyle(PressableGlassButtonStyle())
+                                    .disabled(friendsStore.isLoading)
+
+                                    Button {
+                                        Haptics.playLightTap()
+                                        Task { await friendsStore.decline(requestIdString: request.id) }
+                                    } label: {
+                                        Text("Decline")
+                                    }
+                                    .buttonStyle(PressableGlassButtonStyle())
+                                    .disabled(friendsStore.isLoading)
+                                }
+                            }
+                        }
+
+                        ForEach(friendsStore.outgoingRequests) { request in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(request.toUsername.map { "@\($0)" } ?? (request.toEmail ?? "Unknown"))
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(primaryColor)
+                                    if let date = request.createdAt {
+                                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                                            .appFont(.footnote)
+                                            .foregroundStyle(secondaryColor)
+                                    }
+                                }
+                                Spacer()
+                                Text("Pending")
+                                    .appFont(.footnote, weight: .semibold)
+                                    .foregroundStyle(secondaryColor)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var friendsCard: some View {
+        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Friends")
+                    .appFont(.body, weight: .semibold)
+                    .foregroundStyle(primaryColor)
+                if friendsStore.friends.isEmpty {
+                    Text("No friends yet")
+                        .appFont(.footnote)
+                        .foregroundStyle(secondaryColor)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(friendsStore.friends) { friend in
+                            NavigationLink(destination: FriendDetailView(friend: friend)) {
+                                HStack {
+                                    Text(friend.username.map { "@\($0)" } ?? friend.email)
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(primaryColor)
+                                    Spacer()
+                                    if let date = friend.createdAt {
+                                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                                            .appFont(.footnote)
+                                            .foregroundStyle(secondaryColor)
+                                    }
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(secondaryColor)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture().onEnded { Haptics.playLightTap() })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var unauthenticatedCard: some View {
+        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Sign in to use Friends")
+                    .appFont(.title3, weight: .semibold)
+                    .foregroundStyle(primaryColor)
+                Text("You need an active session to view and send requests.")
+                    .appFont(.body)
+                    .foregroundStyle(secondaryColor)
+                Button {
+                    Haptics.playLightTap()
+                    Task { await authStore.signOut() }
+                } label: {
+                    Text("Go to Sign In")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(PressableGlassButtonStyle())
+            }
+        }
+    }
+
+    private func sendRequest() {
+        Haptics.playLightTap()
+        let username = usernameInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard username.isEmpty == false else { return }
+        Task {
+            await friendsStore.sendRequest(username: username)
+            await MainActor.run {
+                if friendsStore.lastErrorMessage == nil && friendsStore.uiError == nil && friendsStore.errorMessage == nil {
+                    usernameInput = ""
+                    dismissKeyboard()
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func refreshIfReady() async {
+        if authStore.isReadyForFriends {
+            await friendsStore.refreshAll()
+        } else {
+            setNotReadyMessage()
+        }
+    }
+
+    private func setNotReadyMessage() {
+        let message = "Sign in to use Friends."
+        friendsStore.lastErrorMessage = message
+        friendsStore.uiError = message
+    }
+
+    private func dismissKeyboard() {
+        #if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
+    }
+}

@@ -32,6 +32,7 @@
 
 import SwiftUI
 import SwiftData
+import Combine
 
 struct WorkoutSessionView: View {
     struct SessionExercise: Identifiable, Hashable {
@@ -79,6 +80,11 @@ struct WorkoutSessionView: View {
     private let menuBackgroundColorLight = Color.white
     @State private var newExerciseName: String = "" // For adding ad-hoc exercises mid-session.
     @FocusState private var focusedField: Field? // Keeps keyboard on weight or reps field.
+    @State private var showTimerSheet = false
+    @State private var timerMinutes: Int = 0
+    @State private var timerSeconds: Int = 0
+    @State private var timerRemaining: Int?
+    @State private var timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     init(routine: Routine) {
         self.routine = routine
@@ -88,44 +94,34 @@ struct WorkoutSessionView: View {
     }
 
     var body: some View {
-        ZStack {
-            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                Text(currentExercise.name)
-                    .appFont(.title, weight: .semibold)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, AppStyle.headerTopPadding)
-
-                GlassCard {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                            coachingSection
-                            Divider()
-                            lastSessionSection
-                            Divider()
-                            thisSessionTargetsSection
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+        ZStack(alignment: .top) {
+            VStack(spacing: AppStyle.sectionSpacing) {
+                TabView(selection: $exerciseIndex) {
+                    ForEach(Array(sessionExercises.enumerated()), id: \.offset) { index, _ in
+                        exercisePage
+                            .tag(index)
                     }
                 }
-
-                setLogSection
-
-                Spacer(minLength: 0)
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
             .padding(AppStyle.contentPaddingLarge)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .onAppear {
                 loadCoachingAndHistory()
             }
-            .onChange(of: exerciseIndex) { _, _ in
+            .onChange(of: exerciseIndex) { _, newIndex in
                 clearFocus()
                 resetDraftForNewExercise()
                 loadCoachingAndHistory()
+                #if DEBUG
+                print("[SESSION][PAGER] index=\(newIndex) exercise=\(currentExercise.name)")
+                #endif
             }
 
         }
         .navigationTitle("Session")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .background(Color(.systemBackground))
         .tint(.primary)
         .safeAreaInset(edge: .bottom) {
@@ -145,6 +141,66 @@ struct WorkoutSessionView: View {
                     dismiss()
                 }
             }
+        }
+        .sheet(isPresented: $showTimerSheet) {
+            timerSheet
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 8) {
+                    if let remaining = timerRemaining {
+                        Text(formattedTime(remaining))
+                            .appFont(.footnote, weight: .semibold)
+                            .foregroundStyle(.primary)
+                    }
+                    Button {
+                        Haptics.playLightTap()
+                        showTimerSheet = true
+                    } label: {
+                        Image(systemName: "timer")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                }
+            }
+        }
+        .onReceive(timer) { _ in
+            guard let remaining = timerRemaining, remaining >= 0 else { return }
+            if remaining > 0 {
+                timerRemaining = remaining - 1
+            } else {
+                timerRemaining = nil
+                Haptics.playMediumTap()
+            }
+        }
+    }
+
+    private var exercisePage: some View {
+        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+            Text(currentExercise.name)
+                .appFont(.title, weight: .semibold)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, AppStyle.headerTopPadding)
+
+            GlassCard {
+                VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
+                    coachingSection
+                    Divider()
+                    lastSessionSection
+                    Divider()
+                    thisSessionTargetsSection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            setLogSection
         }
     }
 
@@ -198,27 +254,38 @@ struct WorkoutSessionView: View {
                         .appFont(.body, weight: .regular)
                         .foregroundStyle(.secondary)
                 } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(loggedSetsForCurrent, id: \.id) { set in
-                            AtlasRowPill {
-                                HStack {
-                                    Text(set.tag)
-                                        .appFont(.body, weight: .semibold)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 6)
-                                        .background(
-                                            Capsule().fill(.white.opacity(0.1))
-                                        )
-                                    Text(setLine(set))
-                                        .appFont(.body, weight: .regular)
-                                    Spacer()
-                                    Text(set.createdAt, style: .time)
-                                        .appFont(.footnote, weight: .regular)
-                                        .foregroundStyle(.secondary)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(loggedSetsForCurrent, id: \.id) { set in
+                                AtlasRowPill {
+                                    HStack {
+                                        Text(set.tag)
+                                            .appFont(.body, weight: .semibold)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 6)
+                                            .background(
+                                                Capsule().fill(.white.opacity(0.1))
+                                            )
+                                        Text(setLine(set))
+                                            .appFont(.body, weight: .regular)
+                                        Spacer()
+                                        Text(set.createdAt, style: .time)
+                                            .appFont(.footnote, weight: .regular)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        deleteSet(set)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
                                 }
                             }
                         }
                     }
+                    .frame(maxHeight: 280)
+                    .scrollIndicators(.hidden)
                 }
             }
 
@@ -262,7 +329,7 @@ struct WorkoutSessionView: View {
 
     private var bottomActions: some View {
         HStack(spacing: AppStyle.sectionSpacing) {
-            AtlasPillButton("Alternate") {
+            AtlasPillButton("New Workout") {
                 clearFocus()
                 Haptics.playLightTap()
                 showAltPopup = true
@@ -479,6 +546,15 @@ struct WorkoutSessionView: View {
         isAddingSet = false
     }
 
+    private func deleteSet(_ set: SetLog) {
+        guard let session else { return }
+        historyStore.deleteSet(set, from: session)
+        if let exerciseLog = session.exercises.first(where: { $0.orderIndex == currentExercise.orderIndex }) {
+            exerciseLogs[currentExercise.id] = exerciseLog
+            loggedSets[currentExercise.id] = exerciseLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
+        }
+    }
+
     private func ensureSession() {
         guard session == nil else { return }
         let exerciseNames = sessionExercises
@@ -551,6 +627,94 @@ struct WorkoutSessionView: View {
         }
     }
 
+    private func cleanExerciseName(_ raw: String) async -> String {
+        let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+            return fallbackCleanName(trimmed)
+        }
+        do {
+            let cleaned = RoutineAIService.cleanExerciseName(trimmed)
+            let result = cleaned.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            if result.isEmpty {
+                return fallbackCleanName(trimmed)
+            }
+            #if DEBUG
+            print("[AI][CLEAN] success input=\"\(trimmed)\" output=\"\(result)\"")
+            #endif
+            return result
+        } catch {
+            #if DEBUG
+            print("[AI][CLEAN][WARN] \(error.localizedDescription)")
+            #endif
+            return fallbackCleanName(trimmed)
+        }
+    }
+
+    private func fallbackCleanName(_ text: String) -> String {
+        let collapsed = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        let words = collapsed.split(separator: " ").map { word in
+            word.prefix(1).uppercased() + word.dropFirst().lowercased()
+        }
+        return words.joined(separator: " ")
+    }
+
+    private var timerSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                Text("Rest Timer")
+                    .appFont(.title3, weight: .semibold)
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 16) {
+                    Picker("Minutes", selection: $timerMinutes) {
+                        ForEach(0..<60, id: \.self) { minute in
+                            Text("\(minute) min").tag(minute)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    Picker("Seconds", selection: $timerSeconds) {
+                        ForEach(0..<60, id: \.self) { sec in
+                            Text("\(sec) sec").tag(sec)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                }
+                .frame(maxHeight: 200)
+
+                HStack(spacing: AppStyle.sectionSpacing) {
+                    AtlasPillButton("Stop") {
+                        timerRemaining = nil
+                        Haptics.playLightTap()
+                        showTimerSheet = false
+                        #if DEBUG
+                        print("[TIMER] stop tapped")
+                        #endif
+                    }
+                    AtlasPillButton("Start") {
+                        let total = (timerMinutes * 60) + timerSeconds
+                        timerRemaining = total
+                        Haptics.playLightTap()
+                        showTimerSheet = false
+                        #if DEBUG
+                        print("[TIMER] start total=\(total)")
+                        #endif
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                Spacer()
+            }
+            .padding(AppStyle.contentPaddingLarge)
+            .background(Color.black.opacity(0.95).ignoresSafeArea())
+        }
+    }
+
+    private func formattedTime(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%d:%02d", minutes, secs)
+    }
+
     private func addNewExercise() {
         let trimmed = newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -560,6 +724,19 @@ struct WorkoutSessionView: View {
         newExerciseName = ""
         showAltPopup = false
         exerciseIndex = nextIndex
+        Task {
+            let cleaned = await cleanExerciseName(trimmed)
+            await MainActor.run {
+                if let idx = sessionExercises.firstIndex(where: { $0.id == newExercise.id }) {
+                    sessionExercises[idx].name = cleaned
+                }
+                if let session {
+                    if let exerciseLog = session.exercises.first(where: { $0.orderIndex == nextIndex }) {
+                        exerciseLog.name = cleaned
+                    }
+                }
+            }
+        }
     }
 
     private func clearFocus() {

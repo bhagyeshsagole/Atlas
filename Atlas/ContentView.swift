@@ -65,7 +65,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $path) {
             ZStack {
-                HomeView(
+                RootTabShellView(
                     startWorkout: { path.append(.routines) },
                     openSettings: {
                         if !showSettings {
