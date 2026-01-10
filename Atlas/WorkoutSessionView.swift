@@ -56,6 +56,7 @@ struct WorkoutSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var historyStore: HistoryStore
+    @EnvironmentObject private var routineStore: RoutineStore
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
 
     @State private var exerciseIndex: Int = 0 // Tracks which exercise the user is editing.
@@ -628,7 +629,8 @@ struct WorkoutSessionView: View {
         let started = historyStore.startSession(
             routineId: routine.id,
             routineTitle: routine.name,
-            exercises: exerciseNames
+            exercises: exerciseNames,
+            routineTemplateId: routine.id
         )
         session = started
         for exerciseLog in started.exercises {
@@ -663,6 +665,9 @@ struct WorkoutSessionView: View {
         if didStore {
             completedSessionId = session.id
             showSummary = true
+            if routine.expiresOnCompletion {
+                routineStore.deleteRoutine(id: routine.id)
+            }
         } else {
             dismiss()
         }

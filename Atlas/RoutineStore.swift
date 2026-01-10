@@ -43,14 +43,32 @@ struct Routine: Identifiable, Codable, Hashable {
     var createdAt: Date
     var workouts: [RoutineWorkout]
     var summary: String
+    var source: RoutineSource
+    var coachPlanId: UUID?
+    var expiresOnCompletion: Bool
+    var generatedForRange: StatsLens?
 
     /// DEV MAP: Routine data model; persisted via JSON in RoutineStore.
-    init(id: UUID, name: String, createdAt: Date, workouts: [RoutineWorkout], summary: String = "") {
+    init(
+        id: UUID,
+        name: String,
+        createdAt: Date,
+        workouts: [RoutineWorkout],
+        summary: String = "",
+        source: RoutineSource = .user,
+        coachPlanId: UUID? = nil,
+        expiresOnCompletion: Bool = false,
+        generatedForRange: StatsLens? = nil
+    ) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.workouts = workouts
         self.summary = summary
+        self.source = source
+        self.coachPlanId = coachPlanId
+        self.expiresOnCompletion = expiresOnCompletion
+        self.generatedForRange = generatedForRange
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -59,6 +77,10 @@ struct Routine: Identifiable, Codable, Hashable {
         case createdAt
         case workouts
         case summary
+        case source
+        case coachPlanId
+        case expiresOnCompletion
+        case generatedForRange
     }
 
     init(from decoder: Decoder) throws {
@@ -68,6 +90,10 @@ struct Routine: Identifiable, Codable, Hashable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         workouts = try container.decode([RoutineWorkout].self, forKey: .workouts)
         summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        source = try container.decodeIfPresent(RoutineSource.self, forKey: .source) ?? .user
+        coachPlanId = try container.decodeIfPresent(UUID.self, forKey: .coachPlanId)
+        expiresOnCompletion = try container.decodeIfPresent(Bool.self, forKey: .expiresOnCompletion) ?? false
+        generatedForRange = try container.decodeIfPresent(StatsLens.self, forKey: .generatedForRange)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -77,6 +103,10 @@ struct Routine: Identifiable, Codable, Hashable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(workouts, forKey: .workouts)
         try container.encode(summary, forKey: .summary)
+        try container.encode(source, forKey: .source)
+        try container.encode(coachPlanId, forKey: .coachPlanId)
+        try container.encode(expiresOnCompletion, forKey: .expiresOnCompletion)
+        try container.encode(generatedForRange, forKey: .generatedForRange)
     }
 }
 
@@ -85,6 +115,11 @@ struct RoutineWorkout: Identifiable, Codable, Hashable {
     let name: String
     var wtsText: String
     var repsText: String
+}
+
+enum RoutineSource: String, Codable, Hashable {
+    case user
+    case coach
 }
 
 @MainActor

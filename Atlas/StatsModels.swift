@@ -1,6 +1,6 @@
 import Foundation
 
-enum StatsLens: String, CaseIterable, Identifiable {
+enum StatsLens: String, CaseIterable, Identifiable, Codable, Hashable {
     case week = "Week"
     case month = "Month"
     case all = "All-time"
@@ -8,7 +8,10 @@ enum StatsLens: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum MuscleGroup: String, CaseIterable, Identifiable {
+/// Back-compat alias so older code that referenced StatsRange continues to work.
+typealias StatsRange = StatsLens
+
+enum MuscleGroup: String, CaseIterable, Identifiable, Codable, Hashable {
     case legs = "Legs"
     case back = "Back"
     case chest = "Chest"
@@ -36,6 +39,7 @@ extension MuscleGroup {
 }
 
 struct BucketScore: Equatable {
+    var bucket: MuscleGroup
     var score0to10: Int          // 0...10
     var progress01: Double       // 0.0...1.0
     var reasons: [String] = []
@@ -43,7 +47,6 @@ struct BucketScore: Equatable {
 }
 
 extension BucketScore {
-    var bucket: MuscleGroup { MuscleGroup.allCases.first ?? .legs }
     var score: Int { score0to10 }
 }
 
@@ -78,7 +81,7 @@ struct StatsMetrics: Equatable {
 
     static func empty(_ lens: StatsLens) -> StatsMetrics {
         let emptyMuscle = Dictionary(uniqueKeysWithValues: MuscleGroup.allCases.map {
-            ($0, BucketScore(score0to10: 0, progress01: 0))
+            ($0, BucketScore(bucket: $0, score0to10: 0, progress01: 0))
         })
         return StatsMetrics(
             lens: lens,

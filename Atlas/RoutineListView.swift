@@ -176,6 +176,9 @@ func routineOverviewText(_ routine: Routine) -> String {
 private func routineTags(_ routine: Routine) -> [String] {
     let title = routine.name.lowercased()
     var tags: [String] = []
+    if routine.source == .coach {
+        tags.append("Coach")
+    }
     if title.contains("pull") || title.contains("back") { tags.append("Pull") }
     if title.contains("push") || title.contains("chest") { tags.append("Push") }
     if title.contains("leg") || title.contains("legs") { tags.append("Legs") }
@@ -198,6 +201,21 @@ private struct RoutineCardView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    if routine.source == .coach {
+                        Text("Coach")
+                            .appFont(.caption, weight: .bold)
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(.white.opacity(0.08))
+                            )
+                            .overlay(
+                                Capsule()
+                                    .stroke(.white.opacity(0.15), lineWidth: 1)
+                            )
+                    }
                     Spacer()
                     HStack(spacing: 10) {
                         Text(routineOverviewText(routine))

@@ -44,6 +44,7 @@ import SwiftData
 final class WorkoutSession {
     @Attribute(.unique) var id: UUID
     var routineId: UUID?
+    var routineTemplateId: UUID?
     var routineTitle: String
     var startedAt: Date
     var endedAt: Date?
@@ -63,6 +64,7 @@ final class WorkoutSession {
     init(
         id: UUID = UUID(),
         routineId: UUID?,
+        routineTemplateId: UUID? = nil,
         routineTitle: String,
         startedAt: Date = Date(),
         endedAt: Date? = nil,
@@ -80,6 +82,7 @@ final class WorkoutSession {
     ) {
         self.id = id
         self.routineId = routineId
+        self.routineTemplateId = routineTemplateId
         self.routineTitle = routineTitle
         self.startedAt = startedAt
         self.endedAt = endedAt

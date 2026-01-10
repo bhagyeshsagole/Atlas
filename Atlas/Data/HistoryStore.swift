@@ -64,7 +64,7 @@ final class HistoryStore: ObservableObject {
         cloudSyncCoordinator = coordinator
     }
 
-    func startSession(routineId: UUID?, routineTitle: String, exercises: [String]) -> WorkoutSession {
+    func startSession(routineId: UUID?, routineTitle: String, exercises: [String], routineTemplateId: UUID? = nil) -> WorkoutSession {
         // Re-entrancy guard: reuse any active draft for the same routine to avoid duplicate starts.
         if let active = existingActiveSession(routineId: routineId, routineTitle: routineTitle) {
             return active
@@ -72,6 +72,7 @@ final class HistoryStore: ObservableObject {
 
         let session = WorkoutSession(
             routineId: routineId,
+            routineTemplateId: routineTemplateId ?? routineId,
             routineTitle: routineTitle,
             startedAt: Date(),
             endedAt: nil,

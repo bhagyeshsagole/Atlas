@@ -5,63 +5,86 @@ struct StatsView: View {
     @StateObject private var statsStore = StatsStore()
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var allSessions: [WorkoutSession]
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
-    @State private var selectedLens: StatsLens = .week
     @State private var showCoverageDetail = false
+    @State private var showCoachPlanConfirm = false
+    @EnvironmentObject private var routineStore: RoutineStore
 
     private let spacing: CGFloat = 18
 
     var body: some View {
         let preferredUnit = WorkoutUnits(from: weightUnit)
-        let metrics = statsStore.metrics(for: selectedLens)
+        let metrics = statsStore.metrics(for: statsStore.selectedRange)
         let scores = metrics.muscle
         let coach = metrics.coach
 
         ZStack {
             Color.black.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: spacing) {
-                Text("Stats")
-                    .appFont(.title, weight: .semibold)
-                    .foregroundStyle(.white)
+            ScrollView {
+                VStack(alignment: .leading, spacing: spacing) {
+                    Text("Stats")
+                        .appFont(.title, weight: .semibold)
+                        .foregroundStyle(.white)
 
-                Picker("Range", selection: $selectedLens) {
-                    ForEach(StatsLens.allCases) { range in
-                        Text(range.rawValue).tag(range)
+                    Picker("Range", selection: $statsStore.selectedRange) {
+                        ForEach(StatsLens.allCases) { range in
+                            Text(range.rawValue).tag(range)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+
+                    MuscleCoverageCard(scores: scores, range: statsStore.selectedRange) {
+                        Haptics.playLightTap()
+                        showCoverageDetail = true
+                    }
+
+                    HStack(spacing: 14) {
+                        WorkloadCard(metrics: metrics, range: statsStore.selectedRange, preferredUnit: preferredUnit)
+                            .frame(maxWidth: .infinity, minHeight: 120)
+                        CoachCard(coach: coach)
+                            .frame(maxWidth: .infinity, minHeight: 120)
+                    }
+
+                    CreateCoachPlanCard {
+                        Haptics.playLightTap()
+                        showCoachPlanConfirm = true
                     }
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-
-                MuscleCoverageCard(scores: scores, range: selectedLens) {
-                    Haptics.playLightTap()
-                    showCoverageDetail = true
-                }
-
-                HStack(spacing: 14) {
-                    WorkloadCard(metrics: metrics, range: selectedLens, preferredUnit: preferredUnit)
-                        .frame(maxWidth: .infinity, minHeight: 120)
-                    CoachCard(coach: coach)
-                        .frame(maxWidth: .infinity, minHeight: 120)
-                }
-
-                Spacer()
+                .padding(.horizontal, 20)
+                .padding(.top, AppStyle.screenTopPadding + AppStyle.headerTopPadding)
+                .padding(.bottom, 110)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, AppStyle.screenTopPadding + AppStyle.headerTopPadding)
-            .padding(.bottom, 110)
+            .scrollIndicators(.hidden)
+            .safeAreaPadding(.top)
         }
         .sheet(isPresented: $showCoverageDetail) {
-            MuscleCoverageDetailSheet(scores: scores, lens: selectedLens)
+            MuscleCoverageDetailSheet(scores: scores, lens: statsStore.selectedRange)
         }
         .tint(.primary)
-        .animation(.easeInOut(duration: 0.28), value: selectedLens)
+        .animation(.easeInOut(duration: 0.28), value: statsStore.selectedRange)
         .onAppear {
             statsStore.updateSessions(Array(allSessions))
         }
         .onChange(of: allSessions) { _, newValue in
             statsStore.updateSessions(Array(newValue))
         }
+        .alert("Create 10/10 Routine?", isPresented: $showCoachPlanConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Create", role: .none) {
+                createCoachPlans(from: metrics)
+            }
+        } message: {
+            Text("This will add coach-generated routines to Start Workout for \(statsStore.selectedRange.rawValue). They’ll disappear after you complete them.")
+        }
     }
 
+    private func createCoachPlans(from metrics: StatsMetrics) {
+        let plans = CoachPlanGenerator.generatePlans(for: metrics, range: statsStore.selectedRange)
+        for routine in plans {
+            routineStore.addRoutine(routine)
+        }
+    }
 }
 
 private struct WorkloadCard: View {
@@ -157,15 +180,18 @@ private struct MuscleCoverageCard: View {
     }
 
     private func muscleRow(for bucket: MuscleBucket) -> some View {
-        let score = scores[bucket]?.score ?? 0
-        return VStack(alignment: .leading, spacing: 6) {
+        guard let bucketScore = scores[bucket] else {
+            return AnyView(EmptyView())
+        }
+        let displayValue: String = (range == .all) ? "\(Int(bucketScore.progress01 * 100))%" : "\(bucketScore.score0to10) / 10"
+        let view = VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(bucket.displayName)
                     .appFont(.body, weight: .semibold)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Spacer()
-                Text("\(score.score0to10) / 10")
+                Text(displayValue)
                     .appFont(.body, weight: .semibold)
                     .foregroundStyle(.primary.opacity(0.8))
                     .lineLimit(1)
@@ -176,12 +202,13 @@ private struct MuscleCoverageCard: View {
                         .fill(Color.white.opacity(0.08))
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color.white.opacity(0.28))
-                        .frame(width: max(8, geo.size.width * CGFloat(min(score.progress0to1, 1.0))))
-                        .animation(.easeOut(duration: 0.25), value: score)
+                        .frame(width: max(8, geo.size.width * CGFloat(min(bucketScore.progress01, 1.0))))
+                        .animation(.easeOut(duration: 0.25), value: bucketScore.progress01)
                 }
             }
             .frame(height: 10)
         }
+        return AnyView(view)
     }
 }
 
@@ -271,8 +298,13 @@ private func detailRow(score: BucketScore) -> some View {
                 Text(score.bucket.displayName)
                     .appFont(.body, weight: .semibold)
                 Spacer()
-                Text("\(score.score0to10) / 10")
-                    .appFont(.body, weight: .semibold)
+                if lens == .all {
+                    Text("\(Int(score.progress01 * 100))%")
+                        .appFont(.body, weight: .semibold)
+                } else {
+                    Text("\(score.score0to10) / 10")
+                        .appFont(.body, weight: .semibold)
+                }
             }
             .foregroundStyle(.primary)
 
@@ -307,5 +339,101 @@ private func detailRow(score: BucketScore) -> some View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
+    }
+}
+
+private enum CoachPlanGenerator {
+    static func generatePlans(for metrics: StatsMetrics, range: StatsLens) -> [Routine] {
+        let planId = UUID()
+        let sortedBuckets = metrics.muscle.values.sorted { $0.score0to10 < $1.score0to10 }
+        let targetBuckets = Array(sortedBuckets.prefix(max(1, min(3, sortedBuckets.count))))
+
+        var routines: [Routine] = []
+        for bucketScore in targetBuckets {
+            let exercises = exercises(for: bucketScore.bucket)
+            guard exercises.isEmpty == false else { continue }
+            let workouts = exercises.map { name in
+                RoutineWorkout(id: UUID(), name: name, wtsText: "3x8", repsText: "3x8")
+            }
+            let routine = Routine(
+                id: UUID(),
+                name: "Coach: \(bucketScore.bucket.displayName) 10/10",
+                createdAt: Date(),
+                workouts: workouts,
+                summary: "Coach-generated to shore up \(bucketScore.bucket.displayName) and reach 10/10.",
+                source: .coach,
+                coachPlanId: planId,
+                expiresOnCompletion: true,
+                generatedForRange: range
+            )
+            routines.append(routine)
+        }
+
+        if routines.isEmpty {
+            let fallbackExercises = ["Squat", "Row", "Press", "Core Plank"]
+            let workouts = fallbackExercises.map { name in
+                RoutineWorkout(id: UUID(), name: name, wtsText: "3x8", repsText: "3x8")
+            }
+            let fallback = Routine(
+                id: UUID(),
+                name: "Coach: Balanced 10/10",
+                createdAt: Date(),
+                workouts: workouts,
+                summary: "Coach-generated to balance your week and reach 10/10.",
+                source: .coach,
+                coachPlanId: planId,
+                expiresOnCompletion: true,
+                generatedForRange: range
+            )
+            routines.append(fallback)
+        }
+
+        return routines
+    }
+
+    private static func exercises(for bucket: MuscleGroup) -> [String] {
+        switch bucket {
+        case .legs:
+            return ["Back Squat", "Romanian Deadlift", "Walking Lunge", "Calf Raise"]
+        case .back:
+            return ["Pull-Up or Lat Pulldown", "Barbell Row", "Single-Arm Dumbbell Row", "Face Pull"]
+        case .chest:
+            return ["Bench Press", "Incline Dumbbell Press", "Push-Up", "Cable Fly"]
+        case .shoulders:
+            return ["Overhead Press", "Dumbbell Lateral Raise", "Rear Delt Fly", "Face Pull"]
+        case .arms:
+            return ["Barbell Curl", "Hammer Curl", "Tricep Pressdown", "Dips"]
+        case .core:
+            return ["Plank", "Hanging Knee Raise", "Pallof Press", "Farmer Carry"]
+        }
+    }
+}
+
+private struct CreateCoachPlanCard: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Create 10/10 Routine")
+                        .appFont(.section, weight: .bold)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary.opacity(0.7))
+                }
+                Text("Generate coach routines to cover weak spots. They disappear after you complete them.")
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                AtlasPillButton("Create") {
+                    onTap()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
