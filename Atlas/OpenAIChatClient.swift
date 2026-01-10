@@ -36,6 +36,11 @@
 
 import Foundation
 
+fileprivate struct ChatMessage: Codable {
+    let role: String
+    let content: String
+}
+
 struct RoutineParseOutput: Codable {
     let workouts: [RoutineParseWorkout]
 }
@@ -62,6 +67,24 @@ struct OpenAIError: Error {
 }
 
 struct OpenAIChatClient {
+    /// Simple chat helper for generic prompts.
+    static func chat(prompt: String) async throws -> String {
+        let messages: [ChatMessage] = [
+            .init(role: "user", content: prompt)
+        ]
+        let request = try buildRequest(messages: messages, temperature: 0.2, responseFormat: nil)
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+        #if DEBUG
+        print("[AI][CHAT] status=\(response.statusCode) ms=\(elapsed)")
+        #endif
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+        return stripCodeFences(from: content).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+    }
     /// Sends a structured parsing request to OpenAI and maps the response to workout data.
     /// Change impact: Edit to reshape the parsing prompt, temperature, or JSON decoding strategy.
     static func parseRoutineWorkouts(rawText: String) async throws -> RoutineParseOutput {
@@ -558,16 +581,11 @@ private extension OpenAIChatClient {
     }
 }
 
-private struct OpenAIChatRequest: Codable {
+private struct OAChatRequest: Codable {
     let model: String
     let messages: [ChatMessage]
     let temperature: Double
     let response_format: ResponseFormat?
-}
-
-private struct ChatMessage: Codable {
-    let role: String
-    let content: String
 }
 
 private struct ResponseFormat: Codable {
@@ -634,7 +652,7 @@ private extension OpenAIChatClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 25
 
-        let payload = OpenAIChatRequest(
+        let payload = OAChatRequest(
             model: OpenAIConfig.model,
             messages: messages,
             temperature: temperature,

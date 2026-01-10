@@ -22,6 +22,17 @@ enum MuscleGroup: String, CaseIterable, Identifiable, Codable, Hashable {
     var id: String { rawValue }
 }
 
+enum MovementTag: String, CaseIterable, Codable, Hashable, Identifiable {
+    case horizontalPress, inclinePress, flyAdduction, dipPattern
+    case verticalPull, horizontalRow, rearDeltUpperBack, scapControl
+    case kneeDominant, hinge, singleLeg, calves, gluteIso
+    case overheadPress, lateralRaise, rearDeltER
+    case bicepsCurl, tricepsExtension, forearmGrip
+    case antiExtension, antiRotation, flexion, carry
+
+    var id: String { rawValue }
+}
+
 // Back-compat for older StatsView code.
 typealias MuscleBucket = MuscleGroup
 
@@ -38,16 +49,17 @@ extension MuscleGroup {
     }
 }
 
-struct BucketScore: Equatable {
+struct BucketScore: Equatable, Identifiable {
+    var id: String { bucket.id }
     var bucket: MuscleGroup
     var score0to10: Int          // 0...10
     var progress01: Double       // 0.0...1.0
+    var coveredTags: [MovementTag]
+    var missingTags: [MovementTag]
+    var hardSets: Int
+    var trainingDays: Int
     var reasons: [String] = []
     var suggestions: [String] = []
-}
-
-extension BucketScore {
-    var score: Int { score0to10 }
 }
 
 extension Int {
@@ -81,7 +93,7 @@ struct StatsMetrics: Equatable {
 
     static func empty(_ lens: StatsLens) -> StatsMetrics {
         let emptyMuscle = Dictionary(uniqueKeysWithValues: MuscleGroup.allCases.map {
-            ($0, BucketScore(bucket: $0, score0to10: 0, progress01: 0))
+            ($0, BucketScore(bucket: $0, score0to10: 0, progress01: 0, coveredTags: [], missingTags: [], hardSets: 0, trainingDays: 0))
         })
         return StatsMetrics(
             lens: lens,

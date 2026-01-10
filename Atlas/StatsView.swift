@@ -251,6 +251,7 @@ private struct CoachCard: View {
 private struct MuscleCoverageDetailSheet: View {
     let scores: [MuscleGroup: BucketScore]?
     let lens: StatsLens
+    @State private var activeChatContext: MuscleCoachContext?
 
     var body: some View {
         NavigationStack {
@@ -271,7 +272,15 @@ private struct MuscleCoverageDetailSheet: View {
                         VStack(alignment: .leading, spacing: 14) {
                             ForEach(MuscleBucket.allCases) { bucket in
                                 if let score = scores[bucket] {
-                                    detailRow(score: score)
+                                    detailRow(score: score) {
+                                        activeChatContext = MuscleCoachContext(
+                                            selectedRange: lens,
+                                            bucket: bucket,
+                                            score: score.score0to10,
+                                            reasons: score.reasons,
+                                            suggestions: score.suggestions
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -290,9 +299,13 @@ private struct MuscleCoverageDetailSheet: View {
             .padding(AppStyle.contentPaddingLarge)
             .background(Color.black.opacity(0.95).ignoresSafeArea())
         }
+        .sheet(item: $activeChatContext) { context in
+            CoachChatView(context: context)
+                .presentationDetents([.medium, .large])
+        }
     }
 
-private func detailRow(score: BucketScore) -> some View {
+    private func detailRow(score: BucketScore, onTap: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(score.bucket.displayName)
@@ -307,6 +320,10 @@ private func detailRow(score: BucketScore) -> some View {
                 }
             }
             .foregroundStyle(.primary)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onTap()
+            }
 
             if !score.reasons.isEmpty {
                 Text("Why")
@@ -357,14 +374,16 @@ private enum CoachPlanGenerator {
             }
             let routine = Routine(
                 id: UUID(),
-                name: "Coach: \(bucketScore.bucket.displayName) 10/10",
+                name: bucketScore.bucket.displayName,
                 createdAt: Date(),
                 workouts: workouts,
                 summary: "Coach-generated to shore up \(bucketScore.bucket.displayName) and reach 10/10.",
                 source: .coach,
                 coachPlanId: planId,
                 expiresOnCompletion: true,
-                generatedForRange: range
+                generatedForRange: range,
+                coachName: "Titan",
+                coachGroup: "Coach Group \(planId.uuidString.prefix(4))"
             )
             routines.append(routine)
         }
@@ -376,14 +395,16 @@ private enum CoachPlanGenerator {
             }
             let fallback = Routine(
                 id: UUID(),
-                name: "Coach: Balanced 10/10",
+                name: "Balanced",
                 createdAt: Date(),
                 workouts: workouts,
                 summary: "Coach-generated to balance your week and reach 10/10.",
                 source: .coach,
                 coachPlanId: planId,
                 expiresOnCompletion: true,
-                generatedForRange: range
+                generatedForRange: range,
+                coachName: "Titan",
+                coachGroup: "Coach Group \(planId.uuidString.prefix(4))"
             )
             routines.append(fallback)
         }

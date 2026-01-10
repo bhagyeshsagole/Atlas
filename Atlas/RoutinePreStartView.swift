@@ -45,6 +45,11 @@ struct RoutinePreStartView: View {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                             sectionHeader("Summary")
+                            if routine.isCoachSuggested {
+                                Text("Titan suggested this routine to shore up gaps and reach 10/10.")
+                                    .appFont(.footnote, weight: .semibold)
+                                    .foregroundStyle(.secondary)
+                            }
                             Text(spacedSummary(routine.summary))
                                 .appFont(.body, weight: .regular)
                                 .foregroundStyle(.primary)

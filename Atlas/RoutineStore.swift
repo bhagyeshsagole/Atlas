@@ -47,6 +47,8 @@ struct Routine: Identifiable, Codable, Hashable {
     var coachPlanId: UUID?
     var expiresOnCompletion: Bool
     var generatedForRange: StatsLens?
+    var coachName: String?
+    var coachGroup: String?
 
     /// DEV MAP: Routine data model; persisted via JSON in RoutineStore.
     init(
@@ -58,7 +60,9 @@ struct Routine: Identifiable, Codable, Hashable {
         source: RoutineSource = .user,
         coachPlanId: UUID? = nil,
         expiresOnCompletion: Bool = false,
-        generatedForRange: StatsLens? = nil
+        generatedForRange: StatsLens? = nil,
+        coachName: String? = nil,
+        coachGroup: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -69,6 +73,8 @@ struct Routine: Identifiable, Codable, Hashable {
         self.coachPlanId = coachPlanId
         self.expiresOnCompletion = expiresOnCompletion
         self.generatedForRange = generatedForRange
+        self.coachName = coachName
+        self.coachGroup = coachGroup
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -81,6 +87,8 @@ struct Routine: Identifiable, Codable, Hashable {
         case coachPlanId
         case expiresOnCompletion
         case generatedForRange
+        case coachName
+        case coachGroup
     }
 
     init(from decoder: Decoder) throws {
@@ -94,6 +102,8 @@ struct Routine: Identifiable, Codable, Hashable {
         coachPlanId = try container.decodeIfPresent(UUID.self, forKey: .coachPlanId)
         expiresOnCompletion = try container.decodeIfPresent(Bool.self, forKey: .expiresOnCompletion) ?? false
         generatedForRange = try container.decodeIfPresent(StatsLens.self, forKey: .generatedForRange)
+        coachName = try container.decodeIfPresent(String.self, forKey: .coachName)
+        coachGroup = try container.decodeIfPresent(String.self, forKey: .coachGroup)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -107,6 +117,8 @@ struct Routine: Identifiable, Codable, Hashable {
         try container.encode(coachPlanId, forKey: .coachPlanId)
         try container.encode(expiresOnCompletion, forKey: .expiresOnCompletion)
         try container.encode(generatedForRange, forKey: .generatedForRange)
+        try container.encode(coachName, forKey: .coachName)
+        try container.encode(coachGroup, forKey: .coachGroup)
     }
 }
 
@@ -202,4 +214,10 @@ final class RoutineStore: ObservableObject {
         routines[index] = routine
         save()
     }
+}
+
+extension Routine {
+    var isCoachSuggested: Bool { source == .coach }
+    var coachDisplayName: String? { coachName }
+    var coachGroupLabel: String? { coachGroup }
 }

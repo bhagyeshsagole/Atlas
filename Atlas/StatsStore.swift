@@ -104,77 +104,7 @@ final class StatsStore: ObservableObject {
     }
 
     private func computeMuscleScores(for lens: StatsLens, sessions: [WorkoutSession]) -> [MuscleGroup: BucketScore] {
-        var setCounts: [MuscleGroup: Double] = Dictionary(uniqueKeysWithValues: MuscleGroup.allCases.map { ($0, 0.0) })
-        for session in sessions {
-            for exercise in session.exercises {
-                let groups = classify(exerciseName: exercise.name)
-                for set in exercise.sets {
-                    let weight = setWeightMultiplier(for: set.tag)
-                    for group in groups {
-                        setCounts[group, default: 0] += weight
-                    }
-                }
-            }
-        }
-
-        var scores: [MuscleGroup: BucketScore] = [:]
-        let totalSets = setCounts.values.reduce(0, +)
-        for group in MuscleGroup.allCases {
-            let sets = setCounts[group] ?? 0
-            switch lens {
-            case .all:
-                let progress = totalSets > 0 ? max(0, min(1, sets / totalSets)) : 0
-                let scoreInt = Int((progress * 10).rounded())
-                let reasons = sets > 0 ? ["\(group.displayName) made up \(Int(progress * 100))% of total sets"] : ["No sets logged"]
-                let suggestions: [String]
-                if totalSets == 0 {
-                    suggestions = ["Add a primary \(group.displayName) lift to begin balancing coverage."]
-                } else if sets < (totalSets * 0.2) {
-                    suggestions = ["Add a primary \(group.displayName) lift to balance distribution", "Layer an accessory for \(group.displayName) to raise share"]
-                } else {
-                    suggestions = []
-                }
-                scores[group] = BucketScore(bucket: group, score0to10: scoreInt, progress01: progress, reasons: reasons, suggestions: suggestions)
-            case .week, .month:
-                let target = 10.0
-                let progress = min(1.0, sets / target)
-                let scoreInt = Int((progress * 10).rounded())
-                let reasons = sets > 0 ? ["Logged \(Int(sets.rounded())) hard sets"] : ["No sets logged"]
-                let suggestions = sets < target ? ["Add a primary \(group.displayName) lift", "Add an accessory to cover missing pattern"] : []
-                scores[group] = BucketScore(bucket: group, score0to10: scoreInt, progress01: progress, reasons: reasons, suggestions: suggestions)
-            }
-        }
-        return scores
-    }
-
-    private func classify(exerciseName: String) -> [MuscleGroup] {
-        let lower = exerciseName.lowercased()
-        var groups: [MuscleGroup] = []
-        func contains(_ keywords: [String]) -> Bool {
-            keywords.contains { lower.contains($0) }
-        }
-        if contains(["squat", "lunge", "leg press", "leg curl", "rdl", "deadlift", "hip thrust", "calf"]) {
-            groups.append(.legs)
-        }
-        if contains(["bench", "press", "pushup", "push-up", "fly"]) {
-            groups.append(.chest)
-        }
-        if contains(["row", "pulldown", "pull-down", "pullup", "pull-up"]) {
-            groups.append(.back)
-        }
-        if contains(["shoulder", "ohp", "overhead", "lateral raise", "rear delt", "face pull"]) {
-            groups.append(.shoulders)
-        }
-        if contains(["curl", "bicep", "biceps", "tricep", "triceps", "extension", "dip"]) {
-            groups.append(.arms)
-        }
-        if contains(["plank", "crunch", "situp", "sit-up", "ab", "core"]) {
-            groups.append(.core)
-        }
-        if groups.isEmpty {
-            groups.append(.core)
-        }
-        return groups
+        MuscleCoverageScoring.computeBucketScores(sessions: sessions, range: lens)
     }
 
     private func computeCoach(from sessions: [WorkoutSession], now: Date) -> CoachSummary {
@@ -208,14 +138,4 @@ final class StatsStore: ObservableObject {
         return count
     }
 
-    private func setWeightMultiplier(for tag: String) -> Double {
-        switch SetTag(rawValue: tag) {
-        case .W:
-            return 0.5
-        case .DS:
-            return 0.75
-        case .S, .none:
-            return 1.0
-        }
-    }
 }

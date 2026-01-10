@@ -185,41 +185,62 @@ struct WorkoutSessionView: View {
                 }
             }
         }
-        .confirmationDialog("End workout?", isPresented: $showEndConfirm, titleVisibility: .visible) {
-            Button("End Session", role: .destructive) {
-                endSession()
-            }
-            Button("Keep Going", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to end this session?")
-        }
-        .alert("Remove this set?", isPresented: $showConfirmDelete1) {
-            Button("Continue", role: .destructive) {
-                showConfirmDelete1 = false
-                showConfirmDelete2 = true
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDeleteSetID = nil
-            }
-        } message: {
-            Text("This action cannot be undone.")
-        }
-        .alert("Are you absolutely sure?", isPresented: $showConfirmDelete2) {
-            Button("Remove", role: .destructive) {
-                if let id = pendingDeleteSetID, let set = loggedSetsForCurrent.first(where: { $0.id == id }) {
-                    deleteSet(set)
-                }
-                pendingDeleteSetID = nil
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDeleteSetID = nil
-            }
-        } message: {
-            Text("Remove this set permanently.")
-        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 reloadForCurrentExercise()
+            }
+        }
+        .overlay {
+            if showConfirmDelete1 {
+                GlassConfirmPopup(
+                    title: "Remove this set?",
+                    message: "This action cannot be undone.",
+                    primaryTitle: "Continue",
+                    secondaryTitle: "Cancel",
+                    isDestructive: true,
+                    isPresented: $showConfirmDelete1,
+                    onPrimary: {
+                        showConfirmDelete2 = true
+                    },
+                    onSecondary: {
+                        pendingDeleteSetID = nil
+                    }
+                )
+            }
+            if showConfirmDelete2 {
+                GlassConfirmPopup(
+                    title: "Are you absolutely sure?",
+                    message: "Remove this set permanently.",
+                    primaryTitle: "Remove",
+                    secondaryTitle: "Cancel",
+                    isDestructive: true,
+                    isPresented: $showConfirmDelete2,
+                    onPrimary: {
+                        if let id = pendingDeleteSetID, let set = loggedSetsForCurrent.first(where: { $0.id == id }) {
+                            deleteSet(set)
+                        }
+                        pendingDeleteSetID = nil
+                        showConfirmDelete1 = false
+                    },
+                    onSecondary: {
+                        pendingDeleteSetID = nil
+                        showConfirmDelete1 = false
+                    }
+                )
+            }
+            if showEndConfirm {
+                GlassConfirmPopup(
+                    title: "End workout?",
+                    message: "This will finish the session and save your logged sets.",
+                    primaryTitle: "End",
+                    secondaryTitle: "Keep Going",
+                    isDestructive: true,
+                    isPresented: $showEndConfirm,
+                    onPrimary: {
+                        endSession()
+                    },
+                    onSecondary: { }
+                )
             }
         }
     }

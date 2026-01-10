@@ -48,4 +48,10 @@ enum Haptics {
     static func playMediumImpact() {
         playMediumTap()
     }
+
+    /// Heavy impact wrapper for destructive/confirms.
+    static func playHeavyImpact() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+    }
 }
