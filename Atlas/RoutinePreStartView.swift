@@ -45,10 +45,11 @@ struct RoutinePreStartView: View {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                             sectionHeader("Summary")
-                            Text(routine.summary.isEmpty ? "Summary unavailable — regenerate later" : routine.summary)
+                            Text(spacedSummary(routine.summary))
                                 .appFont(.body, weight: .regular)
                                 .foregroundStyle(.primary)
                                 .multilineTextAlignment(.leading)
+                                .lineSpacing(6)
 
                             Divider()
 
@@ -56,17 +57,11 @@ struct RoutinePreStartView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 ForEach(routine.workouts) { workout in
                                     AtlasRowPill {
-                                        HStack(spacing: AppStyle.rowSpacing) {
-                                            Text(workout.name)
-                                                .appFont(.body, weight: .semibold)
-                                                .foregroundStyle(.primary)
-                                                .lineLimit(1)
-                                            Spacer()
-                                            Text(workoutMetaText(workout))
-                                                .appFont(.footnote, weight: .regular)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
+                                        Text(workout.name)
+                                            .appFont(.body, weight: .semibold)
+                                            .foregroundStyle(.primary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .lineLimit(1)
                                     }
                                 }
                             }
@@ -121,14 +116,14 @@ struct RoutinePreStartView: View {
             .foregroundStyle(.primary)
     }
 
-    /// VISUAL TWEAK: Hide/show workout right-side meta by editing `workoutMetaText(...)`.
-    private func workoutMetaText(_ workout: RoutineWorkout) -> String {
-        let repsDisplay = workout.repsText
-            .replacingOccurrences(of: "x", with: "×")
-            .replacingOccurrences(of: "X", with: "×")
-        let weightDisplay = workout.wtsText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let right = weightDisplay.isEmpty ? "—" : weightDisplay
-        return repsDisplay.isEmpty ? right : "\(repsDisplay) · \(right)"
+    private func spacedSummary(_ text: String) -> String {
+        guard text.isEmpty == false else { return "Summary unavailable — regenerate later" }
+        var spaced = text
+        spaced = spaced.replacingOccurrences(of: "Focus:", with: "Focus:\n")
+        spaced = spaced.replacingOccurrences(of: "Volume:", with: "\nVolume:")
+        spaced = spaced.replacingOccurrences(of: "Rep ranges:", with: "Rep ranges:")
+        spaced = spaced.replacingOccurrences(of: "Tip:", with: "\nTip:")
+        return spaced.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

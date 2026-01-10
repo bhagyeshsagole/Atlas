@@ -69,22 +69,29 @@ struct WorkoutSessionView: View {
     @State private var lastSessionDate: Date?
     @State private var isLoadingCoaching = false // Indicates in-flight AI request.
     @State private var isAddingSet = false // Blocks duplicate set submissions.
-    @State private var showAltPopup = false // Shows alternate tag popup when true.
-    @State private var alternateButtonFrame: CGRect = .zero // Anchor frame for the alternate popup arrow.
-    @State private var popupSize: CGSize = .zero // Helps position the popup relative to the button.
-    @Environment(\.colorScheme) private var colorScheme
     @State private var completedSessionId: UUID?
     @State private var showSummary = false // Triggers the post-workout summary sheet.
-    private let menuBackgroundOpacity: Double = 0.96
-    private let menuBackgroundColorDark = Color.black
-    private let menuBackgroundColorLight = Color.white
     @State private var newExerciseName: String = "" // For adding ad-hoc exercises mid-session.
+    @State private var showNewWorkoutSheet = false
+    @State private var isAddingNewWorkout = false // Blocks double add in sheet.
+    @FocusState private var newWorkoutFieldFocused: Bool
     @FocusState private var focusedField: Field? // Keeps keyboard on weight or reps field.
     @State private var showTimerSheet = false
     @State private var timerMinutes: Int = 0
     @State private var timerSeconds: Int = 0
     @State private var timerRemaining: Int?
     @State private var timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    @State private var exerciseRefreshToken = UUID()
+    @State private var derivedThisSessionPlan: String = "Dial in form and keep rest tight."
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var dragOffset: CGFloat = 0
+    @State private var didFireCompletionHaptic = false
+    @State private var showEndConfirm = false
+    @State private var showTipsSheet = false
+    @State private var showPlanSheet = false
+    @State private var pendingDeleteSetID: UUID?
+    @State private var showConfirmDelete1 = false
+    @State private var showConfirmDelete2 = false
 
     init(routine: Routine) {
         self.routine = routine
@@ -94,35 +101,30 @@ struct WorkoutSessionView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            VStack(spacing: AppStyle.sectionSpacing) {
-                TabView(selection: $exerciseIndex) {
-                    ForEach(Array(sessionExercises.enumerated()), id: \.offset) { index, _ in
-                        exercisePage
-                            .tag(index)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-            }
-            .padding(AppStyle.contentPaddingLarge)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .onAppear {
-                loadCoachingAndHistory()
-            }
-            .onChange(of: exerciseIndex) { _, newIndex in
-                clearFocus()
-                resetDraftForNewExercise()
-                loadCoachingAndHistory()
-                #if DEBUG
-                print("[SESSION][PAGER] index=\(newIndex) exercise=\(currentExercise.name)")
-                #endif
-            }
-
+        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+            topPager
+                .padding(.horizontal, AppStyle.contentPaddingLarge)
+                .padding(.top, AppStyle.contentPaddingLarge)
+            setLogSection
+                .padding(.horizontal, AppStyle.contentPaddingLarge)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.black.ignoresSafeArea())
+        .onAppear {
+            reloadForCurrentExercise()
+        }
+        .onChange(of: exerciseIndex) { _, newIndex in
+            clearFocus()
+            resetDraftForNewExercise()
+            reloadForCurrentExercise()
+            #if DEBUG
+            print("[SESSION][PAGER] index=\(newIndex) exercise=\(currentExercise.name)")
+            #endif
         }
         .navigationTitle("Session")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .background(Color(.systemBackground))
         .tint(.primary)
         .safeAreaInset(edge: .bottom) {
             if !isEditingSetFields {
@@ -130,10 +132,6 @@ struct WorkoutSessionView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .animation(AppStyle.popupAnimation, value: isEditingSetFields)
             }
-        }
-        .overlay(alternatePopupOverlay)
-        .onPreferenceChange(ViewFrameKey.self) { frame in
-            alternateButtonFrame = frame
         }
         .sheet(isPresented: $showSummary) {
             if let sessionId = completedSessionId {
@@ -144,6 +142,9 @@ struct WorkoutSessionView: View {
         }
         .sheet(isPresented: $showTimerSheet) {
             timerSheet
+        }
+        .sheet(isPresented: $showNewWorkoutSheet) {
+            newWorkoutSheet
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -173,21 +174,61 @@ struct WorkoutSessionView: View {
         }
         .onReceive(timer) { _ in
             guard let remaining = timerRemaining, remaining >= 0 else { return }
-            if remaining > 0 {
+            if remaining > 1 {
                 timerRemaining = remaining - 1
             } else {
                 timerRemaining = nil
-                Haptics.playMediumTap()
+                if !didFireCompletionHaptic {
+                    didFireCompletionHaptic = true
+                    RestTimerHaptics.playCompletionPattern()
+                }
+            }
+        }
+        .confirmationDialog("End workout?", isPresented: $showEndConfirm, titleVisibility: .visible) {
+            Button("End Session", role: .destructive) {
+                endSession()
+            }
+            Button("Keep Going", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to end this session?")
+        }
+        .alert("Remove this set?", isPresented: $showConfirmDelete1) {
+            Button("Continue", role: .destructive) {
+                showConfirmDelete1 = false
+                showConfirmDelete2 = true
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDeleteSetID = nil
+            }
+        } message: {
+            Text("This action cannot be undone.")
+        }
+        .alert("Are you absolutely sure?", isPresented: $showConfirmDelete2) {
+            Button("Remove", role: .destructive) {
+                if let id = pendingDeleteSetID, let set = loggedSetsForCurrent.first(where: { $0.id == id }) {
+                    deleteSet(set)
+                }
+                pendingDeleteSetID = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDeleteSetID = nil
+            }
+        } message: {
+            Text("Remove this set permanently.")
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                reloadForCurrentExercise()
             }
         }
     }
 
-    private var exercisePage: some View {
+    private var topPager: some View {
         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+            pagerDots
             Text(currentExercise.name)
                 .appFont(.title, weight: .semibold)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, AppStyle.headerTopPadding)
 
             GlassCard {
                 VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
@@ -199,18 +240,91 @@ struct WorkoutSessionView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            setLogSection
+            .contentShape(Rectangle())
+            .offset(x: dragOffset)
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: dragOffset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if abs(value.translation.width) > abs(value.translation.height) * 1.2 {
+                            dragOffset = value.translation.width
+                        }
+                    }
+                    .onEnded { value in
+                        let threshold: CGFloat = 80
+                        var newIndex = exerciseIndex
+                        if value.translation.width < -threshold && exerciseIndex < sessionExercises.count - 1 {
+                            newIndex += 1
+                        } else if value.translation.width > threshold && exerciseIndex > 0 {
+                            newIndex -= 1
+                        }
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            dragOffset = 0
+                            if newIndex != exerciseIndex {
+                                exerciseIndex = newIndex
+                            }
+                        }
+                    }
+            )
         }
+    }
+
+    private var pagerDots: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(sessionExercises.enumerated()), id: \.0) { index, _ in
+                Group {
+                    if index == exerciseIndex {
+                        Capsule()
+                            .fill(Color.white.opacity(0.9))
+                            .frame(width: 18, height: 6)
+                    } else {
+                        Circle()
+                            .fill(Color.white.opacity(0.35))
+                            .frame(width: 8, height: 8)
+                    }
+                }
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        exerciseIndex = index
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var coachingSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.subheaderSpacing) {
-            Text("Technique Tips")
-                .appFont(.section, weight: .bold)
+            HStack {
+                Text("Technique Tips")
+                    .appFont(.section, weight: .bold)
+                Spacer()
+                Button("More") {
+                    showTipsSheet = true
+                }
+                .appFont(.footnote, weight: .semibold)
+            }
             Text(currentSuggestion?.techniqueTips ?? "Tips unavailable — continue logging.")
                 .appFont(.body, weight: .regular)
                 .foregroundStyle(.primary)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .sheet(isPresented: $showTipsSheet) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    Text("Technique Tips")
+                        .appFont(.title3, weight: .semibold)
+                        .foregroundStyle(.primary)
+                    Text(currentSuggestion?.techniqueTips ?? "Tips unavailable — continue logging.")
+                        .appFont(.body, weight: .regular)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer()
+                }
+                .padding(AppStyle.contentPaddingLarge)
+                .background(Color.black.opacity(0.95).ignoresSafeArea())
+            }
         }
     }
 
@@ -223,24 +337,54 @@ struct WorkoutSessionView: View {
                     .appFont(.body, weight: .regular)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(lastSessionLines, id: \.self) { line in
-                        Text(line)
-                            .appFont(.body, weight: .regular)
-                            .foregroundStyle(.primary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(lastSessionLines, id: \.self) { line in
+                            Text(line)
+                                .appFont(.body, weight: .regular)
+                                .foregroundStyle(.primary)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .frame(maxHeight: 160)
+                .scrollIndicators(.hidden)
             }
         }
     }
 
     private var thisSessionTargetsSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.subheaderSpacing) {
-            Text("This Session")
-                .appFont(.section, weight: .bold)
-            Text(currentSuggestion?.thisSessionPlan ?? "Dial in form and keep rest tight.")
+            HStack {
+                Text("This Session")
+                    .appFont(.section, weight: .bold)
+                Spacer()
+                Button("More") {
+                    showPlanSheet = true
+                }
+                .appFont(.footnote, weight: .semibold)
+            }
+            Text(thisSessionPlanText)
                 .appFont(.body, weight: .regular)
                 .foregroundStyle(.primary)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .sheet(isPresented: $showPlanSheet) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    Text("This Session")
+                        .appFont(.title3, weight: .semibold)
+                        .foregroundStyle(.primary)
+                    Text(thisSessionPlanText)
+                        .appFont(.body, weight: .regular)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer()
+                }
+                .padding(AppStyle.contentPaddingLarge)
+                .background(Color.black.opacity(0.95).ignoresSafeArea())
+            }
         }
     }
 
@@ -258,7 +402,7 @@ struct WorkoutSessionView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(loggedSetsForCurrent, id: \.id) { set in
                                 AtlasRowPill {
-                                    HStack {
+                                    HStack(spacing: 12) {
                                         Text(set.tag)
                                             .appFont(.body, weight: .semibold)
                                             .padding(.horizontal, 8)
@@ -266,17 +410,39 @@ struct WorkoutSessionView: View {
                                             .background(
                                                 Capsule().fill(.white.opacity(0.1))
                                             )
-                                        Text(setLine(set))
-                                            .appFont(.body, weight: .regular)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(weightText(for: set))
+                                                .appFont(.body, weight: .semibold)
+                                                .foregroundStyle(.primary)
+                                            Text("× \(set.reps) reps")
+                                                .appFont(.footnote, weight: .semibold)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(
+                                                    Capsule().fill(Color.white.opacity(0.08))
+                                                )
+                                        }
                                         Spacer()
-                                        Text(set.createdAt, style: .time)
-                                            .appFont(.footnote, weight: .regular)
-                                            .foregroundStyle(.secondary)
+                                        Button {
+                                            pendingDeleteSetID = set.id
+                                            showConfirmDelete1 = true
+                                        } label: {
+                                            Text("Remove")
+                                                .appFont(.footnote, weight: .semibold)
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 6)
+                                                .background(
+                                                    Capsule().fill(Color.white.opacity(0.08))
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     Button(role: .destructive) {
-                                        deleteSet(set)
+                                        pendingDeleteSetID = set.id
+                                        showConfirmDelete1 = true
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
@@ -286,6 +452,10 @@ struct WorkoutSessionView: View {
                     }
                     .frame(maxHeight: 280)
                     .scrollIndicators(.hidden)
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 10)
+                            .onChanged { _ in }
+                    )
                 }
             }
 
@@ -328,151 +498,40 @@ struct WorkoutSessionView: View {
     }
 
     private var bottomActions: some View {
-        HStack(spacing: AppStyle.sectionSpacing) {
-            AtlasPillButton("New Workout") {
-                clearFocus()
-                Haptics.playLightTap()
-                showAltPopup = true
-            }
-            .frame(maxWidth: .infinity)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.preference(key: ViewFrameKey.self, value: proxy.frame(in: .global))
+        VStack(spacing: 12) {
+            HStack(spacing: AppStyle.sectionSpacing) {
+                AtlasPillButton("New Workout") {
+                    clearFocus()
+                    Haptics.playLightTap()
+                    newWorkoutFieldFocused = true
+                    showNewWorkoutSheet = true
                 }
-            )
-            AtlasPillButton(isLastExercise ? "End" : "Next") {
-                clearFocus()
-                Haptics.playLightTap()
-                if isLastExercise {
-                    endSession()
-                } else {
-                    goToNextExercise()
+                .frame(maxWidth: .infinity)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+
+                AtlasPillButton("End") {
+                    clearFocus()
+                    Haptics.playLightTap()
+                    showEndConfirm = true
                 }
+                .frame(maxWidth: .infinity)
+                    .tint(.red)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
             }
-            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, AppStyle.screenHorizontalPadding)
         .padding(.bottom, AppStyle.startButtonBottomPadding)
         .background(
-            Color(.systemBackground)
+            Color.black
                 .opacity(0.9)
                 .ignoresSafeArea(edges: .bottom)
         )
     }
 
-    private var alternatePopupOverlay: some View {
-        GeometryReader { proxy in
-            let bounds = proxy.frame(in: .global)
-            let safeTop = proxy.safeAreaInsets.top
-            let safeBottom = proxy.safeAreaInsets.bottom
-            let horizontalPadding: CGFloat = AppStyle.screenHorizontalPadding
-            let spacing: CGFloat = 8
-            let popupWidth: CGFloat = 240
-
-            let maxX = bounds.width - popupSize.width - horizontalPadding
-            let clampedX = max(horizontalPadding, min(alternateButtonFrame.minX, maxX))
-
-            let maxY = bounds.height - safeBottom - popupSize.height - spacing
-            let desiredY = alternateButtonFrame.minY - popupSize.height - spacing
-            let clampedY = max(safeTop + spacing, min(desiredY, maxY))
-
-            ZStack(alignment: .topLeading) {
-                if showAltPopup {
-                    Color.black.opacity(0.001)
-                        .ignoresSafeArea()
-                        .onTapGesture { showAltPopup = false }
-
-                    alternatePopupContent
-                        .frame(maxWidth: popupWidth, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
-                                /// VISUAL TWEAK: Increase `menuBackgroundOpacity` if you can still see content behind the popup.
-                                /// VISUAL TWEAK: Adjust `menuBackgroundColorDark/Light` to change the popup tone.
-                                .fill((colorScheme == .dark ? menuBackgroundColorDark : menuBackgroundColorLight).opacity(menuBackgroundOpacity))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppStyle.dropdownCornerRadius)
-                                .stroke(Color.primary.opacity(0.25), lineWidth: 1)
-                        )
-                        .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 6)
-                        .background(
-                            GeometryReader { sizeProxy in
-                                Color.clear
-                                    .onAppear { popupSize = sizeProxy.size }
-                                    .onChange(of: sizeProxy.size) { _, newValue in
-                                        popupSize = newValue
-                                    }
-                            }
-                        )
-                        .offset(x: clampedX, y: clampedY)
-                        .transition(.scale(scale: 0.96).combined(with: .opacity))
-                        .animation(AppStyle.popupAnimation, value: showAltPopup)
-                }
-            }
-        }
-    }
-
-    private var alternatePopupContent: some View {
-        VStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Pick Exercise")
-                    .appFont(.title3, weight: .semibold)
-                    .foregroundStyle(.primary)
-                ForEach(sessionExercises) { exercise in
-                    if exercise.id != currentExercise.id {
-                        Button {
-                            exerciseIndex = exercise.orderIndex
-                            showAltPopup = false
-                        } label: {
-                            HStack {
-                                Text(exercise.name)
-                                    .appFont(.body, weight: .regular)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                if exercise.orderIndex == exerciseIndex {
-                                    Image(systemName: "checkmark")
-                                        .appFont(.caption, weight: .semibold)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                Divider().foregroundStyle(.primary.opacity(0.2))
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Add new workout")
-                        .appFont(.body, weight: .semibold)
-                    TextField("Name", text: $newExerciseName)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Add") {
-                        addNewExercise()
-                    }
-                    .disabled(newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 16)
-
-            Button("Cancel") {
-                showAltPopup = false
-            }
-            .appFont(.body, weight: .semibold)
-            .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
-    }
-
     private var currentExercise: SessionExercise {
         sessionExercises[exerciseIndex]
-    }
-
-    private var isLastExercise: Bool {
-        exerciseIndex >= sessionExercises.count - 1
     }
 
     private var currentSuggestion: RoutineAIService.ExerciseSuggestion? {
@@ -491,8 +550,8 @@ struct WorkoutSessionView: View {
         guard let suggestion = currentSuggestion, let weightKg = suggestion.suggestedWeightKg else {
             return preferredUnit == .kg ? "kg" : "lb"
         }
-        let weight = preferredUnit == .kg ? weightKg : weightKg * WorkoutSessionFormatter.kgToLb
-        return String(format: "%.0f %@", weight, preferredUnit == .kg ? "kg" : "lb")
+        let text = WeightFormatter.format(weightKg, unit: preferredUnit)
+        return text
     }
 
     private var repsPlaceholder: String {
@@ -501,6 +560,11 @@ struct WorkoutSessionView: View {
 
     private var preferredUnit: WorkoutUnits {
         WorkoutUnits(from: weightUnit) // AppStorage stores a string; convert to enum for conversions.
+    }
+
+    private var thisSessionPlanText: String {
+        let plan = currentSuggestion?.thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return plan.isEmpty ? derivedThisSessionPlan : plan
     }
 
     private func addSet() {
@@ -541,7 +605,8 @@ struct WorkoutSessionView: View {
             loggedSets[currentExercise.id] = exerciseLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
         }
 
-        setDraft = SetLogDraft(weight: "", reps: "", tag: setDraft.tag)
+        let nextWeight = trimmedWeight
+        setDraft = SetLogDraft(weight: nextWeight, reps: "", tag: setDraft.tag)
         focusedField = nil
         isAddingSet = false
     }
@@ -582,6 +647,12 @@ struct WorkoutSessionView: View {
         exerciseIndex += 1
     }
 
+    private func goToPreviousExercise() {
+        guard exerciseIndex > 0 else { return }
+        resetDraftForNewExercise()
+        exerciseIndex -= 1
+    }
+
     private func endSession() {
         guard let session else {
             dismiss()
@@ -597,18 +668,27 @@ struct WorkoutSessionView: View {
         }
     }
 
-    private func loadCoachingAndHistory() {
+    private func reloadForCurrentExercise() {
         isLoadingCoaching = true
         let exerciseName = currentExercise.name
+        let exerciseId = currentExercise.id
         let unit = preferredUnit
         let lastLog = WorkoutSessionHistory.latestExerciseLog(for: exerciseName, context: modelContext)
         lastSessionDate = lastLog?.session?.endedAt ?? lastLog?.session?.startedAt
         if let lastLog {
             lastSessionLines = WorkoutSessionFormatter.lastSessionLines(for: lastLog, preferred: unit)
+            derivedThisSessionPlan = derivedPlan(from: lastLog, preferred: unit)
         } else {
             lastSessionLines = []
+            derivedThisSessionPlan = "Dial in form and keep rest tight."
         }
 
+        if let session, let exerciseLog = session.exercises.first(where: { $0.orderIndex == currentExercise.orderIndex }) {
+            exerciseLogs[currentExercise.id] = exerciseLog
+            loggedSets[currentExercise.id] = exerciseLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
+        }
+
+        exerciseRefreshToken = UUID()
         let lastSessionText = lastSessionLines.joined(separator: "\n")
 
         Task {
@@ -621,7 +701,13 @@ struct WorkoutSessionView: View {
                 preferredUnit: unit
             )
             await MainActor.run {
+                guard exerciseId == currentExercise.id else { return }
                 suggestions[currentExercise.id] = suggestion
+                let plan = suggestion.thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !plan.isEmpty {
+                    derivedThisSessionPlan = plan
+                }
+                exerciseRefreshToken = UUID()
                 isLoadingCoaching = false
             }
         }
@@ -632,22 +718,15 @@ struct WorkoutSessionView: View {
         guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
             return fallbackCleanName(trimmed)
         }
-        do {
-            let cleaned = RoutineAIService.cleanExerciseName(trimmed)
-            let result = cleaned.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-            if result.isEmpty {
-                return fallbackCleanName(trimmed)
-            }
-            #if DEBUG
-            print("[AI][CLEAN] success input=\"\(trimmed)\" output=\"\(result)\"")
-            #endif
-            return result
-        } catch {
-            #if DEBUG
-            print("[AI][CLEAN][WARN] \(error.localizedDescription)")
-            #endif
+        let cleaned = await RoutineAIService.cleanExerciseNameAsync(trimmed)
+        let result = cleaned.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        if result.isEmpty {
             return fallbackCleanName(trimmed)
         }
+        #if DEBUG
+        print("[AI][CLEAN] success input=\"\(trimmed)\" output=\"\(result)\"")
+        #endif
+        return result
     }
 
     private func fallbackCleanName(_ text: String) -> String {
@@ -656,6 +735,21 @@ struct WorkoutSessionView: View {
             word.prefix(1).uppercased() + word.dropFirst().lowercased()
         }
         return words.joined(separator: " ")
+    }
+
+    private func derivedPlan(from lastLog: ExerciseLog, preferred: WorkoutUnits) -> String {
+        let sets = lastLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
+        guard let top = sets.max(by: { lhs, rhs in
+            let l = (lhs.weightKg ?? 0) * Double(lhs.reps)
+            let r = (rhs.weightKg ?? 0) * Double(rhs.reps)
+            return l < r
+        }) else {
+            return "Build on last session: add a clean set and keep rest ~90s."
+        }
+        let primary = WeightFormatter.format(top.weightKg, unit: preferred)
+        let totalSets = sets.count
+        let tagHint = (SetTag(rawValue: top.tag) == .DS) ? "ease volume, focus form" : "match or beat top set"
+        return "\(primary) × \(top.reps) — \(tagHint); keep \(totalSets) sets sharp."
     }
 
     private var timerSheet: some View {
@@ -684,21 +778,27 @@ struct WorkoutSessionView: View {
                 HStack(spacing: AppStyle.sectionSpacing) {
                     AtlasPillButton("Stop") {
                         timerRemaining = nil
+                        didFireCompletionHaptic = false
                         Haptics.playLightTap()
                         showTimerSheet = false
                         #if DEBUG
                         print("[TIMER] stop tapped")
                         #endif
                     }
+                    .frame(maxWidth: .infinity)
+                    .tint(.red)
+
                     AtlasPillButton("Start") {
                         let total = (timerMinutes * 60) + timerSeconds
                         timerRemaining = total
+                        didFireCompletionHaptic = false
                         Haptics.playLightTap()
                         showTimerSheet = false
                         #if DEBUG
                         print("[TIMER] start total=\(total)")
                         #endif
                     }
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -709,32 +809,84 @@ struct WorkoutSessionView: View {
         }
     }
 
+    private var newWorkoutSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                Text("New Workout")
+                    .appFont(.title3, weight: .semibold)
+                    .foregroundStyle(.primary)
+
+                TextField("Enter workout name", text: $newExerciseName)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled(false)
+                    .padding(AppStyle.glassContentPadding)
+                    .background(Color.white.opacity(0.06))
+                    .cornerRadius(14)
+                    .focused($newWorkoutFieldFocused)
+
+                HStack(spacing: AppStyle.sectionSpacing) {
+                    AtlasPillButton("Cancel") {
+                        Haptics.playLightTap()
+                        showNewWorkoutSheet = false
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    AtlasPillButton("Add") {
+                        guard isAddingNewWorkout == false else { return }
+                        isAddingNewWorkout = true
+                        Haptics.playLightTap()
+                        Task {
+                            await addNewWorkoutFromSheet()
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .disabled(isAddingNewWorkout || newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                Spacer()
+            }
+            .padding(AppStyle.contentPaddingLarge)
+            .background(Color.black.opacity(0.95).ignoresSafeArea())
+            .onAppear { newWorkoutFieldFocused = true }
+        }
+        .presentationDetents([.height(260)])
+    }
+
     private func formattedTime(_ seconds: Int) -> String {
         let minutes = seconds / 60
         let secs = seconds % 60
         return String(format: "%d:%02d", minutes, secs)
     }
 
-    private func addNewExercise() {
-        let trimmed = newExerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        let nextIndex = sessionExercises.count
-        let newExercise = SessionExercise(id: UUID(), name: trimmed, orderIndex: nextIndex)
-        sessionExercises.append(newExercise)
-        newExerciseName = ""
-        showAltPopup = false
-        exerciseIndex = nextIndex
-        Task {
-            let cleaned = await cleanExerciseName(trimmed)
+    private func addNewWorkoutFromSheet() async {
+        let trimmed = newExerciseName.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else {
             await MainActor.run {
-                if let idx = sessionExercises.firstIndex(where: { $0.id == newExercise.id }) {
-                    sessionExercises[idx].name = cleaned
-                }
-                if let session {
-                    if let exerciseLog = session.exercises.first(where: { $0.orderIndex == nextIndex }) {
-                        exerciseLog.name = cleaned
-                    }
-                }
+                isAddingNewWorkout = false
+            }
+            return
+        }
+        let cleaned = await cleanExerciseName(trimmed)
+        await MainActor.run {
+            newExerciseName = ""
+            isAddingNewWorkout = false
+            showNewWorkoutSheet = false
+        }
+        await addNewExerciseNamed(cleaned)
+    }
+
+    @MainActor
+    private func addNewExerciseNamed(_ name: String) async {
+        let nextIndex = sessionExercises.count
+        let newExercise = SessionExercise(id: UUID(), name: name, orderIndex: nextIndex)
+        sessionExercises.append(newExercise)
+        exerciseIndex = nextIndex
+        if let session {
+            if session.exercises.first(where: { $0.orderIndex == nextIndex }) == nil {
+                let exerciseLog = ExerciseLog(name: name, orderIndex: nextIndex, session: session)
+                session.exercises.append(exerciseLog)
+                exerciseLogs[newExercise.id] = exerciseLog
+                loggedSets[newExercise.id] = []
             }
         }
     }
@@ -749,6 +901,10 @@ struct WorkoutSessionView: View {
 
     private func setLine(_ set: SetLog) -> String {
         WorkoutSessionFormatter.formatSetLine(set: set, preferred: preferredUnit)
+    }
+
+    private func weightText(for set: SetLog) -> String {
+        WeightFormatter.format(set.weightKg, unit: preferredUnit)
     }
 }
 
@@ -774,11 +930,4 @@ struct WorkoutSessionView: View {
         .environmentObject(HistoryStore(modelContext: context))
     }
     .modelContainer(container)
-}
-
-private struct ViewFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
 }

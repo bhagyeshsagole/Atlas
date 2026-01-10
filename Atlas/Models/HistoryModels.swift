@@ -177,18 +177,9 @@ enum WorkoutSessionFormatter {
         }
     }
 
-    static func displayWeightStrings(weightKg: Double?, preferred: WorkoutUnits) -> (kg: String, lb: String) {
-        guard let weightKg else { return ("Bodyweight", "Bodyweight") }
-        let kgValue = weightKg
-        let lbValue = weightKg * kgToLb
-        return (String(format: "%.1f kg", kgValue), String(format: "%.1f lb", lbValue))
-    }
-
     static func formatSetLine(set: SetLog, preferred: WorkoutUnits) -> String {
-        let weights = displayWeightStrings(weightKg: set.weightKg, preferred: preferred)
-        let primary = preferred == .kg ? weights.kg : weights.lb
-        let secondary = preferred == .kg ? weights.lb : weights.kg
-        return "\(primary) | \(secondary) × \(set.reps)"
+        let weightText = WeightFormatter.format(set.weightKg, unit: preferred)
+        return "\(weightText) × \(set.reps)"
     }
 
     /// VISUAL TWEAK: Keep formatting helpers in one place so we can tune the “Last Session” display style later.
@@ -197,9 +188,22 @@ enum WorkoutSessionFormatter {
             .sorted(by: { $0.createdAt < $1.createdAt })
             .enumerated()
             .map { index, set in
-                let prefix = "S\(index + 1) — "
-                return prefix + formatSetLine(set: set, preferred: preferred)
+                let prefix = tagLabel(for: set, index: index)
+                return "\(prefix) — " + formatSetLine(set: set, preferred: preferred)
             }
+    }
+
+    private static func tagLabel(for set: SetLog, index: Int) -> String {
+        switch SetTag(rawValue: set.tag) {
+        case .W:
+            return "Warm-up"
+        case .S:
+            return "Standard"
+        case .DS:
+            return "Drop set"
+        case .none:
+            return "Set \(index + 1)"
+        }
     }
 }
 

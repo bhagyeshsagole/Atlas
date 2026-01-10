@@ -140,9 +140,10 @@ struct PostWorkoutSummaryView: View {
 
     private func buildDisplayText(with payload: PostWorkoutSummaryPayload?, for session: WorkoutSession) -> String {
         let totals = computeTotals(session: session)
-        let volumeKg = String(format: "%.0f kg", totals.volumeKg)
-        let volumeLb = String(format: "%.0f lb", totals.volumeKg * WorkoutSessionFormatter.kgToLb)
-        let trainingVolumeLine = "Training volume: \(volumeKg) | \(volumeLb)"
+        let unitPref = WorkoutUnits(from: weightUnit)
+        let volumeValue = unitPref == .kg ? totals.volumeKg : totals.volumeKg * WorkoutSessionFormatter.kgToLb
+        let volumeText = String(format: "%.0f %@", volumeValue, unitPref == .kg ? "kg" : "lb")
+        let trainingVolumeLine = "Training volume: \(volumeText)"
         let setsRepsLine = "Sets / Reps: \(totals.sets) sets / \(totals.reps) reps"
 
         let ratingValue = payload?.rating.map { String(format: "%.1f", $0) } ?? "—"
@@ -165,17 +166,12 @@ struct PostWorkoutSummaryView: View {
             improvements = ["Improvements next time:"] + improvementsRaw.map { "• \($0)" }
         }
 
-        var lines: [String] = [
-            trainingVolumeLine,
-            setsRepsLine,
-            "",
-            ratingLine,
-            ""
-        ]
+        var lines: [String] = []
+        lines.append("Training volume: \(volumeText)")
+        lines.append(setsRepsLine)
+        lines.append(ratingLine)
         lines.append(contentsOf: prLines)
-        lines.append("")
         lines.append(contentsOf: improvements)
-
         return lines.joined(separator: "\n")
     }
 

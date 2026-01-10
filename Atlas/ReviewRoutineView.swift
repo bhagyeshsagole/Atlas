@@ -41,6 +41,9 @@ struct ReviewRoutineView: View {
     @State private var editableWorkouts: [ParsedWorkout] // Live list the user can edit before saving.
     @State private var isSaving = false // Prevents double-saves while AI summary completes.
     @State private var alertMessage: String?
+    @State private var newWorkoutRawName: String = ""
+    @State private var isAddingNewWorkout = false
+    @FocusState private var newWorkoutFieldFocused: Bool
 
     init(routineName: String, workouts: [ParsedWorkout], onComplete: @escaping () -> Void) {
         self.routineName = routineName
@@ -61,29 +64,45 @@ struct ReviewRoutineView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                        ForEach($editableWorkouts) { $workout in
+                        ForEach(editableWorkouts) { workout in
                             AtlasRowPill {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Text(workout.name)
-                                            .appFont(.title, weight: .semibold)
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        AtlasHeaderIconButton(systemName: "xmark") {
-                                            removeWorkout(workout.id)
-                                        }
-                                    }
-
-                                    VStack(alignment: .leading, spacing: 10) {
-                                        TextField("wts", text: $workout.wtsText)
-                                            .textFieldStyle(.roundedBorder)
-                                            .tint(.primary)
-                                        TextField("reps", text: $workout.repsText)
-                                            .textFieldStyle(.roundedBorder)
-                                            .tint(.primary)
+                                HStack(spacing: 12) {
+                                    Text(workout.name)
+                                        .appFont(.title, weight: .semibold)
+                                        .foregroundStyle(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    AtlasHeaderIconButton(systemName: "xmark") {
+                                        removeWorkout(workout.id)
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Add new workout")
+                        .appFont(.section, weight: .bold)
+                        .foregroundStyle(.primary)
+                    AtlasRowPill {
+                        HStack(spacing: 12) {
+                            TextField("Workout name", text: $newWorkoutRawName)
+                                .textInputAutocapitalization(.words)
+                                .disableAutocorrection(true)
+                                .tint(.primary)
+                                .focused($newWorkoutFieldFocused)
+                            Button {
+                                addNewWorkout()
+                            } label: {
+                                if isAddingNewWorkout {
+                                    ProgressView()
+                                        .tint(.primary)
+                                } else {
+                                    Text("Add")
+                                        .appFont(.body, weight: .semibold)
+                                }
+                            }
+                            .disabled(newWorkoutRawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAddingNewWorkout || isSaving)
                         }
                     }
                 }
@@ -111,6 +130,22 @@ struct ReviewRoutineView: View {
 
     private func removeWorkout(_ id: UUID) {
         editableWorkouts.removeAll { $0.id == id }
+    }
+
+    private func addNewWorkout() {
+        let trimmed = newWorkoutRawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        isAddingNewWorkout = true
+        Task {
+            let cleaned = await RoutineAIService.cleanWorkoutName(trimmed)
+            let name = cleaned.isEmpty ? trimmed : cleaned
+            await MainActor.run {
+                editableWorkouts.append(ParsedWorkout(name: name))
+                newWorkoutRawName = ""
+                newWorkoutFieldFocused = false
+                isAddingNewWorkout = false
+            }
+        }
     }
 
     private func addRoutine() {

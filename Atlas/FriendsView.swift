@@ -16,8 +16,8 @@ struct FriendsView: View {
                     if authStore.isReadyForFriends {
                         statusMessages
                         addFriendCard
-                        requestsCard
                         friendsCard
+                        requestsCard
                     } else {
                         unauthenticatedCard
                     }
@@ -87,17 +87,20 @@ struct FriendsView: View {
                         .autocorrectionDisabled(true)
                         .foregroundStyle(primaryColor)
                         .tint(primaryColor)
-                        .padding(12)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
                         .background(Color.white.opacity(0.06))
-                        .cornerRadius(12)
+                        .cornerRadius(14)
                     Button {
                         sendRequest()
                     } label: {
                         Text("Send")
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(12)
+                            .appFont(.body, weight: .semibold)
+                            .frame(minWidth: 74)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 12)
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(14)
                     }
                     .buttonStyle(PressableGlassButtonStyle())
                     .disabled(friendsStore.isLoading)
@@ -192,15 +195,13 @@ struct FriendsView: View {
                         ForEach(friendsStore.friends) { friend in
                             NavigationLink(destination: FriendDetailView(friend: friend)) {
                                 HStack {
-                                    Text(friend.username.map { "@\($0)" } ?? friend.email)
+                                    Text(friend.username ?? friend.email)
                                         .appFont(.body, weight: .semibold)
                                         .foregroundStyle(primaryColor)
                                     Spacer()
-                                    if let date = friend.createdAt {
-                                        Text(date.formatted(date: .abbreviated, time: .shortened))
-                                            .appFont(.footnote)
-                                            .foregroundStyle(secondaryColor)
-                                    }
+                                    Text(lastWorkoutText(friend: friend))
+                                        .appFont(.footnote)
+                                        .foregroundStyle(secondaryColor)
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(secondaryColor)
@@ -214,6 +215,14 @@ struct FriendsView: View {
                 }
             }
         }
+    }
+
+    private func lastWorkoutText(friend: AtlasFriend) -> String {
+        if let date = friend.createdAt {
+            let formatted = date.formatted(.dateTime.month().day())
+            return "Last workout • \(formatted)"
+        }
+        return "No workouts yet"
     }
 
     private var unauthenticatedCard: some View {

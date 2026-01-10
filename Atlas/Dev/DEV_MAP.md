@@ -28,10 +28,10 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `RoutineStore.swift` — Codable routines saved to `Documents/routines.json` (custom URL optional for tests). Used by routine views via `@EnvironmentObject`. Change filename or fields carefully; never drop properties without migration. Example: add a `notes` field by extending `Routine`, updating decoding defaults, and regenerating JSON save.
 - `RoutineListView.swift` — Lists routines with edit/delete menu and start navigation. Mutations go through `RoutineStore`. Keep `routineMenuTarget` resets to avoid stuck menus. Example: add a “Duplicate” action that calls a new store helper.
 - `CreateRoutineView.swift` — Form for title + workout text; triggers AI parsing. Guards duplicate generates with `isGenerating`. Example: add validation before calling AI to require at least one exercise string.
-- `ReviewRoutineView.swift` — Edit AI-parsed workouts and save via `RoutineStore`, generating a summary first. Keep `isSaving` guard to prevent double saves. Example: allow reordering by adding move support to the ForEach.
+- `ReviewRoutineView.swift` — Edit AI-parsed workouts and save via `RoutineStore`, generating a summary first. Keep `isSaving` guard to prevent double saves. Workout pills are name + remove only; add workouts via the inline field (AI-cleaned via `RoutineAIService.cleanWorkoutName`). Example: allow reordering by adding move support to the ForEach.
 - `EditRoutineView.swift` — Simple edit form for existing routines. Calls `onSave` with the draft. Keep trims so blank workouts are prevented. Example: add a toggle to mark favorite routines before saving.
 - `RoutinePreStartView.swift` — Pre-start summary of a routine; navigates into `WorkoutSessionView`. Change copy/layout freely; keep `showSession` navigation intact. Example: add a “Regenerate summary” button that re-calls AI before starting.
-- `RoutineAIService.swift` — High-level AI pipeline (generate → repair → parse, coaching, summaries). Called by creation/logging flows. Change prompts/defaults, but keep error handling and caching. Example: tweak `defaultSets`/`defaultReps` to change auto-filled targets.
+- `RoutineAIService.swift` — High-level AI pipeline (generate → repair → parse, coaching, summaries). Called by creation/logging flows. Includes title/workout name cleaners (`cleanRoutineTitle`, `cleanWorkoutName`, `cleanExerciseNameAsync`). Change prompts/defaults, but keep error handling and caching. Example: tweak `defaultSets`/`defaultReps` to change auto-filled targets.
 - `OpenAIChatClient.swift` — Low-level OpenAI HTTP client, shared prompts, repair/parse helpers. Used by `RoutineAIService`. Change prompts or temperatures; keep JSON parsing and fence stripping aligned with callers. Example: adjust `repairSystemPrompt` if models start returning markdown.
 - `OpenAIConfig.swift` — Reads API key from `LocalSecrets` and sets default model. Change model name safely; keep empty-key guard to avoid crashes.
 
@@ -41,9 +41,10 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `Views/SessionHistoryStackView.swift` — Collapsed/expanded stack of recent sessions (not currently shown on Home).
 - `Views/AllHistoryView.swift` — Full history list with expand/collapse sets. Uses `@Query` sorted newest first. Example: add a filter to hide in-progress sessions by checking `endedAt`.
 - `Views/DayHistoryView.swift` — Sessions for a specific day; filters `endedAt` within day window and hides zero-set drafts. Example: add navigation to open a session detail screen.
-- `WorkoutSessionView.swift` — Live logger for sets + coaching + summary sheet. Writes via `HistoryStore`, stores sets in kg, and handles alternate set tags. Avoid breaking `isAddingSet` guard or `completedSessionId` summary trigger. Example: add a “Bodyweight” quick-fill that sets weight to nil.
+- `WorkoutSessionView.swift` — Live logger for sets + coaching + summary sheet. Writes via `HistoryStore`, stores sets in kg, and handles alternate set tags. Pager uses `exerciseIndex` + `exerciseRefreshToken` to refresh coaching/last-session/timer as you swipe; timer sheet lives here. Queue pill replaces “Next” and supports swipe/chevron navigation + sheet jump. Avoid breaking `isAddingSet` guard or `completedSessionId` summary trigger. Example: add a “Bodyweight” quick-fill that sets weight to nil.
 - `PostWorkoutSummaryView.swift` — Shows AI or cached summaries for a completed session. Loads session by ID, reuses cached JSON/text. Keep cache-first logic to avoid repeat calls. Example: adjust line spacing or add a share button without touching fetch logic.
 - `Dev/DevHistorySeeder.swift` — DEBUG-only seeder for fake sessions. Controlled by a UserDefaults flag. Do not enable in release builds. Example: add more seed days for UI testing.
+- `StatsView.swift` — Stats tab with Week/Month/All-time toggle, muscle coverage, workload summary, and coach navigator. Uses `StatsMetrics` to aggregate SwiftData sessions.
 
 - Auth/Supabase files are currently unused; core app flow does not depend on them. Minimal stubs exist (`AuthStore`, `SupabaseClientProvider`) but are not wired into UI yet.
 
@@ -57,6 +58,7 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `DesignSystem/GlassCard.swift` — Reusable frosted card container. Tweak corner radius/shadows carefully; many screens rely on it.
 - `DesignSystem/PressableGlassButtonStyle.swift` — Glass CTA button styling and press animation. Change padding/scale to retune CTAs.
 - `DesignSystem/Haptics.swift` — Light/medium haptic helpers. Simulator won’t vibrate; test on device.
+- `DesignSystem/RestTimerHaptics.swift` — CoreHaptics + fallback pattern for the rest timer completion vibration. Call `RestTimerHaptics.playCompletionPattern()` when the timer hits zero.
 - `DesignSystem/AppMotion.swift` — Shared animation curves for springs and transitions. Changing values retunes all animations.
 
 ### Config, secrets, and supporting files
@@ -71,6 +73,8 @@ Update Protocol: When you add/edit features, update this map with what changed a
 
 ### Dev docs and notes
 - `Dev/DEV_MAP.md` — This guide. Update whenever files/flows change so newcomers can navigate quickly.
+- `ExerciseMuscleHeuristics.swift` — Keyword-based mapping from exercise names to muscle groups for stats coverage. Update weights/keywords here; swap with real metadata later.
+- `MuscleTargets` (in `StatsView`) — Weekly set targets per muscle; tweak to retune coverage goals and coach suggestions.
 
 ## Common “How do I…?” Recipes
 - Add fake history sessions for testing: enable `DevHistorySeeder.seedIfNeeded(...)` in DEBUG (e.g., call from `AtlasApp`), tweak `seedDays`, then delete the UserDefaults flag to reseed.

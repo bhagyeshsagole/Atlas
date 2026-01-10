@@ -234,6 +234,65 @@ Return 2-5 short lines, plain text only. No markdown, no bullets.
         return (cleaned, response.statusCode, elapsed)
     }
 
+    static func cleanRoutineTitle(rawTitle: String, workoutsPrompt: String) async throws -> (text: String, status: Int, elapsedMs: Int) {
+        let userContent = """
+Raw title: "\(rawTitle)"
+Routine description: "\(workoutsPrompt)"
+Task:
+- Fix spelling/casing
+- Use the description to improve the title if needed
+- Keep 2–5 words, optional parenthetical like "(Chest/Shoulders)" only if helpful
+Return ONLY the title text.
+"""
+
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: cleanRoutineTitleSystemPrompt),
+            .init(role: "user", content: userContent)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.15, responseFormat: nil)
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, response.statusCode, elapsed)
+    }
+
+    static func cleanWorkoutName(raw: String) async throws -> (text: String, status: Int, elapsedMs: Int) {
+        let userContent = """
+Raw name: "\(raw)"
+Task:
+- Fix spelling/casing
+- Keep meaning
+- Shorten only if overly verbose
+Return ONLY the cleaned name.
+"""
+
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: cleanWorkoutNameSystemPrompt),
+            .init(role: "user", content: userContent)
+        ]
+
+        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: nil)
+        let start = Date()
+        let (data, response) = try await perform(request: request)
+        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+
+        let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
+        guard let content = chatResponse.choices.first?.message.content else {
+            throw OpenAIError(statusCode: response.statusCode, message: "No content returned from OpenAI.")
+        }
+
+        let cleaned = stripCodeFences(from: content).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, response.statusCode, elapsed)
+    }
+
     /// Generates coaching tips and session targets for a specific exercise.
     static func generateExerciseCoaching(
         routineTitle: String,
@@ -360,6 +419,14 @@ Return schema:
 }
 
 User text will be provided in the user message.
+"""
+
+    private static let cleanRoutineTitleSystemPrompt = """
+You are a naming assistant for gym routines.
+"""
+
+    private static let cleanWorkoutNameSystemPrompt = """
+You clean gym exercise/workout names.
 """
 
     private static let generateSystemPrompt = """

@@ -53,6 +53,9 @@ struct ParsedWorkout: Identifiable, Codable, Hashable {
         let parts = trimmed
             .components(separatedBy: CharacterSet.whitespacesAndNewlines)
             .filter { !$0.isEmpty }
+            .map { word in
+                word.prefix(1).uppercased() + word.dropFirst().lowercased()
+            }
         return parts.joined(separator: " ")
     }
 }
@@ -551,11 +554,60 @@ struct RoutineAIService {
 }
 
 extension RoutineAIService {
+    static func cleanRoutineTitle(rawTitle: String, workoutsPrompt: String) async -> String {
+        let trimmedTitle = rawTitle.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        let trimmedPrompt = workoutsPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        let fallback = trimmedTitle.isEmpty ? "Routine" : titleCased(trimmedTitle)
+
+        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+            return fallback
+        }
+
+        do {
+            let response = try await OpenAIChatClient.cleanRoutineTitle(rawTitle: trimmedTitle, workoutsPrompt: trimmedPrompt)
+            let cleaned = response.text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            if cleaned.isEmpty { return fallback }
+            return cleaned
+        } catch {
+            return fallback
+        }
+    }
+
+    static func cleanWorkoutName(_ raw: String) async -> String {
+        let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+            return cleanExerciseName(trimmed)
+        }
+        do {
+            let response = try await OpenAIChatClient.cleanWorkoutName(raw: trimmed)
+            let cleaned = response.text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            if cleaned.isEmpty { return cleanExerciseName(trimmed) }
+            return cleaned
+        } catch {
+            return cleanExerciseName(trimmed)
+        }
+    }
+
     static func cleanExerciseName(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         let parts = trimmed
             .components(separatedBy: CharacterSet.whitespacesAndNewlines)
             .filter { !$0.isEmpty }
         return parts.joined(separator: " ")
+    }
+
+    static func cleanExerciseNameAsync(_ raw: String) async -> String {
+        let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+            return cleanExerciseName(trimmed)
+        }
+        do {
+            let response = try await OpenAIChatClient.cleanExerciseName(raw: trimmed)
+            let cleaned = response.text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            if cleaned.isEmpty { return cleanExerciseName(trimmed) }
+            return cleaned
+        } catch {
+            return cleanExerciseName(trimmed)
+        }
     }
 }

@@ -58,6 +58,7 @@ struct CreateRoutineView: View {
                         .textFieldStyle(.roundedBorder)
                         .tint(.primary)
                         .focused($focusedField, equals: .title)
+                        .disabled(isGenerating)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -73,6 +74,7 @@ struct CreateRoutineView: View {
                             )
                             .tint(.primary)
                             .focused($focusedField, equals: .workoutText)
+                            .disabled(isGenerating)
                         if rawWorkouts.isEmpty {
                             Text("lat pulldown x 3 10-12 and shoulder press x 3 10-12")
                                 .appFont(.body, weight: .regular)
@@ -83,9 +85,35 @@ struct CreateRoutineView: View {
                     }
                 }
 
-                AtlasPillButton(isParsing ? "Generating…" : "Generate") {
+                Button {
                     generate()
+                } label: {
+                    HStack(spacing: 10) {
+                        if isGenerating {
+                            ProgressView()
+                                .tint(.primary)
+                            Text("Generating")
+                                .appFont(.body, weight: .semibold)
+                                .foregroundStyle(.primary)
+                        } else {
+                            Text("Generate")
+                                .appFont(.pill, weight: .semibold)
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, AppStyle.glassContentPadding)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                            .fill(Color.white.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .disabled(isGenerating)
             }
             .padding(AppStyle.contentPaddingLarge)
@@ -125,6 +153,7 @@ struct CreateRoutineView: View {
                 }
             }
             do {
+                let cleanedTitle = await RoutineAIService.cleanRoutineTitle(rawTitle: name, workoutsPrompt: input)
                 let workouts = try await RoutineAIService.parseWorkouts(from: input, routineTitleHint: name)
                 if workouts.isEmpty {
                     await MainActor.run { focusedField = nil }
@@ -140,7 +169,7 @@ struct CreateRoutineView: View {
                 await MainActor.run { focusedField = nil }
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 await MainActor.run {
-                    onGenerate(name, workouts)
+                    onGenerate(cleanedTitle, workouts)
                 }
             } catch let error as RoutineAIError {
                 await MainActor.run { focusedField = nil }
