@@ -77,12 +77,12 @@ struct FriendsView: View {
 
     private var addFriendCard: some View {
         GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Add friend")
-                    .appFont(.body, weight: .semibold)
-                    .foregroundStyle(primaryColor)
-                HStack(spacing: 10) {
-                    TextField("username or email", text: $usernameInput)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Add friend")
+                        .appFont(.body, weight: .semibold)
+                        .foregroundStyle(primaryColor)
+                    TextField("Username or email", text: $usernameInput)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                         .foregroundStyle(primaryColor)
@@ -91,21 +91,15 @@ struct FriendsView: View {
                         .padding(.vertical, 10)
                         .background(Color.white.opacity(0.06))
                         .cornerRadius(14)
-                    Button {
-                        sendRequest()
-                    } label: {
-                        Text("Send")
-                            .appFont(.body, weight: .semibold)
-                            .frame(minWidth: 74)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 12)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(14)
-                    }
-                    .buttonStyle(PressableGlassButtonStyle())
-                    .disabled(friendsStore.isLoading)
                 }
+                AtlasPillButton("Send request") {
+                    sendRequest()
+                }
+                .frame(minWidth: 120)
+                .tint(.primary)
+                .disabled(friendsStore.isLoading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -116,9 +110,14 @@ struct FriendsView: View {
                     .appFont(.body, weight: .semibold)
                     .foregroundStyle(primaryColor)
                 if friendsStore.incomingRequests.isEmpty && friendsStore.outgoingRequests.isEmpty {
-                    Text("No requests")
-                        .appFont(.footnote)
-                        .foregroundStyle(secondaryColor)
+                    HStack(spacing: 8) {
+                        Image(systemName: "envelope.badge")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text("No requests")
+                            .appFont(.footnote)
+                            .foregroundStyle(secondaryColor)
+                    }
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(friendsStore.incomingRequests) { request in
@@ -194,18 +193,29 @@ struct FriendsView: View {
                     VStack(spacing: 10) {
                         ForEach(friendsStore.friends) { friend in
                             NavigationLink(destination: FriendDetailView(friend: friend)) {
-                                HStack {
-                                    Text(friend.username ?? friend.email)
-                                        .appFont(.body, weight: .semibold)
-                                        .foregroundStyle(primaryColor)
+                                HStack(spacing: 12) {
+                                    Circle()
+                                        .fill(Color.white.opacity(0.08))
+                                        .frame(width: 40, height: 40)
+                                        .overlay(
+                                            Text(initials(for: friend))
+                                                .appFont(.body, weight: .bold)
+                                                .foregroundStyle(.primary)
+                                        )
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(friend.username ?? friend.email)
+                                            .appFont(.body, weight: .semibold)
+                                            .foregroundStyle(primaryColor)
+                                        Text(lastWorkoutText(friend: friend))
+                                            .appFont(.footnote)
+                                            .foregroundStyle(secondaryColor)
+                                    }
                                     Spacer()
-                                    Text(lastWorkoutText(friend: friend))
-                                        .appFont(.footnote)
-                                        .foregroundStyle(secondaryColor)
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(secondaryColor)
                                 }
+                                .padding(.vertical, 6)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -223,6 +233,15 @@ struct FriendsView: View {
             return "Last workout • \(formatted)"
         }
         return "No workouts yet"
+    }
+
+    private func initials(for friend: AtlasFriend) -> String {
+        let base = friend.username ?? friend.email
+        let comps = base.split(separator: " ")
+        if comps.count >= 2 {
+            return "\(comps[0].first.map(String.init) ?? "")\(comps[1].first.map(String.init) ?? "")"
+        }
+        return base.prefix(2).uppercased()
     }
 
     private var unauthenticatedCard: some View {

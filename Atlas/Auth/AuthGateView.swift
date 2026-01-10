@@ -140,6 +140,18 @@ private struct AuthLandingView: View {
                 }
                 .disabled(isWorking || emailInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || passwordInput.isEmpty)
 
+                Button {
+                    Haptics.playLightTap()
+                    authStore.activateDemoMode()
+                } label: {
+                    Text("Continue in Demo Mode")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .atlasGlassCard()
+                        .opacity(0.85)
+                }
+                .disabled(isWorking)
+
                 if let status {
                     Text(status.message)
                         .appFont(.body)

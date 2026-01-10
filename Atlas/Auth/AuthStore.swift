@@ -11,6 +11,7 @@ final class AuthStore: ObservableObject {
     @Published var isProfileLoaded: Bool = false
     @Published private(set) var session: Session?
     @Published var authErrorMessage: String?
+    @Published var isGuestMode: Bool = false
 
     private let client: SupabaseClient?
     private let profileService: ProfileService?
@@ -72,8 +73,10 @@ final class AuthStore: ObservableObject {
         #if DEBUG
         print("[AUTH] startIfNeeded")
         #endif
-        kickoffRestore()
-        kickoffListener()
+        if isGuestMode == false {
+            kickoffRestore()
+            kickoffListener()
+        }
     }
 
     func signIn(email rawEmail: String, password rawPassword: String) async -> String? {
@@ -157,7 +160,19 @@ final class AuthStore: ObservableObject {
             print("[AUTH][WARN] signOut failed: \(error)")
             #endif
         }
+        isGuestMode = false
         apply(session: nil, event: nil)
+    }
+
+    func activateDemoMode() {
+        isGuestMode = true
+        isAuthenticated = true
+        isProfileLoaded = true
+        authErrorMessage = nil
+        session = nil
+        userId = nil
+        email = "guest@atlas.app"
+        username = "Guest"
     }
 
     private func kickoffRestore() {
@@ -217,6 +232,12 @@ final class AuthStore: ObservableObject {
     }
 
     private func apply(session: Session?, event: AuthChangeEvent?) {
+        if isGuestMode {
+            // Keep guest session stable without Supabase.
+            isAuthenticated = true
+            isProfileLoaded = true
+            return
+        }
         _ = event
         let expired = session?.isExpired ?? false
         let authenticated = session != nil && expired == false

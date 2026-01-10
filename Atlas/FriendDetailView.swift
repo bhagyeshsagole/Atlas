@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct FriendDetailView: View {
     let friend: AtlasFriend
@@ -8,6 +9,9 @@ struct FriendDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showRemoveConfirm = false
     @State private var removalSuccessMessage: String?
+    @StateObject private var myStatsStore = StatsStore()
+    @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var mySessions: [WorkoutSession]
+    @State private var selectedRange: StatsLens = .week
 
     private var title: String {
         if let username = friend.username, username.isEmpty == false {
@@ -29,6 +33,14 @@ struct FriendDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     header
+                    Picker("Range", selection: $selectedRange) {
+                        ForEach(StatsLens.allCases) { range in
+                            Text(range.rawValue).tag(range)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+
                     if let error = model.errorMessage {
                         Text(error)
                             .appFont(.footnote)
@@ -38,13 +50,16 @@ struct FriendDetailView: View {
                             .appFont(.footnote, weight: .semibold)
                             .foregroundStyle(.green)
                     }
-                    statsCard
-                    calendarCard
-                    sessionsList
+
+                    comparisonCards
+
+                    removeFriendButton
                 }
                 .padding(.horizontal, AppStyle.screenHorizontalPadding)
-                .padding(.top, 20)
+                .padding(.top, AppStyle.screenTopPadding + AppStyle.headerTopPadding)
+                .padding(.bottom, AppStyle.settingsBottomPadding)
             }
+            .scrollIndicators(.hidden)
             .disabled(showRemoveConfirm)
 
             if showRemoveConfirm {
@@ -114,6 +129,10 @@ struct FriendDetailView: View {
             Task {
                 await loadIfNeeded()
             }
+            myStatsStore.updateSessions(Array(mySessions))
+        }
+        .onChange(of: mySessions) { _, newValue in
+            myStatsStore.updateSessions(Array(newValue))
         }
         .navigationTitle("Friend")
         .navigationBarTitleDisplayMode(.inline)
@@ -132,177 +151,130 @@ struct FriendDetailView: View {
         }
     }
 
-    private var statsCard: some View {
-        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Stats")
-                    .appFont(.body, weight: .semibold)
-                    .foregroundStyle(.primary)
-                let stats = model.stats
-                statRow(title: "Sessions", value: stats.map { "\($0.sessionsTotal)" } ?? "–")
-                statRow(title: "Best volume (kg)", value: stats.map { String(format: "%.0f", $0.bestVolumeKg) } ?? "–")
-                statRow(title: "Best sets", value: stats.map { "\($0.bestTotalSets)" } ?? "–")
-                statRow(title: "Best reps", value: stats.map { "\($0.bestTotalReps)" } ?? "–")
-                statRow(title: "Latest workout", value: stats?.latestEndedAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "–")
+    private var comparisonCards: some View {
+        let myMetrics = myStatsStore.metrics(for: selectedRange)
+        let friendMetrics = metricsForFriend(range: selectedRange)
+        return VStack(alignment: .leading, spacing: 16) {
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Muscle Coverage")
+                        .appFont(.section, weight: .bold)
+                        .foregroundStyle(.primary)
+                    ForEach(MuscleGroup.allCases) { bucket in
+                        HStack(spacing: 10) {
+                            Text(bucket.displayName)
+                                .appFont(.footnote, weight: .semibold)
+                                .foregroundStyle(.primary)
+                                .frame(width: 80, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 6) {
+                                coverageRow(label: "You", score: myMetrics.muscle[bucket]?.progress01 ?? 0, display: myMetrics.muscle[bucket]?.score0to10 ?? 0)
+                                coverageRow(label: "Friend", score: friendMetrics.muscle[bucket]?.progress01 ?? 0, display: friendMetrics.muscle[bucket]?.score0to10 ?? 0)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding()
+
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Workload")
+                        .appFont(.section, weight: .bold)
+                        .foregroundStyle(.primary)
+                    workloadRow(label: "You", metrics: myMetrics.workload)
+                    workloadRow(label: "Friend", metrics: friendMetrics.workload)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Coach Insights")
+                        .appFont(.section, weight: .bold)
+                        .foregroundStyle(.primary)
+                    coachRow(title: "You", summary: myMetrics.coach)
+                    coachRow(title: "Friend", summary: friendMetrics.coach, isFriend: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
-    private func statRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-                .appFont(.footnote)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
+    private func coverageRow(label: String, score: Double, display: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(display) / 10")
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.primary)
+            }
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: CGFloat(max(0, min(1, score)) * 180), alignment: .leading),
+                    alignment: .leading
+                )
+        }
+    }
+
+    private func workloadRow(label: String, metrics: WorkloadSummary) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
                 .appFont(.footnote, weight: .semibold)
-                .foregroundStyle(.primary)
+                .foregroundStyle(.secondary)
+            HStack {
+                statColumn(title: "Volume", value: String(format: "%.0f kg", metrics.volume))
+                Spacer()
+                statColumn(title: "Sets", value: "\(metrics.sets)")
+                Spacer()
+                statColumn(title: "Reps", value: "\(metrics.reps)")
+            }
         }
     }
 
-    private var sessionsList: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Sessions")
+    private func statColumn(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .appFont(.caption, weight: .semibold)
+                .foregroundStyle(.secondary)
+            Text(value)
                 .appFont(.body, weight: .semibold)
                 .foregroundStyle(.primary)
+        }
+    }
+
+    private func coachRow(title: String, summary: CoachSummary, isFriend: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .appFont(.footnote, weight: .semibold)
+                .foregroundStyle(.secondary)
+            Text("Streak: \(summary.streakWeeks) wks")
+                .appFont(.body, weight: .semibold)
+                .foregroundStyle(.primary)
+            Text(summary.next.isEmpty ? (isFriend ? "No data yet" : "Keep going") : summary.next)
+                .appFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var removeFriendButton: some View {
+        VStack(alignment: .leading, spacing: 10) {
             if authStore.isReadyForFriends {
-                Button(role: .destructive) {
+                AtlasPillButton("Remove Friend") {
                     Haptics.playLightTap()
                     withAnimation(AppMotion.primary) {
                         showRemoveConfirm = true
                     }
-                } label: {
-                    Text("Remove Friend")
-                        .appFont(.footnote, weight: .semibold)
                 }
-            }
-            if model.sessionsForSelectedDay.isEmpty {
-                Text(model.isLoading ? "Loading…" : "No sessions on this day.")
-                    .appFont(.footnote)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(model.sessionsForSelectedDay) { session in
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(session.routineTitle.isEmpty ? "Workout" : session.routineTitle)
-                                    .appFont(.body, weight: .semibold)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Text(session.endedAt.formatted(date: .omitted, time: .shortened))
-                                    .appFont(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Text("Sets \(session.totalSets) · Reps \(session.totalReps) · Vol \(Int(session.volumeKg)) kg")
-                                .appFont(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                    }
-                }
+                .tint(.red)
             }
         }
-    }
-
-    private var calendarCard: some View {
-        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Button {
-                        Haptics.playLightTap()
-                        Task { await model.goPrevMonth() }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    Spacer()
-                    Text(monthTitle(model.selectedMonth))
-                        .appFont(.body, weight: .semibold)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Button {
-                        Haptics.playLightTap()
-                        Task { await model.goNextMonth() }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                }
-                weekHeader
-                calendarGrid
-            }
-            .padding()
-        }
-    }
-
-    private var weekHeader: some View {
-        let symbols = Calendar.current.shortWeekdaySymbols
-        return HStack {
-            ForEach(symbols, id: \.self) { day in
-                Text(day.uppercased())
-                    .appFont(.footnote, weight: .semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private var calendarGrid: some View {
-        let days = daysInMonth(model.selectedMonth)
-        let counts = Dictionary(grouping: model.sessions) { Calendar.current.startOfDay(for: $0.endedAt) }.mapValues { $0.count }
-        let firstWeekday = Calendar.current.component(.weekday, from: days.first ?? Date())
-        let leading = (firstWeekday - Calendar.current.firstWeekday + 7) % 7
-        let columns = Array(repeating: GridItem(.flexible()), count: 7)
-        return LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(0..<leading, id: \.self) { _ in
-                Rectangle().fill(Color.clear).frame(height: 30)
-            }
-            ForEach(days, id: \.self) { day in
-                VStack {
-                    Text("\(Calendar.current.component(.day, from: day))")
-                        .appFont(.footnote)
-                        .foregroundStyle(.primary)
-                    let dayKey = Calendar.current.startOfDay(for: day)
-                    if let count = counts[dayKey], count > 0 {
-                        Circle()
-                            .fill(isSelected(day) ? Color.green : Color.green.opacity(0.9))
-                            .frame(width: 6, height: 6)
-                            .overlay(
-                                count > 1 ? Text("\(count)").appFont(.footnote).foregroundStyle(.primary) : nil
-                            )
-                            .padding(.top, 2)
-                    } else {
-                        Circle()
-                            .fill(isSelected(day) ? Color.white.opacity(0.15) : Color.clear)
-                            .frame(width: 6, height: 6)
-                            .padding(.top, 2)
-                    }
-                }
-                .frame(maxWidth: .infinity, minHeight: 36)
-                .padding(4)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    Haptics.playLightTap()
-                    model.selectDay(day)
-                }
-            }
-        }
-    }
-
-    private func daysInMonth(_ date: Date) -> [Date] {
-        let cal = Calendar.current
-        let start = cal.date(from: cal.dateComponents([.year, .month], from: date)) ?? date
-        guard let range = cal.range(of: .day, in: .month, for: start) else { return [] }
-        return range.compactMap { day -> Date? in
-            var comps = cal.dateComponents([.year, .month], from: start)
-            comps.day = day
-            return cal.date(from: comps)
-        }
-    }
-
-    private func monthTitle(_ date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "LLLL yyyy"
-        return fmt.string(from: date)
     }
 
     private func removeFriend() async {
@@ -337,14 +309,49 @@ struct FriendDetailView: View {
             return
         }
         model.setService(FriendHistoryService(client: client))
-        if force || model.sessions.isEmpty || model.stats == nil {
+        if force || model.sessions.isEmpty || model.friendStats == nil {
+            await model.refresh()
+        }
+        if model.friendStats == nil {
             await model.refresh()
         }
     }
 
-    private func isSelected(_ day: Date) -> Bool {
-        guard let selected = model.selectedDay else { return false }
-        return Calendar.current.isDate(selected, inSameDayAs: day)
+    private func metricsForFriend(range: StatsLens) -> StatsMetrics {
+        let filtered = filterFriendSessions(for: range, sessions: model.sessions)
+        var volume: Double = 0
+        var sets: Int = 0
+        var reps: Int = 0
+        for session in filtered {
+            volume += session.volumeKg
+            sets += session.totalSets
+            reps += session.totalReps
+        }
+        let workload = WorkloadSummary(volume: volume, sets: sets, reps: reps)
+        let emptyMuscle = Dictionary(uniqueKeysWithValues: MuscleGroup.allCases.map {
+            ($0, BucketScore(bucket: $0, score0to10: 0, progress01: 0, coveredTags: [], missingTags: [], hardSets: 0, trainingDays: 0, reasons: ["No exercise breakdown available"], suggestions: []))
+        })
+        let coach = CoachSummary(streakWeeks: filtered.isEmpty ? 0 : 1, next: filtered.isEmpty ? "No data yet" : "Invite to log more", reason: "")
+        return StatsMetrics(lens: range, muscle: emptyMuscle, workload: workload, coach: coach)
+    }
+
+    private func filterFriendSessions(for range: StatsLens, sessions: [FriendWorkoutSessionSummary]) -> [FriendWorkoutSessionSummary] {
+        let now = Date()
+        let start: Date?
+        switch range {
+        case .week:
+            start = Calendar.current.date(byAdding: .day, value: -7, to: now)
+        case .month:
+            start = Calendar.current.date(byAdding: .day, value: -30, to: now)
+        case .all:
+            start = nil
+        }
+        return sessions.filter { session in
+            if let start {
+                return session.endedAt >= start && session.endedAt <= now
+            }
+            return true
+        }
     }
 }
 

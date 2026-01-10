@@ -1,0 +1,9 @@
+{
+  "version" : 1,
+  "identifier" : "com.atlas.app",
+  "privacy" : {
+    "tracking" : false,
+    "dataCategories" : [],
+    "accessedAPITypes" : []
+  }
+}

@@ -60,6 +60,9 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `DesignSystem/Haptics.swift` — Light/medium haptic helpers. Simulator won’t vibrate; test on device.
 - `DesignSystem/RestTimerHaptics.swift` — CoreHaptics + fallback pattern for the rest timer completion vibration. Call `RestTimerHaptics.playCompletionPattern()` when the timer hits zero.
 - `DesignSystem/AppMotion.swift` — Shared animation curves for springs and transitions. Changing values retunes all animations.
+- `FriendsView.swift` — Friends tab UI (add friend card, friends list, requests). Uses `FriendsStore` + `AuthStore`; glass cards and pill buttons. Add friend uses inline text field + “Send request” pill.
+- `FriendDetailView.swift` — Friend profile compare screen. No calendar; segmented Week/Month/All-time. Compares your `StatsStore` metrics vs friend summaries (workload + placeholder muscle coverage) from `FriendDetailModel` (Supabase fetch). Remove friend confirmation via glass popup.
+- `FriendDetailModel.swift` — Fetches friend sessions/stats via `FriendHistoryService`. Holds sessions list; view computes range-filtered metrics.
 
 ### Config, secrets, and supporting files
 - `Config/LocalSecrets.swift` — Local-only API keys. Do not commit real credentials. Missing keys cause AI calls to throw.
