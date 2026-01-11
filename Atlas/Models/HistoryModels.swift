@@ -56,6 +56,7 @@ final class WorkoutSession {
     var rating: Double?
     /// Compatibility: existing flows track completion/duration; keep them for now.
     var isCompleted: Bool
+    var isHidden: Bool = false
     var durationSeconds: Int?
     var aiPostSummaryGeneratedAt: Date?
     var aiPostSummaryModel: String?
@@ -75,6 +76,7 @@ final class WorkoutSession {
         aiPostSummaryJSON: String = "",
         rating: Double? = nil,
         isCompleted: Bool = false,
+        isHidden: Bool = false,
         durationSeconds: Int? = nil,
         aiPostSummaryGeneratedAt: Date? = nil,
         aiPostSummaryModel: String? = nil,
@@ -93,6 +95,7 @@ final class WorkoutSession {
         self.aiPostSummaryJSON = aiPostSummaryJSON
         self.rating = rating
         self.isCompleted = isCompleted
+        self.isHidden = isHidden
         self.durationSeconds = durationSeconds
         self.aiPostSummaryGeneratedAt = aiPostSummaryGeneratedAt
         self.aiPostSummaryModel = aiPostSummaryModel
@@ -161,6 +164,16 @@ enum SetTag: String {
     case DS
 }
 
+extension SetTag {
+    var displayName: String {
+        switch self {
+        case .W: return "Warmup"
+        case .S: return "Standard"
+        case .DS: return "Drop"
+        }
+    }
+}
+
 enum WorkoutUnits {
     case kg
     case lb
@@ -172,6 +185,13 @@ enum WorkoutUnits {
 
 enum WorkoutSessionFormatter {
     static let kgToLb: Double = 2.20462
+
+    static func volumeString(volumeKg: Double, unit: WorkoutUnits) -> String {
+        guard volumeKg > 0 else { return "—" }
+        let value = unit == .kg ? volumeKg : volumeKg * kgToLb
+        let unitLabel = unit == .kg ? "kg" : "lb"
+        return String(format: "%.0f \(unitLabel)", value)
+    }
 
     static func kg(from value: Double, unit: WorkoutUnits) -> Double {
         switch unit {

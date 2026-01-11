@@ -11,7 +11,6 @@ struct UsernamePromptView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.opacity(0.94).ignoresSafeArea()
                 VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                     HStack {
                         Text("Create a username")
@@ -77,6 +76,8 @@ struct UsernamePromptView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .tint(.primary)
+            .atlasBackground()
+            .atlasBackgroundTheme(.auth)
         }
         .onAppear {
             if usernameStore.hasUsername {

@@ -90,6 +90,14 @@ struct WorkoutSessionView: View {
     @State private var showEndConfirm = false
     @State private var showTipsSheet = false
     @State private var showPlanSheet = false
+    @State private var showAllSetsSheet = false
+    @State private var showPickerSheet = false
+    @State private var pickerWeightInt: Int = 0
+    @State private var pickerWeightDec: Int = 0
+    @State private var pickerReps: Int = 0
+    @State private var pickerUnit: WorkoutUnits = .kg
+    @State private var setDraftWeightKg: Double?
+    @State private var setDraftRepsInt: Int = 0
     @State private var pendingDeleteSetID: UUID?
     @State private var showConfirmDelete1 = false
     @State private var showConfirmDelete2 = false
@@ -102,16 +110,21 @@ struct WorkoutSessionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-            topPager
-                .padding(.horizontal, AppStyle.contentPaddingLarge)
-                .padding(.top, AppStyle.contentPaddingLarge)
-            setLogSection
-                .padding(.horizontal, AppStyle.contentPaddingLarge)
-            Spacer()
+        ZStack {
+            Color.clear
+                .atlasBackground()
+                .atlasBackgroundTheme(.workout)
+                .ignoresSafeArea()
+            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                topPager
+                    .padding(.horizontal, AppStyle.contentPaddingLarge)
+                    .padding(.top, AppStyle.contentPaddingLarge)
+                setLogSection
+                    .padding(.horizontal, AppStyle.contentPaddingLarge)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.black.ignoresSafeArea())
         .onAppear {
             reloadForCurrentExercise()
         }
@@ -126,6 +139,7 @@ struct WorkoutSessionView: View {
         .navigationTitle("Session")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .atlasBackgroundTheme(.workout)
         .tint(.primary)
         .safeAreaInset(edge: .bottom) {
             if !isEditingSetFields {
@@ -345,7 +359,7 @@ struct WorkoutSessionView: View {
                     Spacer()
                 }
                 .padding(AppStyle.contentPaddingLarge)
-                .background(Color.black.opacity(0.95).ignoresSafeArea())
+                .atlasBackground()
             }
         }
     }
@@ -405,79 +419,77 @@ struct WorkoutSessionView: View {
                     Spacer()
                 }
                 .padding(AppStyle.contentPaddingLarge)
-                .background(Color.black.opacity(0.95).ignoresSafeArea())
+                .atlasBackground()
             }
+        }
+        .sheet(isPresented: $showAllSetsSheet) {
+            SetLogSheetView(
+                sets: loggedSetsForCurrent,
+                weightText: weightText(for:),
+                onDelete: { set in
+                    pendingDeleteSetID = set.id
+                    showConfirmDelete1 = true
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 
     private var setLogSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Logged Sets")
-                    .appFont(.section, weight: .bold)
-                if loggedSetsForCurrent.isEmpty {
+                HStack {
+                    Text("Logged Sets")
+                        .appFont(.section, weight: .bold)
+                    Spacer()
+                    Button {
+                        showAllSetsSheet = true
+                    } label: {
+                        Text("View All")
+                            .appFont(.footnote, weight: .semibold)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(loggedSetsForCurrent.isEmpty ? 0 : 1)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !loggedSetsForCurrent.isEmpty {
+                        showAllSetsSheet = true
+                    }
+                }
+                let previewSets = Array(loggedSetsForCurrent.suffix(2))
+                if previewSets.isEmpty {
                     Text("No sets yet.")
                         .appFont(.body, weight: .regular)
                         .foregroundStyle(.secondary)
                 } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(loggedSetsForCurrent, id: \.id) { set in
-                                AtlasRowPill {
-                                    HStack(spacing: 12) {
-                                        Text(set.tag)
-                                            .appFont(.body, weight: .semibold)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 6)
-                                            .background(
-                                                Capsule().fill(.white.opacity(0.1))
-                                            )
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(weightText(for: set))
-                                                .appFont(.body, weight: .semibold)
-                                                .foregroundStyle(.primary)
-                                            Text("× \(set.reps) reps")
-                                                .appFont(.footnote, weight: .semibold)
-                                                .foregroundStyle(.secondary)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(
-                                                    Capsule().fill(Color.white.opacity(0.08))
-                                                )
-                                        }
-                                        Spacer()
-                                        Button {
-                                            pendingDeleteSetID = set.id
-                                            showConfirmDelete1 = true
-                                        } label: {
-                                            Text("Remove")
-                                                .appFont(.footnote, weight: .semibold)
-                                                .padding(.horizontal, 10)
-                                                .padding(.vertical, 6)
-                                                .background(
-                                                    Capsule().fill(Color.white.opacity(0.08))
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(previewSets, id: \.id) { set in
+                            HStack(spacing: 10) {
+                                if let tag = SetTag(rawValue: set.tag) {
+                                    Text(tag.displayName)
+                                        .appFont(.caption, weight: .bold)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Capsule().fill(.white.opacity(0.1)))
                                 }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        pendingDeleteSetID = set.id
-                                        showConfirmDelete1 = true
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
+                                Text("\(weightText(for: set)) × \(set.reps)")
+                                    .appFont(.body, weight: .semibold)
+                                    .lineLimit(1)
+                                    .foregroundStyle(.primary)
+                                Spacer()
                             }
+                            .padding(AppStyle.glassContentPadding)
+                            .atlasGlassCard()
+                        }
+                        if loggedSetsForCurrent.count > previewSets.count {
+                            Text("View all \(loggedSetsForCurrent.count) sets")
+                                .appFont(.footnote, weight: .semibold)
+                                .foregroundStyle(.secondary)
+                                .onTapGesture { showAllSetsSheet = true }
                         }
                     }
-                    .frame(maxHeight: 280)
-                    .scrollIndicators(.hidden)
-                    .highPriorityGesture(
-                        DragGesture(minimumDistance: 10)
-                            .onChanged { _ in }
-                    )
                 }
             }
 
@@ -494,28 +506,31 @@ struct WorkoutSessionView: View {
                             .frame(width: 54)
                     }
 
-                    TextField(weightPlaceholder, text: $setDraft.weight)
-                        .textFieldStyle(.roundedBorder)
-                        .keyboardType(.decimalPad)
-                        .focused($focusedField, equals: .weight)
-                        .frame(width: 90)
-
-                    TextField(repsPlaceholder, text: $setDraft.reps)
-                        .textFieldStyle(.roundedBorder)
-                        .keyboardType(.numberPad)
-                        .focused($focusedField, equals: .reps)
-                        .frame(width: 70)
-
-                    Button {
-                        addSet()
-                    } label: {
-                        Text("Add")
-                            .appFont(.body, weight: .semibold)
+                    AtlasPillButton("Log set") {
+                        presentPicker()
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isAddingSet)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+        .sheet(isPresented: $showPickerSheet) {
+            SetEntrySheetView(
+                weightInt: $pickerWeightInt,
+                weightDec: $pickerWeightDec,
+                reps: $pickerReps,
+                unit: $pickerUnit,
+                onChange: { Haptics.playLightTap() },
+                onLog: { weightKg, reps in
+                    setDraftWeightKg = weightKg
+                    setDraftRepsInt = reps
+                    addSet(weightKgOverride: weightKg, repsOverride: reps)
+                },
+                preferredUnit: preferredUnit
+            )
+            .presentationDetents([.large])
+            .atlasBackgroundTheme(.workout)
+            .atlasBackground()
+            .presentationBackground(.clear)
         }
     }
 
@@ -538,16 +553,17 @@ struct WorkoutSessionView: View {
                     showEndConfirm = true
                 }
                 .frame(maxWidth: .infinity)
-                    .tint(.red)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                .tint(.red)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
             }
         }
         .padding(.horizontal, AppStyle.screenHorizontalPadding)
         .padding(.bottom, AppStyle.startButtonBottomPadding)
         .background(
-            Color.black
-                .opacity(0.9)
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.85)
                 .ignoresSafeArea(edges: .bottom)
         )
     }
@@ -589,19 +605,28 @@ struct WorkoutSessionView: View {
         return plan.isEmpty ? derivedThisSessionPlan : plan
     }
 
-    private func addSet() {
+    private func addSet(weightKgOverride: Double? = nil, repsOverride: Int? = nil) {
         guard !isAddingSet else { return }
-        let trimmedReps = setDraft.reps.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let reps = Int(trimmedReps), reps > 0 else { return }
-
-        let trimmedWeight = setDraft.weight.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parsedWeight = Double(trimmedWeight)
-        let weightKg: Double?
-        if let parsedWeight {
-            // Convert to kg before storing so all history uses a single unit.
-            weightKg = preferredUnit == .kg ? parsedWeight : parsedWeight / WorkoutSessionFormatter.kgToLb
+        let reps: Int
+        if let repsOverride {
+            reps = repsOverride
         } else {
-            weightKg = nil
+            let trimmedReps = setDraft.reps.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsed = Int(trimmedReps), parsed > 0 else { return }
+            reps = parsed
+        }
+
+        let weightKg: Double?
+        if let weightKgOverride {
+            weightKg = weightKgOverride
+        } else {
+            let trimmedWeight = setDraft.weight.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parsedWeight = Double(trimmedWeight)
+            if let parsedWeight {
+                weightKg = preferredUnit == .kg ? parsedWeight : parsedWeight / WorkoutSessionFormatter.kgToLb
+            } else {
+                weightKg = nil
+            }
         }
 
         isAddingSet = true
@@ -627,8 +652,13 @@ struct WorkoutSessionView: View {
             loggedSets[currentExercise.id] = exerciseLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
         }
 
-        let nextWeight = trimmedWeight
-        setDraft = SetLogDraft(weight: nextWeight, reps: "", tag: setDraft.tag)
+        let nextWeightText: String
+        if let weightKg {
+            nextWeightText = String(format: "%.1f", weightKg)
+        } else {
+            nextWeightText = ""
+        }
+        setDraft = SetLogDraft(weight: nextWeightText, reps: "", tag: setDraft.tag)
         focusedField = nil
         isAddingSet = false
     }
@@ -683,7 +713,7 @@ struct WorkoutSessionView: View {
         }
 
         let didStore = historyStore.endSession(session: session)
-        if didStore {
+        if didStore || session.totalSets > 0 {
             completedSessionId = session.id
             showSummary = true
             if routine.expiresOnCompletion {
@@ -831,7 +861,7 @@ struct WorkoutSessionView: View {
                 Spacer()
             }
             .padding(AppStyle.contentPaddingLarge)
-            .background(Color.black.opacity(0.95).ignoresSafeArea())
+            .atlasBackground()
         }
     }
 
@@ -872,7 +902,7 @@ struct WorkoutSessionView: View {
                 Spacer()
             }
             .padding(AppStyle.contentPaddingLarge)
-            .background(Color.black.opacity(0.95).ignoresSafeArea())
+            .atlasBackground()
             .onAppear { newWorkoutFieldFocused = true }
         }
         .presentationDetents([.height(260)])
@@ -925,12 +955,216 @@ struct WorkoutSessionView: View {
         setDraft = SetLogDraft(weight: "", reps: "", tag: "W")
     }
 
+    private func presentPicker() {
+        let parts = setDraft.weight.split(separator: ".")
+        pickerWeightInt = Int(parts.first ?? "0") ?? 0
+        if parts.count > 1 {
+            pickerWeightDec = Int(parts[1]) ?? 0
+        } else {
+            pickerWeightDec = 0
+        }
+        pickerReps = Int(setDraft.reps) ?? 0
+        pickerUnit = preferredUnit
+        showPickerSheet = true
+    }
+
     private func setLine(_ set: SetLog) -> String {
         WorkoutSessionFormatter.formatSetLine(set: set, preferred: preferredUnit)
     }
 
     private func weightText(for set: SetLog) -> String {
         WeightFormatter.format(set.weightKg, unit: preferredUnit)
+    }
+
+    private struct SetEntrySheetView: View {
+        @Binding var weightInt: Int
+        @Binding var weightDec: Int
+        @Binding var reps: Int
+        @Binding var unit: WorkoutUnits
+    let onChange: () -> Void
+    let onLog: (Double?, Int) -> Void
+    let preferredUnit: WorkoutUnits
+
+        @Environment(\.dismiss) private var dismiss
+
+        var body: some View {
+            NavigationStack {
+                VStack(spacing: 24) {
+                Capsule()
+                    .fill(Color.white.opacity(0.25))
+                    .frame(width: 40, height: 4)
+                    .padding(.top, 4)
+
+                HStack {
+                    Spacer()
+                    Text("Set Entry")
+                        .appFont(.title3, weight: .bold)
+                    Spacer()
+                    AtlasPillButton("Log") {
+                        logAndDismiss()
+                    }
+                    .tint(.primary)
+                    .frame(height: 34)
+                }
+
+                unitToggle
+
+                HStack(spacing: 12) {
+                    pickerBlock(title: "Weight", value: Binding(
+                        get: { weightInt },
+                        set: { weightInt = $0; onChange() }
+                    ), range: 0...500)
+                    pickerBlock(title: ".", value: Binding(
+                        get: { weightDec },
+                        set: { weightDec = $0; onChange() }
+                    ), range: 0...9)
+                    Text(unit == .kg ? "kg" : "lb")
+                        .appFont(.body, weight: .semibold)
+                        .monospacedDigit()
+                }
+
+                pickerBlock(title: "Reps", value: Binding(
+                    get: { reps },
+                    set: { reps = $0; onChange() }
+                ), range: 0...50)
+
+                Text("Values are stored in kilograms for history.")
+                    .appFont(.footnote, weight: .regular)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+            .padding(AppStyle.contentPaddingLarge)
+            .atlasBackground()
+            .atlasBackgroundTheme(.workout)
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private func pickerBlock(title: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
+        VStack(alignment: .center, spacing: 8) {
+            Text(title)
+                .appFont(.footnote, weight: .semibold)
+                .foregroundStyle(.secondary)
+            Picker("", selection: value) {
+                ForEach(range, id: \.self) { num in
+                    Text("\(num)")
+                        .tag(num)
+                        .appFont(.title, weight: .bold)
+                }
+            }
+            .pickerStyle(.wheel)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var unitToggle: some View {
+        HStack {
+            Text("Unit")
+                .appFont(.footnote, weight: .semibold)
+                .foregroundStyle(.secondary)
+            Spacer()
+            HStack(spacing: 8) {
+                unitButton(.kg)
+                unitButton(.lb)
+            }
+        }
+    }
+
+    private func unitButton(_ target: WorkoutUnits) -> some View {
+        Button {
+            unit = target
+            onChange()
+        } label: {
+            Text(target == .kg ? "kg" : "lb")
+                .appFont(.body, weight: .semibold)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule().fill(Color.white.opacity(unit == target ? 0.16 : 0.08))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func logAndDismiss() {
+        let weightValue = Double(weightInt) + Double(weightDec) / 10.0
+        let kgValue = unit == .kg ? weightValue : weightValue / WorkoutSessionFormatter.kgToLb
+        Haptics.playMediumImpact()
+        onLog(kgValue.isNaN ? nil : kgValue, reps)
+        dismiss()
+    }
+}
+}
+
+private struct SetLogSheetView: View {
+    let sets: [SetLog]
+    let weightText: (SetLog) -> String
+    let onDelete: (SetLog) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(sets, id: \.id) { set in
+                            AtlasRowPill {
+                                HStack(spacing: 12) {
+                                    Text(set.tag)
+                                        .appFont(.body, weight: .semibold)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(
+                                            Capsule().fill(.white.opacity(0.1))
+                                        )
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(weightText(set))
+                                            .appFont(.body, weight: .semibold)
+                                            .foregroundStyle(.primary)
+                                        Text("× \(set.reps) reps")
+                                            .appFont(.footnote, weight: .semibold)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(
+                                                Capsule().fill(Color.white.opacity(0.08))
+                                            )
+                                    }
+                                    Spacer()
+                                    Button(role: .destructive) {
+                                        onDelete(set)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .foregroundStyle(.red)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .id(set.id)
+                        }
+                    }
+                    .padding()
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: sets.count) { _, _ in
+                    if let last = sets.last {
+                        withAnimation {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("All Sets")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .atlasBackground()
+        }
     }
 }
 

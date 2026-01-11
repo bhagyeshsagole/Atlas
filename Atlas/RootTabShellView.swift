@@ -39,6 +39,8 @@ struct RootTabShellView: View {
                         .transition(tabTransition)
                 }
             }
+            .atlasBackground()
+            .atlasBackgroundTheme(backgroundTheme(for: selectedTab))
             .animation(.spring(response: 0.55, dampingFraction: 0.9), value: selectedTab)
 
             if let bannerMessage {
@@ -137,3 +139,12 @@ struct RootTabShellView: View {
         }
     }
 }
+
+
+    private func backgroundTheme(for tab: AppTab) -> BackgroundTheme {
+        switch tab {
+        case .home: return .home
+        case .friends: return .friends
+        case .stats: return .stats
+        }
+    }

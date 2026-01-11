@@ -9,7 +9,6 @@ struct FriendsView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                     header
@@ -29,6 +28,8 @@ struct FriendsView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .tint(primaryColor)
+        .atlasBackground()
+        .atlasBackgroundTheme(.friends)
         .task {
             await refreshIfReady()
         }

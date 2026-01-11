@@ -11,7 +11,9 @@ import SwiftData
 struct HomeView: View {
     @Query(sort: [SortDescriptor(\Workout.date, order: .reverse)]) private var workouts: [Workout]
     @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var historySessions: [WorkoutSession]
+    @EnvironmentObject private var historyStore: HistoryStore
     private let calendar = Calendar.current
+    @AppStorage("weightUnit") private var weightUnit: String = "kg"
 
     let startWorkout: () -> Void
     let openSettings: () -> Void
@@ -19,6 +21,7 @@ struct HomeView: View {
     @State private var showCalendarCard = false
     @State private var isDayHistoryPresented = false
     @State private var selectedDayForHistory: Date = Date()
+    @State private var presentedSession: WorkoutSession?
     @State private var monthOffset: Int = 0
 
     var body: some View {
@@ -119,7 +122,8 @@ struct HomeView: View {
         .padding(.horizontal, 24)
         .padding(.top, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.black.ignoresSafeArea())
+        .atlasBackground()
+        .atlasBackgroundTheme(.home)
         .tint(.primary)
         .onAppear {
             withAnimation(AppMotion.primary) {
@@ -127,7 +131,24 @@ struct HomeView: View {
             }
         }
         .navigationDestination(isPresented: $isDayHistoryPresented) {
-            DayHistoryView(day: selectedDayForHistory)
+            DayHistoryView(day: selectedDayForHistory, onSelectSession: { session in
+                presentedSession = session
+            })
+            .sheet(item: $presentedSession) { session in
+                SessionHistoryDetailSheetView(
+                    session: session,
+                    onRemove: {
+                        historyStore.deleteSession(session)
+                        presentedSession = nil
+                        // refresh day view by toggling
+                        isDayHistoryPresented = false
+                        DispatchQueue.main.async {
+                            isDayHistoryPresented = true
+                        }
+                    },
+                    preferredUnit: weightUnitPreference
+                )
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -255,6 +276,10 @@ struct HomeView: View {
             guard session.totalSets > 0, let ended = session.endedAt else { return false }
             return ended >= start && ended < end
         }
+    }
+
+    private var weightUnitPreference: WorkoutUnits {
+        WorkoutUnits(from: weightUnit)
     }
 }
 

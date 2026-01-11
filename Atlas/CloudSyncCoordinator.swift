@@ -16,6 +16,8 @@ final class CloudSyncCoordinator: ObservableObject {
     private var didStart = false
     private var inflight: Set<UUID> = []
     private var lastAttempt: [UUID: Date] = [:]
+    private var lastFailureAt: Date?
+    private var cooldownSeconds: TimeInterval = 0
 
     init(historyStore: HistoryStore, authStore: AuthStore) {
         self.historyStore = historyStore
@@ -65,6 +67,16 @@ final class CloudSyncCoordinator: ObservableObject {
         guard isSyncing == false else { return }
         guard let service else { return }
         guard authStore.isAuthenticated else { return }
+        if let failureAt = lastFailureAt, cooldownSeconds > 0 {
+            let elapsed = Date().timeIntervalSince(failureAt)
+            if elapsed < cooldownSeconds {
+                #if DEBUG
+                let remaining = Int(cooldownSeconds - elapsed)
+                print("[CLOUDSYNC] skipped push (cooldown) remaining=\(remaining)s")
+                #endif
+                return
+            }
+        }
         isSyncing = true
         lastError = nil
         #if DEBUG
@@ -116,11 +128,19 @@ final class CloudSyncCoordinator: ObservableObject {
             do {
                 try await service.upsertWorkoutSessionSummary(summary)
                 state.markSynced(sessionId: session.id, endedAt: ended)
+                lastFailureAt = nil
+                cooldownSeconds = 0
                 #if DEBUG
                 print("[CLOUDSYNC] upsert ok session=\(session.id)")
                 #endif
             } catch {
                 lastError = error.localizedDescription
+                lastFailureAt = Date()
+                if cooldownSeconds == 0 {
+                    cooldownSeconds = 30
+                } else {
+                    cooldownSeconds = min(cooldownSeconds * 2, 300)
+                }
                 #if DEBUG
                 print("[CLOUDSYNC][ERROR] session=\(session.id) error=\(error)")
                 #endif

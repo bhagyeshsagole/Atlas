@@ -17,10 +17,27 @@ struct ProfileService {
         let id: UUID
         let email: String?
         let username: String?
+        let height_cm: Double?
+        let weight_kg: Double?
+        let workouts_per_week: Int?
+        let training_goal: String?
+        let experience_level: String?
+        let limitations: String?
+        let onboarding_completed: Bool?
     }
 
     private struct SetUsernameRow: Encodable {
         let username: String
+    }
+
+    private struct TrainingProfileUpsertRow: Encodable {
+        let height_cm: Double?
+        let weight_kg: Double?
+        let workouts_per_week: Int?
+        let training_goal: String?
+        let experience_level: String?
+        let limitations: String?
+        let onboarding_completed: Bool
     }
 
     func ensureProfile(userId: UUID, email: String?) async throws {
@@ -37,10 +54,10 @@ struct ProfileService {
             .execute()
     }
 
-    func fetchMyProfile(userId: UUID) async throws -> (id: UUID, email: String?, username: String?) {
+    func fetchMyProfile(userId: UUID) async throws -> (id: UUID, email: String?, username: String?, training: TrainingProfile) {
         let response: [ProfileRow] = try await client
             .from("profiles")
-            .select("id,email,username")
+            .select("id,email,username,height_cm,weight_kg,workouts_per_week,training_goal,experience_level,limitations,onboarding_completed")
             .eq("id", value: userId)
             .limit(1)
             .execute()
@@ -48,7 +65,16 @@ struct ProfileService {
         guard let row = response.first else {
             throw ProfileServiceError.notFound
         }
-        return (row.id, row.email, row.username)
+        let training = TrainingProfile(
+            heightCm: row.height_cm,
+            weightKg: row.weight_kg,
+            workoutsPerWeek: row.workouts_per_week,
+            goal: row.training_goal,
+            experienceLevel: row.experience_level,
+            limitations: row.limitations,
+            onboardingCompleted: row.onboarding_completed ?? false
+        )
+        return (row.id, row.email, row.username, training)
     }
 
     func setUsername(userId: UUID, username: String) async throws {
@@ -70,6 +96,23 @@ struct ProfileService {
             }
             throw error
         }
+    }
+
+    func setTrainingProfile(userId: UUID, profile: TrainingProfile) async throws {
+        let payload = TrainingProfileUpsertRow(
+            height_cm: profile.heightCm,
+            weight_kg: profile.weightKg,
+            workouts_per_week: profile.workoutsPerWeek,
+            training_goal: profile.goal,
+            experience_level: profile.experienceLevel,
+            limitations: profile.limitations,
+            onboarding_completed: profile.onboardingCompleted
+        )
+        _ = try await client
+            .from("profiles")
+            .update(payload, returning: .minimal)
+            .eq("id", value: userId)
+            .execute()
     }
 }
 

@@ -55,8 +55,8 @@ struct ContentView: View {
 
     private enum Route: Hashable {
         case routines
-        case createRoutine
-        case reviewRoutine(RoutineDraft)
+        case createRoutine(groupId: String?)
+        case reviewRoutine(RoutineDraft, groupId: String?)
         case history
     }
 
@@ -86,17 +86,18 @@ struct ContentView: View {
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .routines:
-                    RoutineListView {
-                        path.append(.createRoutine)
+                    RoutineListView { groupId in
+                        path.append(.createRoutine(groupId: groupId))
                     }
-                case .createRoutine:
+                case .createRoutine(let groupId):
                     CreateRoutineView { name, workouts in
-                        path.append(.reviewRoutine(RoutineDraft(name: name, workouts: workouts)))
+                        path.append(.reviewRoutine(RoutineDraft(name: name, workouts: workouts), groupId: groupId))
                     }
-                case .reviewRoutine(let draft):
+                case .reviewRoutine(let draft, let groupId):
                     ReviewRoutineView(
                         routineName: draft.name,
-                        workouts: draft.workouts
+                        workouts: draft.workouts,
+                        initialGroupId: groupId
                     ) {
                         path = [.routines]
                     }

@@ -61,18 +61,26 @@ struct MuscleCoverageScoring {
     private static func filterSessions(_ sessions: [WorkoutSession], for range: StatsLens, calendar: Calendar) -> [WorkoutSession] {
         let now = Date()
         let start: Date?
+        let end: Date?
         switch range {
         case .week:
-            start = calendar.date(byAdding: .day, value: -7, to: now)
+            let range = DateRanges.weekRangeMonday(for: now, calendar: DateRanges.isoCalendar())
+            start = range.lowerBound
+            end = range.upperBound
         case .month:
+            end = now
             start = calendar.date(byAdding: .day, value: -30, to: now)
         case .all:
             start = nil
+            end = nil
         }
         return sessions.filter { session in
             guard let ended = session.endedAt, session.totalSets > 0 else { return false }
             if let start {
-                return ended >= start && ended <= now
+                if let end {
+                    return ended >= start && ended <= end
+                }
+                return ended >= start
             }
             return true
         }

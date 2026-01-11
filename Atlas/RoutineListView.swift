@@ -32,6 +32,7 @@
 //
 
 import SwiftUI
+import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -44,68 +45,116 @@ struct RoutineListView: View {
     @State private var pendingDeleteRoutine: Routine?
     @State private var showDeleteConfirm = false
     @State private var selectedRoutine: Routine? // Drives navigation into the pre-start flow.
+    @State private var editingGroupId: String?
+    @State private var editingGroupName: String = ""
+    @State private var showEditGroupSheet = false
+    @State private var showDeleteGroupConfirm = false
+    @State private var showAddGroupSheet = false
+    @State private var newGroupName: String = ""
+    @State private var bannerMessage: String?
 
-    let onAddRoutine: () -> Void
+    let onAddRoutine: (_ initialGroupId: String?) -> Void
 
-    private var coachRoutines: [Routine] {
-        routineStore.routines.filter { $0.isCoachSuggested }
-    }
+struct RoutineGroup: Identifiable {
+    let id: String
+    let title: String
+    let routines: [Routine]
+    let isCoach: Bool
+    var count: Int { routines.count }
+}
 
-    private var userRoutines: [Routine] {
-        routineStore.routines.filter { !$0.isCoachSuggested }
-    }
+    private var groupedSections: [RoutineGroup] {
+        let grouped = Dictionary(grouping: routineStore.routines) { $0.groupId }
+        var groupIds = Set(grouped.keys)
+        groupIds.formUnion(routineStore.groupDisplayNames.keys)
+        groupIds.insert(RoutineStore.defaultUserGroupId)
 
-    private var coachSections: [(key: String, value: [Routine])] {
-        let grouped = Dictionary(grouping: coachRoutines) { $0.coachGroupLabel ?? "Coach Suggested" }
-        return grouped.sorted { $0.key < $1.key }
+        let sections: [RoutineGroup] = groupIds.compactMap { key in
+            let routines = grouped[key] ?? []
+            let isCoach = key == RoutineStore.coachGroupId || routines.first?.isCoachSuggested == true
+            if isCoach && (routines.isEmpty || routineStore.hiddenCoachGroup) {
+                return nil
+            }
+            let fallback = isCoach ? "Coach Suggested" : "My Routines"
+            let title = key == RoutineStore.coachGroupId ? "Coach Suggested" : routineStore.displayName(forGroupId: key, fallback: fallback)
+            return RoutineGroup(id: key, title: title, routines: routines.sorted { $0.createdAt > $1.createdAt }, isCoach: isCoach)
+        }
+
+        return sections.sorted { lhs, rhs in
+            if lhs.isCoach != rhs.isCoach {
+                return lhs.isCoach // coach groups first
+            }
+            return lhs.title < rhs.title
+        }
     }
 
     var body: some View {
         ZStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                    if coachRoutines.isEmpty && userRoutines.isEmpty {
-                        Text("No routines yet — tap + to add")
-                            .appFont(.body, weight: .regular)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, AppStyle.sectionSpacing)
-                    } else {
-                        if !coachRoutines.isEmpty {
-                            Text("Coach Suggested")
-                                .appFont(.section, weight: .bold)
-                                .foregroundStyle(.primary)
-                            ForEach(coachSections, id: \.key) { groupLabel, routines in
-                                if !groupLabel.isEmpty {
-                                    Text(groupLabel)
-                                        .appFont(.footnote, weight: .semibold)
-                                        .foregroundStyle(.secondary)
-                                }
-                                ForEach(routines) { routine in
-                                    RoutineCardView(
-                                        routine: routine,
-                                        onStart: { startRoutine(routine) },
-                                        onMenu: { presentRoutineMenu(for: routine) }
-                                    )
-                                }
-                            }
-                        }
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("Start Workout")
+                            .appFont(.title, weight: .bold)
+                        Spacer()
+                        AtlasHeaderIconButton(systemName: "plus", action: { onAddRoutine(nil) })
+                    }
+                    .padding(.horizontal, AppStyle.screenHorizontalPadding)
 
-                        if !userRoutines.isEmpty {
-                            Text("My Routines")
-                                .appFont(.section, weight: .bold)
-                                .foregroundStyle(.primary)
-                            ForEach(userRoutines) { routine in
-                                RoutineCardView(
-                                    routine: routine,
-                                    onStart: { startRoutine(routine) },
-                                    onMenu: { presentRoutineMenu(for: routine) }
-                                )
+                    if routineStore.hiddenCoachGroup {
+                        Button {
+                            Haptics.playLightTap()
+                            routineStore.showCoachGroup()
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "eye")
+                                Text("Show Coach Suggested")
+                                    .appFont(.body, weight: .semibold)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .atlasGlassCard()
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                    }
+
+                    Button {
+                        Haptics.playLightTap()
+                        newGroupName = ""
+                        showAddGroupSheet = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Add Group")
+                                .appFont(.body, weight: .semibold)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .atlasGlassCard()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, AppStyle.screenHorizontalPadding)
+
+                    VStack(spacing: 14) {
+                        if groupedSections.isEmpty {
+                            Text("No routines yet — tap + to add")
+                                .appFont(.body, weight: .regular)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                        }
+                        ForEach(groupedSections, id: \.id) { section in
+                            GroupSectionCard(
+                                section: section,
+                                onStartRoutine: { startRoutine($0) },
+                                onShowMenu: { presentRoutineMenu(for: $0) },
+                                onEditGroup: { beginGroupEdit(id: section.id, currentName: section.title) },
+                                onDeleteGroup: { deleteGroup(id: section.id) },
+                                onAddRoutine: { onAddRoutine(section.id) }
+                            )
                         }
                     }
                 }
-                .padding(.horizontal, AppStyle.screenHorizontalPadding)
                 .padding(.vertical, AppStyle.screenTopPadding)
             }
             .scrollIndicators(.hidden)
@@ -146,14 +195,76 @@ struct RoutineListView: View {
                 )
             }
         }
+        .sheet(isPresented: $showEditGroupSheet) {
+            NavigationStack {
+                VStack(spacing: 16) {
+                    Text("Edit Group Name")
+                        .appFont(.title3, weight: .bold)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    TextField("Group name", text: $editingGroupName)
+                        .padding(AppStyle.settingsGroupPadding)
+                        .atlasGlassCard()
+                    Spacer()
+                }
+                .padding()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showEditGroupSheet = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") { commitGroupEdit() }.bold()
+                    }
+                }
+                if let id = editingGroupId, id != RoutineStore.coachGroupId, id != RoutineStore.defaultUserGroupId {
+                    Divider()
+                    Button(role: .destructive) {
+                        Haptics.playHeavyImpact()
+                        showDeleteGroupConfirm = true
+                    } label: {
+                        Text("Delete Group")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .atlasGlassCard()
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+            .atlasBackground()
+            .atlasBackgroundTheme(.workout)
+        }
+        .sheet(isPresented: $showAddGroupSheet) {
+            NavigationStack {
+                VStack(spacing: 16) {
+                    Text("New Group")
+                        .appFont(.title3, weight: .bold)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    TextField("Group name", text: $newGroupName)
+                        .padding(AppStyle.settingsGroupPadding)
+                        .atlasGlassCard()
+                    Spacer()
+                }
+                .padding()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showAddGroupSheet = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Create") { commitAddGroup() }.bold().disabled(newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+            .atlasBackground()
+            .atlasBackgroundTheme(.workout)
+        }
         .navigationTitle("Workout")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                AtlasHeaderIconButton(systemName: "plus", action: onAddRoutine)
-            }
-        }
+        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { EmptyView() } }
         .tint(.primary)
+        .atlasBackgroundTheme(.workout)
+        .atlasBackground()
         .navigationDestination(item: $routineToEdit) { routine in
             EditRoutineView(routine: routine) { updated in
                 routineStore.updateRoutine(updated)
@@ -166,6 +277,24 @@ struct RoutineListView: View {
             RoutinePreStartView(routine: routine)
         }
         .animation(AppStyle.popupAnimation, value: isMenuPresented)
+        .overlay {
+            if showDeleteGroupConfirm, let id = editingGroupId {
+                GlassConfirmPopup(
+                    title: "Delete group?",
+                    message: "Routines will move to My Routines.",
+                    primaryTitle: "Delete",
+                    secondaryTitle: "Cancel",
+                    isDestructive: true,
+                    isPresented: $showDeleteGroupConfirm,
+                    onPrimary: {
+                        deleteGroup(id: id)
+                        showEditGroupSheet = false
+                        editingGroupId = nil
+                    },
+                    onSecondary: { }
+                )
+            }
+        }
     }
 
     private func startRoutine(_ routine: Routine) {
@@ -196,6 +325,104 @@ struct RoutineListView: View {
         withAnimation(AppStyle.popupAnimation) { isMenuPresented = false }
         routineMenuTarget = nil
     }
+
+    private func beginGroupEdit(id: String, currentName: String) {
+        editingGroupId = id
+        editingGroupName = currentName
+        showEditGroupSheet = true
+    }
+
+    private func commitGroupEdit() {
+        guard let id = editingGroupId else { return }
+        routineStore.setGroupDisplayName(for: id, name: editingGroupName)
+        showEditGroupSheet = false
+    }
+
+    private func commitAddGroup() {
+        let trimmed = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        _ = routineStore.createGroup(named: trimmed)
+        showAddGroupSheet = false
+    }
+
+    private func deleteGroup(id: String) {
+        if id == RoutineStore.coachGroupId {
+            routineStore.deleteGroup(id: id)
+            bannerMessage = "Coach Suggested hidden. Show it again above."
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { bannerMessage = nil }
+            return
+        }
+        routineStore.deleteGroup(id: id)
+    }
+}
+
+private struct GroupSectionCard: View {
+    let section: RoutineListView.RoutineGroup
+    let onStartRoutine: (Routine) -> Void
+    let onShowMenu: (Routine) -> Void
+    let onEditGroup: () -> Void
+    let onDeleteGroup: () -> Void
+    let onAddRoutine: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(section.title)
+                        .appFont(.title3, weight: .bold)
+                        .foregroundStyle(.primary)
+                    Text("\(section.count) routines")
+                        .appFont(.footnote, weight: .semibold)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if section.isCoach == false {
+                    Button(action: onAddRoutine) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Menu {
+                    if section.isCoach == false && section.id != RoutineStore.defaultUserGroupId {
+                        Button("Rename", action: onEditGroup)
+                    }
+                    if section.id != RoutineStore.defaultUserGroupId {
+                        Button("Delete", role: .destructive, action: onDeleteGroup)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .bold))
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .menuOrder(.fixed)
+            }
+
+            VStack(spacing: 10) {
+                ForEach(section.routines) { routine in
+                    RoutineRowCard(
+                        routine: routine,
+                        onStart: { onStartRoutine(routine) },
+                        onMenu: { onShowMenu(routine) }
+                    )
+                }
+            }
+        }
+        .padding(AppStyle.glassContentPadding)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .padding(.horizontal, AppStyle.screenHorizontalPadding)
+    }
 }
 
 func routineOverviewText(_ routine: Routine) -> String {
@@ -212,76 +439,62 @@ private func routineTags(_ routine: Routine) -> [String] {
     }
     let muscles = muscleTags(for: routine)
     tags.append(contentsOf: muscles.prefix(3).map { $0.rawValue })
-    return tags
+    return Array(NSOrderedSet(array: tags)) as? [String] ?? tags
 }
 
-private struct RoutineCardView: View {
+private struct RoutineRowCard: View {
     let routine: Routine
     let onStart: () -> Void
     let onMenu: () -> Void
 
     var body: some View {
-        AtlasRowPill {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(routine.name)
-                        .appFont(.title, weight: .semibold)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if routine.isCoachSuggested {
-                        Text("Coach")
-                            .appFont(.caption, weight: .bold)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(routine.name)
+                    .appFont(.title3, weight: .semibold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                AtlasHeaderIconButton(systemName: "ellipsis", action: onMenu)
+            }
+            Text(routineOverviewText(routine))
+                .appFont(.footnote, weight: .semibold)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            let tags = routineTags(routine)
+            if !tags.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(tags, id: \.self) { tag in
+                        Text(tag)
+                            .appFont(.caption, weight: .semibold)
                             .foregroundStyle(.primary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(.white.opacity(0.08))
-                            )
-                            .overlay(
-                                Capsule()
-                                    .stroke(.white.opacity(0.15), lineWidth: 1)
-                            )
-                    }
-                    Spacer()
-                    HStack(spacing: 10) {
-                        Text(routineOverviewText(routine))
-                            .appFont(.footnote, weight: .semibold)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        AtlasHeaderIconButton(systemName: "ellipsis", action: onMenu)
-                    }
-                }
-                let tags = routineTags(routine)
-                if !tags.isEmpty {
-                    HStack(spacing: 8) {
-                        ForEach(tags, id: \.self) { tag in
-                            Text(tag)
-                                .appFont(.caption, weight: .semibold)
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule()
-                                        .fill(.white.opacity(0.08))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .stroke(.white.opacity(0.15), lineWidth: 1)
-                                )
-                        }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(.white.opacity(0.08)))
+                            .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
                     }
                 }
             }
         }
+        .padding(AppStyle.glassContentPadding)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
         .contentShape(Rectangle())
         .onTapGesture {
+            Haptics.playLightTap()
             onStart()
         }
     }
 }
+
 
 private struct GlassActionPopup: View {
     struct ActionItem: Identifiable {
@@ -304,33 +517,38 @@ private struct GlassActionPopup: View {
                     onDismiss()
                 }
 
-            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(title)
-                        .appFont(.title3, weight: .semibold)
-                        .foregroundStyle(.primary)
-                    ForEach(actions) { item in
-                        AtlasPillButton(item.title) {
-                            if item.isDestructive {
-                                Haptics.playHeavyImpact()
-                            } else {
-                                Haptics.playLightTap()
+            VStack {
+                Spacer()
+                GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(title)
+                            .appFont(.title3, weight: .semibold)
+                            .foregroundStyle(.primary)
+                        ForEach(actions) { item in
+                            AtlasPillButton(item.title) {
+                                if item.isDestructive {
+                                    Haptics.playHeavyImpact()
+                                } else {
+                                    Haptics.playLightTap()
+                                }
+                                item.action()
                             }
-                            item.action()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .tint(item.isDestructive ? .red : .primary)
+                        }
+                        AtlasPillButton("Cancel") {
+                            Haptics.playLightTap()
+                            onDismiss()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .tint(item.isDestructive ? .red : .primary)
-                    }
-                    AtlasPillButton("Cancel") {
-                        Haptics.playLightTap()
-                        onDismiss()
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, AppStyle.glassContentPadding)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                .padding(.bottom, AppStyle.screenTopPadding)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .padding(.horizontal, 32)
-            .transition(.scale.combined(with: .opacity))
         }
         .animation(.easeInOut(duration: 0.18), value: actions.count)
         .zIndex(5)

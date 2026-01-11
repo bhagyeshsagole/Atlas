@@ -32,13 +32,15 @@ import SwiftData
 
 struct DayHistoryView: View {
     let day: Date
+    let onSelectSession: ((WorkoutSession) -> Void)?
     @Query(sort: [SortDescriptor(\WorkoutSession.startedAt, order: .reverse)]) private var allSessions: [WorkoutSession] // Live feed of all sessions; filtered per day below.
+    @AppStorage("weightUnit") private var weightUnit: String = "kg"
 
     private var sessionsForDay: [WorkoutSession] {
         let start = Calendar.current.startOfDay(for: day)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start
         return allSessions.filter { session in
-            guard session.totalSets > 0, let ended = session.endedAt else { return false }
+            guard session.totalSets > 0, session.isHidden == false, let ended = session.endedAt else { return false }
             return ended >= start && ended < end
         }
     }
@@ -80,7 +82,13 @@ struct DayHistoryView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(AppStyle.glassContentPadding)
                             }
-                        }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                onSelectSession?(session)
+        }
+        .atlasBackground()
+        .atlasBackgroundTheme(.workout)
+    }
                     }
                     .padding(.horizontal, AppStyle.screenHorizontalPadding)
                     .padding(.bottom, AppStyle.screenTopPadding)
@@ -96,17 +104,14 @@ struct DayHistoryView: View {
         return formatter.string(from: Calendar.current.startOfDay(for: day))
     }
 
+    private var preferredUnit: WorkoutUnits {
+        WorkoutUnits(from: weightUnit)
+    }
+
     private func statsLine(for session: WorkoutSession) -> String {
         let sets = session.totalSets
         let reps = session.totalReps
-        let volumeKg = session.volumeKg
-        let volumeLb = volumeKg * WorkoutSessionFormatter.kgToLb
-        let volumeString: String
-        if volumeKg > 0 {
-            volumeString = String(format: "%.0f kg / %.0f lb", volumeKg, volumeLb)
-        } else {
-            volumeString = "—"
-        }
+        let volumeString = WorkoutSessionFormatter.volumeString(volumeKg: session.volumeKg, unit: preferredUnit)
         return "Sets \(sets) · Reps \(reps) · Volume \(volumeString)"
     }
 

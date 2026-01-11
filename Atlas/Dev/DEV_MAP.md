@@ -41,10 +41,12 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `Views/SessionHistoryStackView.swift` — Collapsed/expanded stack of recent sessions (not currently shown on Home).
 - `Views/AllHistoryView.swift` — Full history list with expand/collapse sets. Uses `@Query` sorted newest first. Example: add a filter to hide in-progress sessions by checking `endedAt`.
 - `Views/DayHistoryView.swift` — Sessions for a specific day; filters `endedAt` within day window and hides zero-set drafts. Example: add navigation to open a session detail screen.
+- `SessionHistoryDetailSheetView.swift` — Session detail sheet showing per-exercise set breakdown (weights/reps/tags) and soft delete (sets `isHidden=true` via HistoryStore).
 - `WorkoutSessionView.swift` — Live logger for sets + coaching + summary sheet. Writes via `HistoryStore`, stores sets in kg, and handles alternate set tags. Pager uses `exerciseIndex` + `exerciseRefreshToken` to refresh coaching/last-session/timer as you swipe; timer sheet lives here. Queue pill replaces “Next” and supports swipe/chevron navigation + sheet jump. Avoid breaking `isAddingSet` guard or `completedSessionId` summary trigger. Example: add a “Bodyweight” quick-fill that sets weight to nil.
 - `PostWorkoutSummaryView.swift` — Shows AI or cached summaries for a completed session. Loads session by ID, reuses cached JSON/text. Keep cache-first logic to avoid repeat calls. Example: adjust line spacing or add a share button without touching fetch logic.
 - `Dev/DevHistorySeeder.swift` — DEBUG-only seeder for fake sessions. Controlled by a UserDefaults flag. Do not enable in release builds. Example: add more seed days for UI testing.
 - `StatsView.swift` — Stats tab with Week/Month/All-time toggle, muscle coverage, workload summary, and coach navigator. Uses `StatsMetrics` to aggregate SwiftData sessions.
+- Week boundaries: Monday→Sunday via `DateRanges.isoCalendar()` helpers (`DateRanges.startOfWeekMonday` / `weekRangeMonday`); StatsStore and MuscleCoverageScoring use these for filtering and streaks.
 
 - Auth/Supabase files are currently unused; core app flow does not depend on them. Minimal stubs exist (`AuthStore`, `SupabaseClientProvider`) but are not wired into UI yet.
 
@@ -78,6 +80,9 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `Dev/DEV_MAP.md` — This guide. Update whenever files/flows change so newcomers can navigate quickly.
 - `ExerciseMuscleHeuristics.swift` — Keyword-based mapping from exercise names to muscle groups for stats coverage. Update weights/keywords here; swap with real metadata later.
 - `MuscleTargets` (in `StatsView`) — Weekly set targets per muscle; tweak to retune coverage goals and coach suggestions.
+- Routine grouping/titles: `RoutineStore.groupDisplayNames` persists group headers (in routines.json). Coach group id is `coach_suggested` and always shows “Coach Suggested”. Start Workout grouping/rename UI lives in `RoutineListView` (`GroupHeaderView` + edit sheet).
+- Home history detail: tapping a day summary now presents `DayHistoryView` → `SessionHistoryDetailSheetView`. Session delete is a soft delete via `HistoryStore.deleteSession` (local only); sheet shows exercises, sets/reps/volume (single unit).
+- Supabase sync schema/RLS: migrations under `supabase/migrations/` (step4 constraints/RLS in `20260113_step4_rls_constraints.sql`). Session/routine payloads attach `user_id` + `local_id`; routine delete is synced via `SyncService.deleteRoutineRemote(routine:)` (soft delete flag).
 
 ## Common “How do I…?” Recipes
 - Add fake history sessions for testing: enable `DevHistorySeeder.seedIfNeeded(...)` in DEBUG (e.g., call from `AtlasApp`), tweak `seedDays`, then delete the UserDefaults flag to reseed.
@@ -116,3 +121,22 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - Friend history RPCs (friend-safe): `SupabaseMigrations/003_friend_history_cloud.sql` adds `are_friends`, `list_workout_sessions_for_user`, and `workout_stats_for_user_row` over `public.workout_sessions_cloud`, enforcing self-or-friend access. Run and reload schema if needed.
 - Session-to-cloud mapping: `WorkoutSession+CloudSummary.swift` builds `WorkoutSessionCloudSummary` used by `HistoryStore.endSession` to trigger `CloudSyncCoordinator.sync(summary:)` after successful save.
 - Supabase sync schema: see `supabase/atlas_workout_sessions.sql` for `public.workout_sessions` table, RLS policies, and `upsert_workout_session` RPC. Run in Supabase SQL editor, then reload schema (notify pgrst, 'reload schema').
+
+
+### Auth / Onboarding
+- Sign-in UI: `Auth/AuthGateView.swift` (AuthLandingView). Fields: username, email, password, glass inputs.
+- Training onboarding sheet: `Auth/TrainingProfileOnboardingView.swift` presented from `AuthGateView` when `AuthStore.needsOnboarding`.
+- Training profile state/persistence: `Auth/AuthStore.swift` (trainingProfile), `Auth/ProfileService.swift` (Supabase fields), `Auth/TrainingProfileStore.swift` (local fallback), `Auth/TrainingProfile.swift` model.
+- Supabase profile fields migration: `supabase/migrations/20260114_profiles_training_fields.sql`.
+
+### Start Workout / Routine Grouping
+- Grouped routine UI & gradient: `RoutineListView.swift` (Start Workout screen). Sections are pill cards with per-group add menu.
+- Routine groups persistence & helpers: `RoutineStore.swift` (`groupDisplayNames`, `createGroup`, `deleteGroup`, `setGroup`). Coach group id `coach_suggested`, default user group `user_default`.
+- Per-group add flow passes `initialGroupId` into `ReviewRoutineView` via `ContentView` routes.
+- Gradient is local (`StartWorkoutGradientBackground`) and easy to remove.
+- Group delete action lives in `RoutineListView` edit group sheet (uses `RoutineStore.deleteGroup`, reassigns routines to default group).
+
+### Background Themes / Gradients
+- Theme enum & modifier: `DesignSystem/AtlasBackground.swift` (`BackgroundTheme`, `atlasBackgroundTheme`, `atlasBackground`).
+- Tab roots set themes via `RootTabShellView` (Home/Friends/Stats). Workout flow uses `.workout` in `RoutineListView`/`WorkoutSessionView`. Auth/onboarding use `.auth` in `AuthGateView`, `UsernamePromptView`, `TrainingProfileOnboardingView`.
+- Apply `atlasBackground()` to major screens; nested sheets inherit via environment unless overridden.

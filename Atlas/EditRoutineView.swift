@@ -32,76 +32,127 @@ struct EditRoutineView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: Routine // Local copy to edit before saving back.
+    @State private var draftName: String
+    @State private var editableWorkouts: [RoutineWorkoutDraft]
     @State private var newWorkoutName: String = ""
-    @State private var newWorkoutWts: String = ""
-    @State private var newWorkoutReps: String = ""
 
     let onSave: (Routine) -> Void
 
     init(routine: Routine, onSave: @escaping (Routine) -> Void) {
         _draft = State(initialValue: routine)
+        _draftName = State(initialValue: routine.name)
+        _editableWorkouts = State(initialValue: routine.workouts.map { RoutineWorkoutDraft(id: $0.id, name: $0.name, wtsText: $0.wtsText, repsText: $0.repsText) })
         self.onSave = onSave
     }
 
     var body: some View {
-        Form {
-            Section("Routine") {
-                TextField("Name", text: $draft.name)
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Routine Name")
+                            .appFont(.section, weight: .bold)
+                        TextField("Name", text: $draftName)
+                            .padding(AppStyle.settingsGroupPadding)
+                            .atlasGlassCard()
+                    }
+                }
 
-            Section("Workouts") {
-                ForEach($draft.workouts) { $workout in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(workout.name)
-                            .appFont(.body, weight: .semibold)
-                        HStack {
-                            TextField("Wts", text: $workout.wtsText)
-                                .textFieldStyle(.roundedBorder)
-                            TextField("Reps", text: $workout.repsText)
-                                .textFieldStyle(.roundedBorder)
+                GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Workouts")
+                            .appFont(.section, weight: .bold)
+                        ForEach($editableWorkouts) { $workout in
+                            HStack {
+                                TextField("Workout", text: $workout.name)
+                                    .padding(AppStyle.settingsGroupPadding)
+                                    .atlasGlassCard()
+                                Button(role: .destructive) {
+                                    deleteWorkout(id: workout.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 16, weight: .semibold))
+                                }
+                            }
+                        }
+                        TextField("New workout name", text: $newWorkoutName)
+                            .padding(AppStyle.settingsGroupPadding)
+                            .atlasGlassCard()
+                        Button {
+                            addWorkout()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                Text("Add Workout")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .atlasGlassCard()
                         }
                     }
                 }
-                .onDelete { indexSet in
-                    draft.workouts.remove(atOffsets: indexSet)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Add Workout")
-                        .appFont(.body, weight: .semibold)
-                    TextField("Workout name", text: $newWorkoutName)
-                        .textFieldStyle(.roundedBorder)
-                    HStack {
-                        TextField("Wts", text: $newWorkoutWts)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("Reps", text: $newWorkoutReps)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Button("Add") {
-                        guard !newWorkoutName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                        let workout = RoutineWorkout(
-                            id: UUID(),
-                            name: newWorkoutName.trimmingCharacters(in: .whitespacesAndNewlines),
-                            wtsText: newWorkoutWts.trimmingCharacters(in: .whitespacesAndNewlines),
-                            repsText: newWorkoutReps.trimmingCharacters(in: .whitespacesAndNewlines)
-                        )
-                        draft.workouts.append(workout)
-                        newWorkoutName = ""
-                        newWorkoutWts = ""
-                        newWorkoutReps = ""
-                    }
-                }
             }
+            .padding(AppStyle.contentPaddingLarge)
         }
+        .atlasBackground()
+        .atlasBackgroundTheme(.workout)
         .navigationTitle("Edit Routine")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    onSave(draft)
+                    onSave(cleanDraft())
                     dismiss()
                 }
             }
         }
     }
+
+    private func deleteWorkout(id: UUID) {
+        editableWorkouts.removeAll { $0.id == id }
+    }
+
+    private func addWorkout() {
+        let trimmed = newWorkoutName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return }
+        let workout = RoutineWorkoutDraft(
+            id: UUID(),
+            name: trimmed,
+            wtsText: "",
+            repsText: ""
+        )
+        editableWorkouts.append(workout)
+        newWorkoutName = ""
+    }
+
+    private func cleanDraft() -> Routine {
+        var sanitized = draft
+        let cleanedWorkouts = editableWorkouts.compactMap { workout -> RoutineWorkout? in
+            let name = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard name.isEmpty == false else { return nil }
+            return RoutineWorkout(id: workout.id, name: name, wtsText: workout.wtsText, repsText: workout.repsText)
+        }
+        sanitized.workouts = cleanedWorkouts
+        sanitized = Routine(
+            id: sanitized.id,
+            name: draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? sanitized.name : draftName.trimmingCharacters(in: .whitespacesAndNewlines),
+            createdAt: sanitized.createdAt,
+            workouts: sanitized.workouts,
+            summary: sanitized.summary,
+            source: sanitized.source,
+            coachPlanId: sanitized.coachPlanId,
+            expiresOnCompletion: sanitized.expiresOnCompletion,
+            generatedForRange: sanitized.generatedForRange,
+            coachName: sanitized.coachName,
+            coachGroup: sanitized.coachGroup
+        )
+        return sanitized
+    }
+}
+
+private struct RoutineWorkoutDraft: Identifiable {
+    let id: UUID
+    var name: String
+    var wtsText: String
+    var repsText: String
 }

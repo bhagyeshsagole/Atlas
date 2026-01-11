@@ -8,6 +8,7 @@ final class AuthStore: ObservableObject {
     @Published var userId: String?
     @Published var email: String?
     @Published var username: String?
+    @Published var trainingProfile: TrainingProfile = .empty
     @Published var isProfileLoaded: Bool = false
     @Published private(set) var session: Session?
     @Published var authErrorMessage: String?
@@ -15,6 +16,7 @@ final class AuthStore: ObservableObject {
 
     private let client: SupabaseClient?
     private let profileService: ProfileService?
+    private let trainingProfileStore = TrainingProfileStore()
     private var didStart = false
     private var isRestoring = false
     private var listenerTask: Task<Void, Never>?
@@ -36,6 +38,10 @@ final class AuthStore: ObservableObject {
     }
     var isProfileComplete: Bool {
         isAuthenticated && (username?.isEmpty == false)
+    }
+
+    var needsOnboarding: Bool {
+        isAuthenticated && (trainingProfile.onboardingCompleted == false)
     }
 
     init(client: SupabaseClient? = nil) {
@@ -121,6 +127,9 @@ final class AuthStore: ObservableObject {
             authErrorMessage = nil
             apply(session: client.auth.currentSession, event: nil)
             await refreshProfile()
+            if let username = rawUsername, username.isEmpty == false {
+                _ = await setUsername(username)
+            }
             return nil
         } catch {
             authErrorMessage = friendlyAuthMessage(for: error)
@@ -173,6 +182,7 @@ final class AuthStore: ObservableObject {
         userId = nil
         email = "guest@atlas.app"
         username = "Guest"
+        trainingProfile = TrainingProfile(heightCm: nil, weightKg: nil, workoutsPerWeek: nil, goal: nil, experienceLevel: nil, limitations: nil, onboardingCompleted: true)
     }
 
     private func kickoffRestore() {
@@ -352,6 +362,10 @@ final class AuthStore: ObservableObject {
             let profile = try await profileService.fetchMyProfile(userId: userId)
             await MainActor.run {
                 username = profile.username
+                trainingProfile = profile.training
+                if let userId = self.currentUserId {
+                    trainingProfileStore.save(profile.training, for: userId)
+                }
             }
             #if DEBUG
             print("[PROFILE] refresh ok username=\(profile.username ?? "nil")")
@@ -360,8 +374,27 @@ final class AuthStore: ObservableObject {
             #if DEBUG
             print("[PROFILE][WARN] refresh failed: \(error)")
             #endif
+            if let cached = currentUserId.flatMap({ trainingProfileStore.load(for: $0) }) {
+                trainingProfile = cached
+            }
         }
         isProfileLoaded = true
+    }
+
+    func updateTrainingProfile(_ profile: TrainingProfile) async -> String? {
+        guard let userId = currentUserId else { return "Not signed in." }
+        trainingProfile = profile
+        trainingProfileStore.save(profile, for: userId)
+        guard let profileService else { return nil }
+        do {
+            try await profileService.setTrainingProfile(userId: userId, profile: profile)
+            return nil
+        } catch {
+            #if DEBUG
+            print("[PROFILE][ERROR] training profile save failed: \(error)")
+            #endif
+            return "Could not save online; saved locally and will retry later."
+        }
     }
 
     func setUsername(_ newUsername: String) async -> String? {

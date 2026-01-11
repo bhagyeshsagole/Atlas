@@ -18,7 +18,6 @@ struct StatsView: View {
         let coach = metrics.coach
 
         ZStack {
-            Color.black.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: spacing) {
                     Text("Stats")
@@ -58,6 +57,8 @@ struct StatsView: View {
             .scrollIndicators(.hidden)
             .safeAreaPadding(.top)
         }
+        .atlasBackground()
+        .atlasBackgroundTheme(.stats)
         .sheet(isPresented: $showCoverageDetail) {
             MuscleCoverageDetailSheet(scores: scores, lens: statsStore.selectedRange)
         }

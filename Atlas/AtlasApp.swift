@@ -47,6 +47,7 @@ struct AtlasApp: App {
     @StateObject private var friendHistoryStore: FriendHistoryStore
     @StateObject private var cloudSyncCoordinator: CloudSyncCoordinator
     @StateObject private var usernameStore: UsernameStore
+    private let syncService: SyncService
     @Environment(\.scenePhase) private var scenePhase
 
     /// Builds the shared SwiftData container with all app models.
@@ -72,6 +73,14 @@ struct AtlasApp: App {
         let cloudSyncCoordinator = CloudSyncCoordinator(historyStore: historyStore, authStore: authStore)
         historyStore.configureCloudSyncCoordinator(cloudSyncCoordinator)
         let usernameStore = UsernameStore()
+        let syncService = SyncService(
+            modelContext: context,
+            authStore: authStore,
+            routineStore: routineStore,
+            historyStore: historyStore
+        )
+        historyStore.configureSyncService(syncService)
+        routineStore.configureSyncService(syncService)
 
         _authStore = StateObject(wrappedValue: authStore)
         _routineStore = StateObject(wrappedValue: routineStore)
@@ -80,6 +89,7 @@ struct AtlasApp: App {
         _friendHistoryStore = StateObject(wrappedValue: friendHistoryStore)
         _cloudSyncCoordinator = StateObject(wrappedValue: cloudSyncCoordinator)
         _usernameStore = StateObject(wrappedValue: usernameStore)
+        self.syncService = syncService
     }
 
     /// Builds the main scene and injects the shared model container.
@@ -97,6 +107,7 @@ struct AtlasApp: App {
                 .task {
                     authStore.startIfNeeded()
                     await cloudSyncCoordinator.startIfNeeded()
+                    await syncService.processOutboxAndPull()
                 }
                 .onOpenURL { url in
                     authStore.handleAuthRedirect(url)
@@ -105,6 +116,7 @@ struct AtlasApp: App {
                 .onChange(of: scenePhase) { phase in
                     if phase == .active {
                         Task { await cloudSyncCoordinator.syncIfNeeded(reason: "foreground") }
+                        Task { await syncService.processOutboxAndPull() }
                     }
                 }
         }
@@ -118,7 +130,8 @@ enum AtlasPersistence {
         Workout.self,
         WorkoutSession.self,
         ExerciseLog.self,
-        SetLog.self
+        SetLog.self,
+        SyncOutboxItem.self
     ]
 
     static var isInMemory: Bool = false

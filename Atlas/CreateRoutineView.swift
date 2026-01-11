@@ -55,10 +55,11 @@ struct CreateRoutineView: View {
                         .appFont(.section, weight: .bold)
                         .foregroundStyle(.primary)
                     TextField("Push Day", text: $title)
-                        .textFieldStyle(.roundedBorder)
                         .tint(.primary)
                         .focused($focusedField, equals: .title)
                         .disabled(isGenerating)
+                        .padding(AppStyle.settingsGroupPadding)
+                        .atlasGlassCard()
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -68,19 +69,17 @@ struct CreateRoutineView: View {
                     ZStack(alignment: .topLeading) {
                         TextEditor(text: $rawWorkouts)
                             .frame(minHeight: 140)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(.secondary.opacity(0.3), lineWidth: 1)
-                            )
                             .tint(.primary)
                             .focused($focusedField, equals: .workoutText)
                             .disabled(isGenerating)
+                            .padding(10)
+                            .atlasGlassCard()
                         if rawWorkouts.isEmpty {
                             Text("lat pulldown x 3 10-12 and shoulder press x 3 10-12")
                                 .appFont(.body, weight: .regular)
                                 .foregroundStyle(.secondary.opacity(0.6))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 12)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
                         }
                     }
                 }
@@ -122,6 +121,8 @@ struct CreateRoutineView: View {
         .navigationTitle("Routine")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.primary)
+        .atlasBackgroundTheme(.workout)
+        .atlasBackground()
         .alert(alertMessage ?? "", isPresented: Binding(
             get: { alertMessage != nil },
             set: { isPresented in

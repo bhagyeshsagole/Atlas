@@ -72,18 +72,17 @@ final class StatsStore: ObservableObject {
     }
 
     private func filter(sessions: [WorkoutSession], for lens: StatsLens, now: Date) -> [WorkoutSession] {
-        sessions.filter { session in
+        let calendar = DateRanges.isoCalendar()
+        return sessions.filter { session in
             guard let ended = session.endedAt, session.totalSets > 0 else { return false }
             switch lens {
             case .all:
                 return true
             case .week:
-                if let interval = Calendar.current.dateInterval(of: .weekOfYear, for: now) {
-                    return ended >= interval.start && ended <= interval.end
-                }
-                return true
+                let range = DateRanges.weekRangeMonday(for: now, calendar: calendar)
+                return range.contains(ended)
             case .month:
-                if let interval = Calendar.current.dateInterval(of: .month, for: now) {
+                if let interval = calendar.dateInterval(of: .month, for: now) {
                     return ended >= interval.start && ended <= interval.end
                 }
                 return true
@@ -115,8 +114,8 @@ final class StatsStore: ObservableObject {
     }
 
     private func streakCount(sessions: [WorkoutSession], now: Date) -> Int {
-        let calendar = Calendar.current
-        var weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? now
+        let calendar = DateRanges.isoCalendar()
+        var weekStart = DateRanges.startOfWeekMonday(for: now, calendar: calendar)
         var count = 0
         while true {
             let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart

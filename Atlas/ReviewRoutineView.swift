@@ -36,6 +36,7 @@ struct ReviewRoutineView: View {
     @EnvironmentObject private var routineStore: RoutineStore
 
     let routineName: String
+    let initialGroupId: String?
     let onComplete: () -> Void
 
     @State private var editableWorkouts: [ParsedWorkout] // Live list the user can edit before saving.
@@ -45,8 +46,9 @@ struct ReviewRoutineView: View {
     @State private var isAddingNewWorkout = false
     @FocusState private var newWorkoutFieldFocused: Bool
 
-    init(routineName: String, workouts: [ParsedWorkout], onComplete: @escaping () -> Void) {
+    init(routineName: String, workouts: [ParsedWorkout], initialGroupId: String? = nil, onComplete: @escaping () -> Void) {
         self.routineName = routineName
+        self.initialGroupId = initialGroupId
         self.onComplete = onComplete
         _editableWorkouts = State(initialValue: workouts)
     }
@@ -186,7 +188,8 @@ struct ReviewRoutineView: View {
                 name: routineName,
                 createdAt: Date(),
                 workouts: routineWorkouts,
-                summary: summaryText
+                summary: summaryText,
+                coachGroup: initialGroupId
             )
 
             await MainActor.run {

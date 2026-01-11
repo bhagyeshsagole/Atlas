@@ -136,12 +136,22 @@ enum RoutineSource: String, Codable, Hashable {
 
 @MainActor
 final class RoutineStore: ObservableObject {
+    static let coachGroupId: String = "coach_suggested"
+    static let defaultUserGroupId: String = "user_default"
+
     @Published var routines: [Routine] = [] // Live in-memory list that drives routine UI.
+    @Published var groupDisplayNames: [String: String] = [:] // Persisted group titles keyed by groupId.
+    @Published var hiddenCoachGroup: Bool = false
     private let filename = "routines.json"
     private let customStorageURL: URL?
+    private weak var syncService: SyncService?
 
     init(storageURL: URL? = nil) {
         self.customStorageURL = storageURL // Tests can inject a sandboxed path to avoid touching real user data.
+    }
+
+    func configureSyncService(_ service: SyncService) {
+        syncService = service
     }
 
     /// VISUAL TWEAK: Change the filename or directory here to affect which routine file the UI reads.
@@ -161,8 +171,20 @@ final class RoutineStore: ObservableObject {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         do {
             let data = try Data(contentsOf: fileURL)
-            let decoded = try JSONDecoder().decode([Routine].self, from: data)
-            routines = decoded
+            let decoder = JSONDecoder()
+            if let stored = try? decoder.decode(StoredRoutines.self, from: data) {
+                routines = stored.routines
+                groupDisplayNames = stored.groupDisplayNames ?? [:]
+                hiddenCoachGroup = stored.hiddenCoachGroup ?? false
+            } else {
+                let decoded = try decoder.decode([Routine].self, from: data)
+                routines = decoded
+                groupDisplayNames = [:]
+                hiddenCoachGroup = false
+            }
+            if groupDisplayNames[Self.defaultUserGroupId] == nil {
+                groupDisplayNames[Self.defaultUserGroupId] = "My Routines"
+            }
         } catch {
             print("RoutineStore load error: \(error)")
         }
@@ -172,7 +194,7 @@ final class RoutineStore: ObservableObject {
     /// VISUAL TWEAK: Change the encoder settings here to adjust how routines persist.
     func save() {
         do {
-            let data = try JSONEncoder().encode(routines)
+            let data = try JSONEncoder().encode(StoredRoutines(routines: routines, groupDisplayNames: groupDisplayNames, hiddenCoachGroup: hiddenCoachGroup))
             try data.write(to: fileURL, options: .atomic)
         } catch {
             print("RoutineStore save error: \(error)")
@@ -184,13 +206,20 @@ final class RoutineStore: ObservableObject {
     func addRoutine(_ routine: Routine) {
         routines.insert(routine, at: 0)
         save()
+        Task.detached { [weak syncService] in
+            await syncService?.upsertAllRoutines()
+        }
     }
 
     /// VISUAL TWEAK: Change deletion filters here to affect which routines disappear from the UI.
     /// VISUAL TWEAK: Change save timing here to adjust how routines persist.
     func deleteRoutine(id: UUID) {
+        guard let routine = routines.first(where: { $0.id == id }) else { return }
         routines.removeAll { $0.id == id }
         save()
+        Task.detached { [weak syncService] in
+            await syncService?.deleteRoutineRemote(routine: routine)
+        }
     }
 
     /// VISUAL TWEAK: Change which fields update here to affect how edits reflect in the preview UI.
@@ -206,12 +235,64 @@ final class RoutineStore: ObservableObject {
             routines[routineIndex].workouts[workoutIndex].repsText = reps
         }
         save()
+        Task.detached { [weak syncService] in
+            await syncService?.upsertAllRoutines()
+        }
     }
 
     /// VISUAL TWEAK: Change which fields are updatable to control what the Edit screen can save.
     func updateRoutine(_ routine: Routine) {
         guard let index = routines.firstIndex(where: { $0.id == routine.id }) else { return }
         routines[index] = routine
+        save()
+        Task.detached { [weak syncService] in
+            await syncService?.upsertAllRoutines()
+        }
+    }
+
+    func displayName(forGroupId id: String, fallback: String) -> String {
+        if id == RoutineStore.coachGroupId { return "Coach Suggested" }
+        return groupDisplayNames[id].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? fallback
+    }
+
+    func setGroupDisplayName(for id: String, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            groupDisplayNames[id] = nil
+        } else {
+            groupDisplayNames[id] = trimmed
+        }
+        save()
+    }
+
+    func createGroup(named name: String) -> String {
+        let id = "user_\(UUID().uuidString)"
+        setGroupDisplayName(for: id, name: name)
+        return id
+    }
+
+    func deleteGroup(id: String) {
+        if id == Self.coachGroupId {
+            hiddenCoachGroup = true
+        } else {
+            // Delete all routines in the group.
+            routines.removeAll { $0.groupId == id }
+        }
+        groupDisplayNames[id] = nil
+        save()
+        Task.detached { [weak syncService] in
+            await syncService?.upsertAllRoutines()
+        }
+    }
+
+    func setGroup(for routineId: UUID, groupId: String) {
+        guard let idx = routines.firstIndex(where: { $0.id == routineId }) else { return }
+        routines[idx].coachGroup = groupId
+        save()
+    }
+
+    func showCoachGroup() {
+        hiddenCoachGroup = false
         save()
     }
 }
@@ -220,4 +301,14 @@ extension Routine {
     var isCoachSuggested: Bool { source == .coach }
     var coachDisplayName: String? { coachName }
     var coachGroupLabel: String? { coachGroup }
+    var groupId: String {
+        if isCoachSuggested { return RoutineStore.coachGroupId }
+        return coachGroup ?? RoutineStore.defaultUserGroupId
+    }
+}
+
+private struct StoredRoutines: Codable {
+    var routines: [Routine]
+    var groupDisplayNames: [String: String]?
+    var hiddenCoachGroup: Bool?
 }

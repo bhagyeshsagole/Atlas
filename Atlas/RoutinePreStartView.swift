@@ -83,8 +83,9 @@ struct RoutinePreStartView: View {
         }
         .navigationTitle(routine.name)
         .navigationBarTitleDisplayMode(.inline)
-        .background(Color(.systemBackground))
         .tint(.primary)
+        .atlasBackground()
+        .atlasBackgroundTheme(.workout)
         .safeAreaInset(edge: .bottom) {
             bottomActions
         }
@@ -109,8 +110,7 @@ struct RoutinePreStartView: View {
         .padding(.horizontal, AppStyle.screenHorizontalPadding)
         .padding(.bottom, bottomActionPadding)
         .background(
-            Color(.systemBackground)
-                .opacity(0.9)
+            Color.black.opacity(0.65)
                 .ignoresSafeArea(edges: .bottom)
         )
     }

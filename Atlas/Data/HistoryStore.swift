@@ -38,6 +38,37 @@ import Combine
 import SwiftData
 import Supabase
 
+/// Minimal remote history graph used when importing sessions pulled from Supabase.
+/// Kept local to avoid target-membership issues; mirror fields the sync layer returns.
+struct RemoteSessionGraph {
+    struct Session: Codable {
+        let id: UUID
+        let routine_id: UUID?
+        let routine_title: String
+        let started_at: Date
+        let ended_at: Date?
+        let total_sets: Int
+        let total_reps: Int
+        let total_volume_kg: Double
+    }
+
+    struct Exercise: Codable {
+        let id: UUID
+        let session_id: UUID?
+        let exercise_name: String
+        let sort_index: Int
+    }
+
+    struct Set: Codable {
+        let id: UUID
+        let exercise_log_id: UUID
+        let reps: Int
+        let weight_kg: Double
+        let tag: String?
+        let created_at: Date?
+    }
+}
+
 /// DEV MAP: History writes/reads live here (queries, discard rules, calendar data).
 /// DEV NOTE: ALL history writes go through HistoryStore so UI + AI always agree.
 /// DEV NOTE: Queries avoid #Predicate macros to prevent SwiftData macro compiler issues.
@@ -47,6 +78,7 @@ final class HistoryStore: ObservableObject {
     private let calendar = Calendar.current
     private var cloudSyncService: CloudSyncService?
     weak var cloudSyncCoordinator: CloudSyncCoordinator?
+    weak var syncService: SyncService?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -62,6 +94,10 @@ final class HistoryStore: ObservableObject {
 
     func configureCloudSyncCoordinator(_ coordinator: CloudSyncCoordinator?) {
         cloudSyncCoordinator = coordinator
+    }
+
+    func configureSyncService(_ service: SyncService?) {
+        syncService = service
     }
 
     func startSession(routineId: UUID?, routineTitle: String, exercises: [String], routineTemplateId: UUID? = nil) -> WorkoutSession {
@@ -175,6 +211,12 @@ final class HistoryStore: ObservableObject {
             }
         }
 
+        if saved {
+            Task.detached { [weak syncService] in
+                await syncService?.pushCompletedSessions(limit: 10)
+            }
+        }
+
         return saved
     }
 
@@ -191,6 +233,70 @@ final class HistoryStore: ObservableObject {
             return true
         }
         return Array(filtered.prefix(limit))
+    }
+
+    func sessionExists(id: UUID) -> Bool {
+        var descriptor = FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
+        descriptor.fetchLimit = 50
+        let fetched = (try? modelContext.fetch(descriptor)) ?? []
+        return fetched.contains { $0.id == id }
+    }
+
+    func deleteSession(_ session: WorkoutSession) {
+        session.isHidden = true
+        saveContext(reason: "deleteSession")
+    }
+
+    func importRemoteSession(
+        session: RemoteSessionGraph.Session,
+        exercises: [RemoteSessionGraph.Exercise],
+        sets: [RemoteSessionGraph.Set]
+    ) {
+        guard sessionExists(id: session.id) == false else { return }
+        let newSession = WorkoutSession(
+            id: session.id,
+            routineId: session.routine_id,
+            routineTemplateId: session.routine_id,
+            routineTitle: session.routine_title,
+            startedAt: session.started_at,
+            endedAt: session.ended_at,
+            totalSets: session.total_sets,
+            totalReps: session.total_reps,
+            volumeKg: session.total_volume_kg,
+            aiPostSummaryText: "",
+            aiPostSummaryJSON: "",
+            rating: nil,
+            isCompleted: true,
+            durationSeconds: session.ended_at != nil ? Int(session.ended_at!.timeIntervalSince(session.started_at)) : nil,
+            aiPostSummaryGeneratedAt: nil,
+            aiPostSummaryModel: nil,
+            exercises: []
+        )
+        modelContext.insert(newSession)
+
+        var exMap: [UUID: ExerciseLog] = [:]
+        for ex in exercises {
+            let exModel = ExerciseLog(id: ex.id, name: ex.exercise_name, orderIndex: ex.sort_index, session: newSession, sets: [])
+            exMap[ex.id] = exModel
+            newSession.exercises.append(exModel)
+        }
+
+        for set in sets {
+            guard let exModel = exMap[set.exercise_log_id] else { continue }
+            let setModel = SetLog(
+                id: set.id,
+                tag: set.tag ?? "S",
+                weightKg: set.weight_kg,
+                reps: set.reps,
+                createdAt: set.created_at ?? session.started_at,
+                exercise: exModel
+            )
+            exModel.sets.append(setModel)
+        }
+
+        if modelContext.hasChanges {
+            try? modelContext.save()
+        }
     }
 
     func recentSessions(limit: Int) -> [WorkoutSession] {
@@ -213,7 +319,7 @@ final class HistoryStore: ObservableObject {
         )
         let fetched = (try? modelContext.fetch(descriptor)) ?? []
         return fetched.filter { session in
-            guard session.totalSets > 0, let ended = session.endedAt else { return false }
+            guard session.totalSets > 0, session.isHidden == false, let ended = session.endedAt else { return false }
             return ended >= window.start && ended < window.end
         }
     }

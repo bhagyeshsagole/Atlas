@@ -9,6 +9,8 @@ struct AuthGateView: View {
                 AuthLandingView()
             } else if authStore.isProfileLoaded == false {
                 ProfileLoadingView()
+            } else if authStore.needsOnboarding {
+                TrainingProfileOnboardingView { }
             } else {
                 ContentView()
             }
@@ -16,6 +18,7 @@ struct AuthGateView: View {
         .task {
             authStore.startIfNeeded()
         }
+        .atlasBackgroundTheme(.auth)
     }
 }
 
@@ -69,105 +72,86 @@ private struct AuthLandingView: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.92)
-                .ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Atlas")
-                        .appFont(.brand)
-                        .foregroundStyle(.primary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Welcome")
+                            .appFont(.brand)
+                            .foregroundStyle(.primary)
                     Text("Sign in to continue")
                         .appFont(.title3, weight: .semibold)
                         .foregroundStyle(.primary)
-                        .opacity(0.8)
-                }
-
-                VStack(alignment: .leading, spacing: AppStyle.rowSpacing) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Email")
-                            .appFont(.section, weight: .semibold)
-                            .foregroundStyle(.secondary)
-                        TextField("you@example.com", text: $emailInput)
-                            .textInputAutocapitalization(.never)
-                            .textContentType(.emailAddress)
-                            .keyboardType(.emailAddress)
-                            .submitLabel(.next)
-                            .autocorrectionDisabled(true)
-                            .padding(AppStyle.settingsGroupPadding)
-                            .atlasGlassCard()
+                            .opacity(0.9)
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Password")
-                            .appFont(.section, weight: .semibold)
-                            .foregroundStyle(.secondary)
-                        SecureField("••••••••", text: $passwordInput)
-                            .textContentType(.password)
-                            .submitLabel(.go)
-                            .onSubmit { Task { await signIn() } }
-                            .padding(AppStyle.settingsGroupPadding)
-                            .atlasGlassCard()
+                    VStack(spacing: 12) {
+                        GlassInputRow(title: "Username", placeholder: "atlas_user", text: $usernameInput, icon: "person.fill", isSecure: false, keyboard: .asciiCapable)
+                        GlassInputRow(title: "Email", placeholder: "you@example.com", text: $emailInput, icon: "envelope.fill", isSecure: false, keyboard: .emailAddress)
+                        GlassInputRow(title: "Password", placeholder: "••••••••", text: $passwordInput, icon: "lock.fill", isSecure: true, keyboard: .default, onSubmit: { Task { await signIn() } })
                     }
-                }
 
-                Button {
-                    Haptics.playLightTap()
-                    Task { await signIn() }
-                } label: {
-                    HStack {
-                        if isWorking {
-                            ProgressView()
-                                .tint(.primary)
+                    VStack(spacing: 12) {
+                        Button {
+                            Haptics.playLightTap()
+                            Task { await signIn() }
+                        } label: {
+                            HStack {
+                                if isWorking { ProgressView().tint(.primary) }
+                                Text("Continue")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .atlasGlassCard()
                         }
-                        Text("Sign In")
+                        .disabled(isWorking || !isFormValid)
+
+                        Button {
+                            Haptics.playLightTap()
+                            Task { await signUp() }
+                        } label: {
+                            Text("Create Account")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .atlasGlassCard()
+                                .opacity(0.9)
+                        }
+                        .disabled(isWorking || !isFormValid)
+
+                        Button {
+                            Haptics.playLightTap()
+                            authStore.activateDemoMode()
+                        } label: {
+                            Text("Continue in Demo Mode")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .atlasGlassCard()
+                                .opacity(0.85)
+                        }
+                        .disabled(isWorking)
                     }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .atlasGlassCard()
-                }
-                .disabled(isWorking || emailInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || passwordInput.isEmpty)
 
-                Button {
-                    Haptics.playLightTap()
-                    Task { await signUp() }
-                } label: {
-                    Text("Create Account")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .atlasGlassCard()
-                        .opacity(0.9)
+                    if let status {
+                        Text(status.message)
+                            .appFont(.body)
+                            .foregroundStyle(status.style)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
-                .disabled(isWorking || emailInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || passwordInput.isEmpty)
-
-                Button {
-                    Haptics.playLightTap()
-                    authStore.activateDemoMode()
-                } label: {
-                    Text("Continue in Demo Mode")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .atlasGlassCard()
-                        .opacity(0.85)
-                }
-                .disabled(isWorking)
-
-                if let status {
-                    Text(status.message)
-                        .appFont(.body)
-                        .foregroundStyle(status.style)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Spacer()
+                .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                .padding(.top, AppStyle.screenTopPadding + AppStyle.headerTopPadding)
+                .padding(.bottom, AppStyle.settingsBottomPadding)
             }
-            .padding(.horizontal, AppStyle.screenHorizontalPadding)
-            .padding(.top, AppStyle.screenTopPadding + AppStyle.headerTopPadding)
-            .padding(.bottom, AppStyle.settingsBottomPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .scrollDismissesKeyboard(.interactively)
         .tint(.primary)
+        .atlasBackground()
+    }
+
+    private var isFormValid: Bool {
+        usernameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false &&
+        emailInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false &&
+        passwordInput.isEmpty == false
     }
 
     @MainActor
@@ -200,7 +184,7 @@ private struct AuthLandingView: View {
         status = nil
         defer { isWorking = false }
 
-        let errorMessage = await authStore.signUp(email: emailInput, password: passwordInput, username: nil)
+        let errorMessage = await authStore.signUp(email: emailInput, password: passwordInput, username: usernameInput)
         if let errorMessage {
             status = .error(errorMessage)
         } else {
@@ -208,4 +192,45 @@ private struct AuthLandingView: View {
         }
     }
 
+}
+
+private struct GlassInputRow: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+    let icon: String
+    var isSecure: Bool = false
+    var keyboard: UIKeyboardType = .default
+    var onSubmit: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .appFont(.section, weight: .semibold)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if isSecure {
+                        SecureField(placeholder, text: $text)
+                            .textContentType(.password)
+                            .submitLabel(.go)
+                            .onSubmit { onSubmit?() }
+                    } else {
+                        TextField(placeholder, text: $text)
+                            .textContentType(keyboard == .emailAddress ? .emailAddress : .username)
+                            .submitLabel(.next)
+                    }
+                }
+                .textInputAutocapitalization(.never)
+                .keyboardType(keyboard)
+                .autocorrectionDisabled(true)
+
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(AppStyle.settingsGroupPadding)
+            .atlasGlassCard()
+        }
+    }
 }

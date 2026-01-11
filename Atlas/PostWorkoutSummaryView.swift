@@ -84,7 +84,8 @@ struct PostWorkoutSummaryView: View {
         }
         .padding(AppStyle.contentPaddingLarge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(.systemBackground))
+        .atlasBackground()
+        .atlasBackgroundTheme(.workout)
         .safeAreaInset(edge: .bottom) {
             AtlasPillButton("Done") {
                 dismiss()
@@ -143,7 +144,6 @@ struct PostWorkoutSummaryView: View {
         let unitPref = WorkoutUnits(from: weightUnit)
         let volumeValue = unitPref == .kg ? totals.volumeKg : totals.volumeKg * WorkoutSessionFormatter.kgToLb
         let volumeText = String(format: "%.0f %@", volumeValue, unitPref == .kg ? "kg" : "lb")
-        let trainingVolumeLine = "Training volume: \(volumeText)"
         let setsRepsLine = "Sets / Reps: \(totals.sets) sets / \(totals.reps) reps"
 
         let ratingValue = payload?.rating.map { String(format: "%.1f", $0) } ?? "—"
