@@ -96,11 +96,14 @@ struct WorkoutSessionView: View {
     @State private var pickerWeightDec: Int = 0
     @State private var pickerReps: Int = 0
     @State private var pickerUnit: WorkoutUnits = .kg
+    @State private var pickerTag: SetTag = .W
     @State private var setDraftWeightKg: Double?
     @State private var setDraftRepsInt: Int = 0
     @State private var pendingDeleteSetID: UUID?
     @State private var showConfirmDelete1 = false
     @State private var showConfirmDelete2 = false
+    @State private var frozenThisSessionPlan: String = ""
+    @State private var frozenExerciseId: UUID?
 
     init(routine: Routine) {
         self.routine = routine
@@ -458,7 +461,7 @@ struct WorkoutSessionView: View {
                         showAllSetsSheet = true
                     }
                 }
-                let previewSets = Array(loggedSetsForCurrent.suffix(2))
+                let previewSets = Array(loggedSetsForCurrent.suffix(1))
                 if previewSets.isEmpty {
                     Text("No sets yet.")
                         .appFont(.body, weight: .regular)
@@ -467,7 +470,7 @@ struct WorkoutSessionView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(previewSets, id: \.id) { set in
                             HStack(spacing: 10) {
-                                if let tag = SetTag(rawValue: set.tag) {
+                               if let tag = SetTag(rawValue: set.tag) {
                                     Text(tag.displayName)
                                         .appFont(.caption, weight: .bold)
                                         .padding(.horizontal, 8)
@@ -476,6 +479,7 @@ struct WorkoutSessionView: View {
                                 }
                                 Text("\(weightText(for: set)) × \(set.reps)")
                                     .appFont(.body, weight: .semibold)
+                                    .monospacedDigit()
                                     .lineLimit(1)
                                     .foregroundStyle(.primary)
                                 Spacer()
@@ -495,21 +499,14 @@ struct WorkoutSessionView: View {
 
             AtlasRowPill {
                 HStack(spacing: AppStyle.rowSpacing) {
-                    Menu {
-                        Button("W (Warm-up)") { setDraft.tag = "W" }
-                        Button("S (Standard)") { setDraft.tag = "S" }
-                        Button("DS (Drop Set)") { setDraft.tag = "DS" }
-                    } label: {
-                        Text(setDraft.tag)
-                            .appFont(.body, weight: .semibold)
-                            .foregroundStyle(.primary)
-                            .frame(width: 54)
-                    }
-
-                    AtlasPillButton("Log set") {
+                    Text("Logged Sets")
+                        .appFont(.body, weight: .semibold)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    AtlasPillButton("Log Set") {
                         presentPicker()
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: 180)
                 }
             }
         }
@@ -519,13 +516,18 @@ struct WorkoutSessionView: View {
                 weightDec: $pickerWeightDec,
                 reps: $pickerReps,
                 unit: $pickerUnit,
+                tag: $pickerTag,
                 onChange: { Haptics.playLightTap() },
-                onLog: { weightKg, reps in
+                onLog: { weightKg, reps, tag in
                     setDraftWeightKg = weightKg
                     setDraftRepsInt = reps
-                    addSet(weightKgOverride: weightKg, repsOverride: reps)
+                    setDraft.tag = tag.rawValue
+                    addSet(weightKgOverride: weightKg, repsOverride: reps, tagOverride: tag, enteredUnitOverride: pickerUnit)
                 },
-                preferredUnit: preferredUnit
+                preferredUnit: preferredUnit,
+                onUnitChange: { newUnit in
+                    weightUnit = newUnit == .kg ? "kg" : "lb"
+                },
             )
             .presentationDetents([.large])
             .atlasBackgroundTheme(.workout)
@@ -601,11 +603,14 @@ struct WorkoutSessionView: View {
     }
 
     private var thisSessionPlanText: String {
-        let plan = currentSuggestion?.thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return plan.isEmpty ? derivedThisSessionPlan : plan
+        let frozen = frozenThisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !frozen.isEmpty { return frozen }
+        let derived = derivedThisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !derived.isEmpty { return derived }
+        return "Warmup: light × 8–12 reps\nWorking: 3–4 sets × 6–10 reps."
     }
 
-    private func addSet(weightKgOverride: Double? = nil, repsOverride: Int? = nil) {
+    private func addSet(weightKgOverride: Double? = nil, repsOverride: Int? = nil, tagOverride: SetTag? = nil, enteredUnitOverride: WorkoutUnits? = nil) {
         guard !isAddingSet else { return }
         let reps: Int
         if let repsOverride {
@@ -637,14 +642,16 @@ struct WorkoutSessionView: View {
             return
         }
 
-        let tag = SetTag(rawValue: setDraft.tag) ?? .S
+        let tag = tagOverride ?? SetTag(rawValue: setDraft.tag) ?? .S
+        let enteredUnit = enteredUnitOverride ?? preferredUnit
         historyStore.addSet(
             session: session,
             exerciseName: currentExercise.name,
             orderIndex: currentExercise.orderIndex,
             tag: tag,
             weightKg: weightKg,
-            reps: reps
+            reps: reps,
+            enteredUnit: enteredUnit
         )
 
         if let exerciseLog = session.exercises.first(where: { $0.orderIndex == currentExercise.orderIndex }) {
@@ -729,15 +736,25 @@ struct WorkoutSessionView: View {
         let exerciseName = currentExercise.name
         let exerciseId = currentExercise.id
         let unit = preferredUnit
-        let lastLog = WorkoutSessionHistory.latestExerciseLog(for: exerciseName, context: modelContext)
+        let lastLog = WorkoutSessionHistory.latestCompletedExerciseLog(
+            for: exerciseName,
+            excluding: session?.id,
+            context: modelContext
+        )
         lastSessionDate = lastLog?.session?.endedAt ?? lastLog?.session?.startedAt
         if let lastLog {
             lastSessionLines = WorkoutSessionFormatter.lastSessionLines(for: lastLog, preferred: unit)
-            derivedThisSessionPlan = derivedPlan(from: lastLog, preferred: unit)
+            derivedThisSessionPlan = WorkoutSessionHistory.guidanceRange(from: lastLog, displayUnit: unit)
         } else {
             lastSessionLines = []
-            derivedThisSessionPlan = "Dial in form and keep rest tight."
+            derivedThisSessionPlan = "Warmup: light × 8–12 reps\nWorking: 3–4 sets × 6–10 reps."
         }
+        frozenThisSessionPlan = derivedThisSessionPlan
+        frozenExerciseId = exerciseId
+        #if DEBUG
+        let preview = frozenThisSessionPlan.prefix(80)
+        print("[SESSION][PLAN] freeze exerciseId=\(exerciseId) plan=\"\(preview)\"")
+        #endif
 
         if let session, let exerciseLog = session.exercises.first(where: { $0.orderIndex == currentExercise.orderIndex }) {
             exerciseLogs[currentExercise.id] = exerciseLog
@@ -759,10 +776,10 @@ struct WorkoutSessionView: View {
             await MainActor.run {
                 guard exerciseId == currentExercise.id else { return }
                 suggestions[currentExercise.id] = suggestion
-                let plan = suggestion.thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !plan.isEmpty {
-                    derivedThisSessionPlan = plan
-                }
+                #if DEBUG
+                let planPreview = suggestion.thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80)
+                print("[SESSION][PLAN] suggestion loaded exerciseId=\(exerciseId) preview=\"\(planPreview)\"")
+                #endif
                 exerciseRefreshToken = UUID()
                 isLoadingCoaching = false
             }
@@ -791,21 +808,6 @@ struct WorkoutSessionView: View {
             word.prefix(1).uppercased() + word.dropFirst().lowercased()
         }
         return words.joined(separator: " ")
-    }
-
-    private func derivedPlan(from lastLog: ExerciseLog, preferred: WorkoutUnits) -> String {
-        let sets = lastLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
-        guard let top = sets.max(by: { lhs, rhs in
-            let l = (lhs.weightKg ?? 0) * Double(lhs.reps)
-            let r = (rhs.weightKg ?? 0) * Double(rhs.reps)
-            return l < r
-        }) else {
-            return "Build on last session: add a clean set and keep rest ~90s."
-        }
-        let primary = WeightFormatter.format(top.weightKg, unit: preferred)
-        let totalSets = sets.count
-        let tagHint = (SetTag(rawValue: top.tag) == .DS) ? "ease volume, focus form" : "match or beat top set"
-        return "\(primary) × \(top.reps) — \(tagHint); keep \(totalSets) sets sharp."
     }
 
     private var timerSheet: some View {
@@ -965,6 +967,7 @@ struct WorkoutSessionView: View {
         }
         pickerReps = Int(setDraft.reps) ?? 0
         pickerUnit = preferredUnit
+        pickerTag = SetTag(rawValue: setDraft.tag) ?? .W
         showPickerSheet = true
     }
 
@@ -973,7 +976,8 @@ struct WorkoutSessionView: View {
     }
 
     private func weightText(for set: SetLog) -> String {
-        WeightFormatter.format(set.weightKg, unit: preferredUnit)
+        guard let weightKg = set.weightKg else { return "--" }
+        return WeightFormatter.format(weightKg, unit: preferredUnit)
     }
 
     private struct SetEntrySheetView: View {
@@ -981,9 +985,11 @@ struct WorkoutSessionView: View {
         @Binding var weightDec: Int
         @Binding var reps: Int
         @Binding var unit: WorkoutUnits
-    let onChange: () -> Void
-    let onLog: (Double?, Int) -> Void
-    let preferredUnit: WorkoutUnits
+        @Binding var tag: SetTag
+        let onChange: () -> Void
+        let onLog: (Double?, Int, SetTag) -> Void
+        let preferredUnit: WorkoutUnits
+        let onUnitChange: (WorkoutUnits) -> Void
 
         @Environment(\.dismiss) private var dismiss
 
@@ -1008,6 +1014,7 @@ struct WorkoutSessionView: View {
                 }
 
                 unitToggle
+                tagSelector
 
                 HStack(spacing: 12) {
                     pickerBlock(title: "Weight", value: Binding(
@@ -1075,6 +1082,7 @@ struct WorkoutSessionView: View {
         Button {
             unit = target
             onChange()
+            onUnitChange(target)
         } label: {
             Text(target == .kg ? "kg" : "lb")
                 .appFont(.body, weight: .semibold)
@@ -1091,8 +1099,32 @@ struct WorkoutSessionView: View {
         let weightValue = Double(weightInt) + Double(weightDec) / 10.0
         let kgValue = unit == .kg ? weightValue : weightValue / WorkoutSessionFormatter.kgToLb
         Haptics.playMediumImpact()
-        onLog(kgValue.isNaN ? nil : kgValue, reps)
+        onLog(kgValue.isNaN ? nil : kgValue, reps, tag)
         dismiss()
+    }
+
+    private var tagSelector: some View {
+        HStack(spacing: 10) {
+            tagButton(.W, label: "Warmup")
+            tagButton(.S, label: "Standard")
+            tagButton(.DS, label: "Drop")
+        }
+    }
+
+    private func tagButton(_ value: SetTag, label: String) -> some View {
+        Button {
+            tag = value
+            onChange()
+        } label: {
+            Text(label)
+                .appFont(.footnote, weight: .semibold)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule().fill(Color.white.opacity(tag == value ? 0.18 : 0.08))
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 }
@@ -1163,6 +1195,7 @@ private struct SetLogSheetView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .atlasBackgroundTheme(.workout)
             .atlasBackground()
         }
     }

@@ -48,81 +48,88 @@ struct CreateRoutineView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Routine Title")
-                        .appFont(.section, weight: .bold)
-                        .foregroundStyle(.primary)
-                    TextField("Push Day", text: $title)
-                        .tint(.primary)
-                        .focused($focusedField, equals: .title)
-                        .disabled(isGenerating)
-                        .padding(AppStyle.settingsGroupPadding)
-                        .atlasGlassCard()
-                }
+        ZStack {
+            Color.clear
+                .atlasBackground()
+                .atlasBackgroundTheme(.workout)
+                .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Workouts")
-                        .appFont(.section, weight: .bold)
-                        .foregroundStyle(.primary)
-                    ZStack(alignment: .topLeading) {
-                        TextEditor(text: $rawWorkouts)
-                            .frame(minHeight: 140)
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Routine Title")
+                            .appFont(.section, weight: .bold)
+                            .foregroundStyle(.primary)
+                        TextField("Push Day", text: $title)
                             .tint(.primary)
-                            .focused($focusedField, equals: .workoutText)
+                            .focused($focusedField, equals: .title)
                             .disabled(isGenerating)
-                            .padding(10)
+                            .padding(AppStyle.settingsGroupPadding)
                             .atlasGlassCard()
-                        if rawWorkouts.isEmpty {
-                            Text("lat pulldown x 3 10-12 and shoulder press x 3 10-12")
-                                .appFont(.body, weight: .regular)
-                                .foregroundStyle(.secondary.opacity(0.6))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 18)
-                        }
                     }
-                }
 
-                Button {
-                    generate()
-                } label: {
-                    HStack(spacing: 10) {
-                        if isGenerating {
-                            ProgressView()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Workouts")
+                            .appFont(.section, weight: .bold)
+                            .foregroundStyle(.primary)
+                        ZStack(alignment: .topLeading) {
+                            TextEditor(text: $rawWorkouts)
+                                .frame(minHeight: 140)
                                 .tint(.primary)
-                            Text("Generating")
-                                .appFont(.body, weight: .semibold)
-                                .foregroundStyle(.primary)
-                        } else {
-                            Text("Generate")
-                                .appFont(.pill, weight: .semibold)
-                                .foregroundStyle(.primary)
+                                .focused($focusedField, equals: .workoutText)
+                                .disabled(isGenerating)
+                                .padding(10)
+                                .scrollContentBackground(.hidden)
+                                .background(Color.clear)
+                                .atlasGlassCard()
+                            if rawWorkouts.isEmpty {
+                                Text("lat pulldown x 3 10-12 and shoulder press x 3 10-12")
+                                    .appFont(.body, weight: .regular)
+                                    .foregroundStyle(.secondary.opacity(0.6))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 18)
+                            }
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, AppStyle.glassContentPadding)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
-                            .fill(Color.white.opacity(0.08))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
-                    .contentShape(Rectangle())
+
+                    Button {
+                        generate()
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isGenerating {
+                                ProgressView()
+                                    .tint(.primary)
+                                Text("Generating")
+                                    .appFont(.body, weight: .semibold)
+                                    .foregroundStyle(.primary)
+                            } else {
+                                Text("Generate")
+                                    .appFont(.pill, weight: .semibold)
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, AppStyle.glassContentPadding)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isGenerating)
                 }
-                .buttonStyle(.plain)
-                .disabled(isGenerating)
+                .padding(AppStyle.contentPaddingLarge)
             }
-            .padding(AppStyle.contentPaddingLarge)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
         .navigationTitle("Routine")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.primary)
-        .atlasBackgroundTheme(.workout)
-        .atlasBackground()
         .alert(alertMessage ?? "", isPresented: Binding(
             get: { alertMessage != nil },
             set: { isPresented in

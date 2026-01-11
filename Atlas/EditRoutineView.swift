@@ -46,56 +46,61 @@ struct EditRoutineView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Routine Name")
-                            .appFont(.section, weight: .bold)
-                        TextField("Name", text: $draftName)
-                            .padding(AppStyle.settingsGroupPadding)
-                            .atlasGlassCard()
-                    }
-                }
+        ZStack {
+            Color.clear
+                .atlasBackground()
+                .atlasBackgroundTheme(.workout)
+                .ignoresSafeArea()
 
-                GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Workouts")
-                            .appFont(.section, weight: .bold)
-                        ForEach($editableWorkouts) { $workout in
-                            HStack {
-                                TextField("Workout", text: $workout.name)
-                                    .padding(AppStyle.settingsGroupPadding)
-                                    .atlasGlassCard()
-                                Button(role: .destructive) {
-                                    deleteWorkout(id: workout.id)
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 16, weight: .semibold))
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Routine Name")
+                                .appFont(.section, weight: .bold)
+                            TextField("Name", text: $draftName)
+                                .padding(AppStyle.settingsGroupPadding)
+                                .atlasGlassCard()
+                        }
+                    }
+
+                    GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Workouts")
+                                .appFont(.section, weight: .bold)
+                            ForEach($editableWorkouts) { $workout in
+                                HStack {
+                                    TextField("Workout", text: $workout.name)
+                                        .padding(AppStyle.settingsGroupPadding)
+                                        .atlasGlassCard()
+                                    Button(role: .destructive) {
+                                        deleteWorkout(id: workout.id)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 16, weight: .semibold))
+                                    }
                                 }
                             }
-                        }
-                        TextField("New workout name", text: $newWorkoutName)
-                            .padding(AppStyle.settingsGroupPadding)
-                            .atlasGlassCard()
-                        Button {
-                            addWorkout()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "plus")
-                                Text("Add Workout")
+                            TextField("New workout name", text: $newWorkoutName)
+                                .padding(AppStyle.settingsGroupPadding)
+                                .atlasGlassCard()
+                            Button {
+                                addWorkout()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "plus")
+                                    Text("Add Workout")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .atlasGlassCard()
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .atlasGlassCard()
                         }
                     }
                 }
+                .padding(AppStyle.contentPaddingLarge)
             }
-            .padding(AppStyle.contentPaddingLarge)
         }
-        .atlasBackground()
-        .atlasBackgroundTheme(.workout)
         .navigationTitle("Edit Routine")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -138,7 +138,15 @@ final class HistoryStore: ObservableObject {
         return session
     }
 
-    func addSet(session: WorkoutSession, exerciseName: String, orderIndex: Int, tag: SetTag, weightKg: Double?, reps: Int) {
+    func addSet(
+        session: WorkoutSession,
+        exerciseName: String,
+        orderIndex: Int,
+        tag: SetTag,
+        weightKg: Double?,
+        reps: Int,
+        enteredUnit: WorkoutUnits = .kg
+    ) {
         // Try to reuse an exercise by order, then by name, else make a new exercise row.
         let exerciseLog = session.exercises.first(where: { $0.orderIndex == orderIndex })
             ?? session.exercises.first(where: { $0.name.caseInsensitiveCompare(exerciseName) == .orderedSame })
@@ -148,7 +156,7 @@ final class HistoryStore: ObservableObject {
                 return newExercise
             }()
 
-        let set = SetLog(tag: tag.rawValue, weightKg: weightKg, reps: reps, createdAt: Date(), exercise: exerciseLog)
+        let set = SetLog(tag: tag.rawValue, weightKg: weightKg, reps: reps, enteredUnit: enteredUnit, createdAt: Date(), exercise: exerciseLog)
         exerciseLog.sets.append(set)
 
         saveContext(reason: "addSet")

@@ -132,6 +132,8 @@ final class SetLog {
     var tagRaw: String
     var weightKg: Double?
     var reps: Int
+    /// Captures the unit the user used when entering this set (for display).
+    var enteredUnitRaw: String = "kg"
     var createdAt: Date
     var exercise: ExerciseLog?
 
@@ -140,6 +142,7 @@ final class SetLog {
         tag: String,
         weightKg: Double?,
         reps: Int,
+        enteredUnit: WorkoutUnits = .kg,
         createdAt: Date = Date(),
         exercise: ExerciseLog? = nil
     ) {
@@ -147,6 +150,7 @@ final class SetLog {
         self.tagRaw = tag
         self.weightKg = weightKg
         self.reps = reps
+        self.enteredUnitRaw = enteredUnit == .lb ? "lb" : "kg"
         self.createdAt = createdAt
         self.exercise = exercise
     }
@@ -155,6 +159,11 @@ final class SetLog {
     var tag: String {
         get { tagRaw }
         set { tagRaw = newValue }
+    }
+
+    var enteredUnit: WorkoutUnits {
+        get { WorkoutUnits(from: enteredUnitRaw) }
+        set { enteredUnitRaw = newValue == .lb ? "lb" : "kg" }
     }
 }
 
@@ -180,6 +189,13 @@ enum WorkoutUnits {
 
     init(from stored: String) {
         self = stored.lowercased() == "lb" ? .lb : .kg
+    }
+
+    var label: String {
+        switch self {
+        case .kg: return "kg"
+        case .lb: return "lb"
+        }
     }
 }
 
@@ -231,18 +247,55 @@ enum WorkoutSessionFormatter {
 }
 
 enum WorkoutSessionHistory {
-    static func latestExerciseLog(
+    static func latestCompletedExerciseLog(
         for exerciseName: String,
+        excluding sessionId: UUID? = nil,
         context: ModelContext
     ) -> ExerciseLog? {
-        /// DEV NOTE: Placeholder in Pass 1 — replace with real SwiftData query in Pass 2.
         let descriptor = FetchDescriptor<WorkoutSession>()
         guard let sessions = try? context.fetch(descriptor) else { return nil }
-        for session in sessions.sorted(by: { $0.startedAt > $1.startedAt }) {
+        let filtered = sessions
+            .filter { session in
+                if let exclude = sessionId, session.id == exclude { return false }
+                guard session.isHidden == false else { return false }
+                guard let ended = session.endedAt, ended <= Date() else { return false }
+                return session.totalSets > 0
+            }
+            .sorted { (lhs, rhs) in
+                (lhs.endedAt ?? lhs.startedAt) > (rhs.endedAt ?? rhs.startedAt)
+            }
+
+        for session in filtered {
             if let match = session.exercises.first(where: { $0.name.lowercased() == exerciseName.lowercased() }) {
                 return match
             }
         }
         return nil
+    }
+
+    static func guidanceRange(from lastLog: ExerciseLog, displayUnit: WorkoutUnits) -> String {
+        let sets = lastLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
+        guard let top = sets.max(by: { lhs, rhs in
+            let l = (lhs.weightKg ?? 0) * Double(max(lhs.reps, 1))
+            let r = (rhs.weightKg ?? 0) * Double(max(rhs.reps, 1))
+            return l < r
+        }) else {
+            return "Warmup: 2 sets · 8–12 reps\nWorking: 3–4 sets · 6–10 reps"
+        }
+
+        let baseWeightKg = top.weightKg ?? 0
+        let warmupLow = max(baseWeightKg * 0.4, baseWeightKg - 5)
+        let warmupHigh = max(baseWeightKg * 0.6, warmupLow + 0.5)
+        let workLow = max(baseWeightKg * 0.9, baseWeightKg - 2.5)
+        let workHigh = max(baseWeightKg * 1.05, workLow + 0.5)
+
+        let reps = max(top.reps, 1)
+        let repLow = max(reps - 2, 1)
+        let repHigh = reps + 2
+
+        let warmupText = "\(WeightFormatter.format(warmupLow, unit: displayUnit))–\(WeightFormatter.format(warmupHigh, unit: displayUnit))"
+        let workText = "\(WeightFormatter.format(workLow, unit: displayUnit))–\(WeightFormatter.format(workHigh, unit: displayUnit))"
+
+        return "Warmup: \(warmupText) × \(repLow)–\(repHigh) reps\nWorking: \(workText) × \(repLow)–\(repHigh) reps"
     }
 }

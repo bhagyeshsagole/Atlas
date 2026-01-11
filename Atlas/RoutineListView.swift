@@ -448,50 +448,52 @@ private struct RoutineRowCard: View {
     let onMenu: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(routine.name)
-                    .appFont(.title3, weight: .semibold)
-                    .foregroundStyle(.primary)
+        Button(action: {
+            Haptics.playLightTap()
+            onStart()
+        }) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(routine.name)
+                        .appFont(.title3, weight: .semibold)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer()
+                    AtlasHeaderIconButton(systemName: "ellipsis", action: onMenu)
+                }
+                Text(routineOverviewText(routine))
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer()
-                AtlasHeaderIconButton(systemName: "ellipsis", action: onMenu)
-            }
-            Text(routineOverviewText(routine))
-                .appFont(.footnote, weight: .semibold)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            let tags = routineTags(routine)
-            if !tags.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(tags, id: \.self) { tag in
-                        Text(tag)
-                            .appFont(.caption, weight: .semibold)
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Capsule().fill(.white.opacity(0.08)))
-                            .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
+                let tags = routineTags(routine)
+                if !tags.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(tags, id: \.self) { tag in
+                            Text(tag)
+                                .appFont(.caption, weight: .semibold)
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(.white.opacity(0.08)))
+                                .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
+                        }
                     }
                 }
             }
+            .padding(AppStyle.glassContentPadding)
+            .background(
+                RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
         }
-        .padding(AppStyle.glassContentPadding)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
-                .fill(Color.white.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            Haptics.playLightTap()
-            onStart()
-        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -510,8 +512,14 @@ private struct GlassActionPopup: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.45)
+            Color.clear
+                .atlasBackground()
+                .atlasBackgroundTheme(.workout)
                 .ignoresSafeArea()
+                .overlay(
+                    Color.black.opacity(0.45)
+                        .ignoresSafeArea()
+                )
                 .onTapGesture {
                     Haptics.playLightTap()
                     onDismiss()

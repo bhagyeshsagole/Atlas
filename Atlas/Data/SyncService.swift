@@ -4,24 +4,32 @@ import Supabase
 
 struct RemoteRoutinePayload: Codable {
     let id: UUID
-    let owner_user_id: UUID
     let user_id: UUID
     let local_id: String
+    let group_id: String
     let title: String
-    let tags: [String]
     let is_coach_suggested: Bool
-    let coach_name: String?
-    let payload: String
-    let is_deleted: Bool
-    let updated_at: Date
+    let deleted_at: Date?
     let created_at: Date
+    let updated_at: Date
+}
+
+struct RemoteRoutineExerciseRow: Codable {
+    let id: UUID
+    let user_id: UUID
+    let routine_id: UUID
+    let local_id: String
+    let exercise_name: String
+    let sort_order: Int
+    let created_at: Date
+    let updated_at: Date
 }
 
 struct RemoteSessionRow: Codable {
     let id: UUID
     let user_id: UUID
     let local_id: String
-    let routine_id: UUID?
+    let routine_local_id: String?
     let routine_title: String
     let started_at: Date
     let ended_at: Date
@@ -29,6 +37,7 @@ struct RemoteSessionRow: Codable {
     let total_reps: Int
     let total_volume_kg: Double
     let created_at: Date
+    let updated_at: Date
 }
 
 struct RemoteExerciseRow: Codable {
@@ -36,30 +45,24 @@ struct RemoteExerciseRow: Codable {
     let session_id: UUID
     let user_id: UUID
     let local_id: String
-    let name: String
-    let sort_index: Int
+    let exercise_name: String
+    let sort_order: Int
     let created_at: Date
+    let updated_at: Date
 }
 
 struct RemoteSetRow: Codable {
     let id: UUID
-    let exercise_id: UUID
-    let session_id: UUID
+    let session_exercise_id: UUID
     let user_id: UUID
     let local_id: String
+    let performed_at: Date
     let weight_kg: Double
     let reps: Int
-    let is_bodyweight: Bool
-    let is_warmup: Bool
+    let entered_unit: String?
+    let tag: String?
     let created_at: Date
-}
-
-struct RemoteTagRow: Codable {
-    let id: UUID
-    let set_id: UUID
-    let user_id: UUID
-    let tag: String
-    let created_at: Date
+    let updated_at: Date
 }
 
 @MainActor
@@ -97,21 +100,16 @@ final class SyncService {
             guard let graph = buildSessionGraph(session: session, userId: userId) else { continue }
             do {
                 try await client.database.from("workout_sessions")
-                    .upsert(graph.session, onConflict: "id", returning: .minimal)
+                    .upsert(graph.session, onConflict: "local_id", returning: .minimal)
                     .execute()
                 if !graph.exercises.isEmpty {
                     try await client.database.from("session_exercises")
-                        .upsert(graph.exercises, onConflict: "id", returning: .minimal)
+                        .upsert(graph.exercises, onConflict: "local_id", returning: .minimal)
                         .execute()
                 }
                 if !graph.sets.isEmpty {
-                    try await client.database.from("session_sets")
-                        .upsert(graph.sets, onConflict: "id", returning: .minimal)
-                        .execute()
-                }
-                if !graph.tags.isEmpty {
-                    try await client.database.from("session_set_tags")
-                        .upsert(graph.tags, onConflict: "set_id,tag", returning: .minimal)
+                    try await client.database.from("set_logs")
+                        .upsert(graph.sets, onConflict: "local_id", returning: .minimal)
                         .execute()
                 }
                 lastSessionFailure[session.id] = nil
@@ -128,6 +126,7 @@ final class SyncService {
     func upsertAllRoutines() async {
         guard let client = authStore?.supabaseClient, let userId = authStore?.currentUserId, let store = routineStore else { return }
         let payloads = store.routines.map { routinePayload(for: $0, userId: userId) }
+        let exerciseRows = store.routines.flatMap { routineExerciseRows(for: $0, userId: userId) }
         guard !payloads.isEmpty else { return }
         if let lastFail = lastRoutineFailure, Date().timeIntervalSince(lastFail) < 60 {
             #if DEBUG
@@ -137,8 +136,13 @@ final class SyncService {
         }
         do {
             try await client.database.from("routines")
-                .upsert(payloads, onConflict: "id", returning: .minimal)
+                .upsert(payloads, onConflict: "local_id", returning: .minimal)
                 .execute()
+            if !exerciseRows.isEmpty {
+                try await client.database.from("routine_exercises")
+                    .upsert(exerciseRows, onConflict: "local_id", returning: .minimal)
+                    .execute()
+            }
             #if DEBUG
             print("[SYNC][ROUTINES] upsert ok count=\(payloads.count)")
             #endif
@@ -157,17 +161,14 @@ final class SyncService {
         do {
             let payload = RemoteRoutinePayload(
                 id: routine.id,
-                owner_user_id: userId,
                 user_id: userId,
                 local_id: routine.id.uuidString,
+                group_id: routine.groupId,
                 title: routine.name,
-                tags: muscleTags(for: routine).map { $0.rawValue },
                 is_coach_suggested: routine.isCoachSuggested,
-                coach_name: routine.coachDisplayName,
-                payload: "{}",
-                is_deleted: true,
-                updated_at: Date(),
-                created_at: Date()
+                deleted_at: Date(),
+                created_at: routine.createdAt,
+                updated_at: Date()
             )
             try await client.database.from("routines")
                 .upsert(payload, onConflict: "id", returning: .minimal)
@@ -204,81 +205,83 @@ final class SyncService {
 }
 
 private extension SyncService {
-    func buildSessionGraph(session: WorkoutSession, userId: UUID) -> (session: RemoteSessionRow, exercises: [RemoteExerciseRow], sets: [RemoteSetRow], tags: [RemoteTagRow])? {
+    func buildSessionGraph(session: WorkoutSession, userId: UUID) -> (session: RemoteSessionRow, exercises: [RemoteExerciseRow], sets: [RemoteSetRow])? {
         guard let ended = session.endedAt else { return nil }
         let sessionRow = RemoteSessionRow(
             id: session.id,
             user_id: userId,
             local_id: session.id.uuidString,
-            routine_id: session.routineTemplateId,
+            routine_local_id: session.routineTemplateId?.uuidString,
             routine_title: session.routineTitle,
             started_at: session.startedAt,
             ended_at: ended,
             total_sets: session.totalSets,
             total_reps: session.totalReps,
             total_volume_kg: session.volumeKg,
-            created_at: Date()
+            created_at: Date(),
+            updated_at: Date()
         )
         var exercises: [RemoteExerciseRow] = []
         var sets: [RemoteSetRow] = []
-        var tags: [RemoteTagRow] = []
         for exercise in session.exercises.sorted(by: { $0.orderIndex < $1.orderIndex }) {
             let exerciseRow = RemoteExerciseRow(
                 id: exercise.id,
                 session_id: sessionRow.id,
                 user_id: userId,
                 local_id: exercise.id.uuidString,
-                name: exercise.name,
-                sort_index: exercise.orderIndex,
-                created_at: Date()
+                exercise_name: exercise.name,
+                sort_order: exercise.orderIndex,
+                created_at: Date(),
+                updated_at: Date()
             )
             exercises.append(exerciseRow)
             for set in exercise.sets.sorted(by: { $0.createdAt < $1.createdAt }) {
-                let isBodyweight = set.weightKg == nil
                 let setRow = RemoteSetRow(
                     id: set.id,
-                    exercise_id: exerciseRow.id,
-                    session_id: sessionRow.id,
+                    session_exercise_id: exerciseRow.id,
                     user_id: userId,
                     local_id: set.id.uuidString,
+                    performed_at: set.createdAt,
                     weight_kg: set.weightKg ?? 0,
                     reps: set.reps,
-                    is_bodyweight: isBodyweight,
-                    is_warmup: set.tagRaw == "W",
-                    created_at: set.createdAt
+                    entered_unit: set.enteredUnitRaw,
+                    tag: set.tagRaw,
+                    created_at: set.createdAt,
+                    updated_at: Date()
                 )
                 sets.append(setRow)
-                let tagValue = set.tagRaw
-                let tagRow = RemoteTagRow(
-                    id: UUID(),
-                    set_id: setRow.id,
-                    user_id: userId,
-                    tag: tagValue,
-                    created_at: Date()
-                )
-                tags.append(tagRow)
             }
         }
-        return (sessionRow, exercises, sets, tags)
+        return (sessionRow, exercises, sets)
     }
 
     func routinePayload(for routine: Routine, userId: UUID) -> RemoteRoutinePayload {
-        let encoded = (try? JSONEncoder().encode(routine)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        let tags = muscleTags(for: routine).map { $0.rawValue }
-        return RemoteRoutinePayload(
+        RemoteRoutinePayload(
             id: routine.id,
-            owner_user_id: userId,
             user_id: userId,
             local_id: routine.id.uuidString,
+            group_id: routine.groupId,
             title: routine.name,
-            tags: tags,
             is_coach_suggested: routine.isCoachSuggested,
-            coach_name: routine.coachDisplayName,
-            payload: encoded,
-            is_deleted: false,
-            updated_at: Date(),
-            created_at: Date()
+            deleted_at: nil,
+            created_at: routine.createdAt,
+            updated_at: Date()
         )
+    }
+
+    func routineExerciseRows(for routine: Routine, userId: UUID) -> [RemoteRoutineExerciseRow] {
+        routine.workouts.enumerated().map { index, workout in
+            RemoteRoutineExerciseRow(
+                id: workout.id,
+                user_id: userId,
+                routine_id: routine.id,
+                local_id: workout.id.uuidString,
+                exercise_name: workout.name,
+                sort_order: index,
+                created_at: routine.createdAt,
+                updated_at: Date()
+            )
+        }
     }
 
     func muscleTags(for routine: Routine) -> [MuscleGroup] {

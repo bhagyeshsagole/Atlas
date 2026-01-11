@@ -54,69 +54,76 @@ struct ReviewRoutineView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                Text(routineName)
-                    .appFont(.title, weight: .semibold)
-                    .foregroundStyle(.primary)
+        ZStack {
+            Color.clear
+                .atlasBackground()
+                .atlasBackgroundTheme(.workout)
+                .ignoresSafeArea()
 
-                if editableWorkouts.isEmpty {
-                    Text("No workouts to review.")
-                        .appFont(.body, weight: .regular)
-                        .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                        ForEach(editableWorkouts) { workout in
-                            AtlasRowPill {
-                                HStack(spacing: 12) {
-                                    Text(workout.name)
-                                        .appFont(.title, weight: .semibold)
-                                        .foregroundStyle(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    AtlasHeaderIconButton(systemName: "xmark") {
-                                        removeWorkout(workout.id)
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    Text(routineName)
+                        .appFont(.title, weight: .semibold)
+                        .foregroundStyle(.primary)
+
+                    if editableWorkouts.isEmpty {
+                        Text("No workouts to review.")
+                            .appFont(.body, weight: .regular)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                            ForEach(editableWorkouts) { workout in
+                                AtlasRowPill {
+                                    HStack(spacing: 12) {
+                                        Text(workout.name)
+                                            .appFont(.title, weight: .semibold)
+                                            .foregroundStyle(.primary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        AtlasHeaderIconButton(systemName: "xmark") {
+                                            removeWorkout(workout.id)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Add new workout")
-                        .appFont(.section, weight: .bold)
-                        .foregroundStyle(.primary)
-                    AtlasRowPill {
-                        HStack(spacing: 12) {
-                            TextField("Workout name", text: $newWorkoutRawName)
-                                .textInputAutocapitalization(.words)
-                                .disableAutocorrection(true)
-                                .tint(.primary)
-                                .focused($newWorkoutFieldFocused)
-                            Button {
-                                addNewWorkout()
-                            } label: {
-                                if isAddingNewWorkout {
-                                    ProgressView()
-                                        .tint(.primary)
-                                } else {
-                                    Text("Add")
-                                        .appFont(.body, weight: .semibold)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Add new workout")
+                            .appFont(.section, weight: .bold)
+                            .foregroundStyle(.primary)
+                        AtlasRowPill {
+                            HStack(spacing: 12) {
+                                TextField("Workout name", text: $newWorkoutRawName)
+                                    .textInputAutocapitalization(.words)
+                                    .disableAutocorrection(true)
+                                    .tint(.primary)
+                                    .focused($newWorkoutFieldFocused)
+                                Button {
+                                    addNewWorkout()
+                                } label: {
+                                    if isAddingNewWorkout {
+                                        ProgressView()
+                                            .tint(.primary)
+                                    } else {
+                                        Text("Add")
+                                            .appFont(.body, weight: .semibold)
+                                    }
                                 }
+                                .disabled(newWorkoutRawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAddingNewWorkout || isSaving)
                             }
-                            .disabled(newWorkoutRawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isAddingNewWorkout || isSaving)
                         }
                     }
-                }
 
-                AtlasPillButton("Done") {
-                    addRoutine()
+                    AtlasPillButton("Done") {
+                        addRoutine()
+                    }
+                    .disabled(editableWorkouts.isEmpty || isSaving)
                 }
-                .disabled(editableWorkouts.isEmpty || isSaving)
+                .padding(AppStyle.contentPaddingLarge)
             }
-            .padding(AppStyle.contentPaddingLarge)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
         .navigationTitle("Routine")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.primary)

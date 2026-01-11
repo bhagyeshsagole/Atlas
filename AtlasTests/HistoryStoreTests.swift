@@ -40,6 +40,38 @@ final class HistoryStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testLatestCompletedExerciseLogExcludesActiveSession() throws {
+        let (store, context) = makeStore()
+        let ended = store.startSession(routineId: nil, routineTitle: "Bench Day", exercises: ["Bench"])
+        store.addSet(session: ended, exerciseName: "Bench", orderIndex: 0, tag: .S, weightKg: 80, reps: 8)
+        XCTAssertTrue(store.endSession(session: ended))
+
+        let active = store.startSession(routineId: nil, routineTitle: "Bench Draft", exercises: ["Bench"])
+        store.addSet(session: active, exerciseName: "Bench", orderIndex: 0, tag: .S, weightKg: 60, reps: 5)
+
+        let latest = WorkoutSessionHistory.latestCompletedExerciseLog(for: "Bench", excluding: active.id, context: context)
+        XCTAssertNotNil(latest)
+        XCTAssertEqual(latest?.session?.id, ended.id)
+    }
+
+    @MainActor
+    func testGuidanceRangeUsesLastEndedSession() throws {
+        let (_, _) = makeStore()
+
+        // Build a manual ExerciseLog with a strong top set.
+        let session = WorkoutSession(routineId: nil, routineTemplateId: nil, routineTitle: "Test", startedAt: Date(), endedAt: Date(), totalSets: 0, totalReps: 0, volumeKg: 0, aiPostSummaryText: "", aiPostSummaryJSON: "", rating: nil, isCompleted: true, isHidden: false, durationSeconds: nil, aiPostSummaryGeneratedAt: nil, aiPostSummaryModel: nil, exercises: [])
+        let exercise = ExerciseLog(name: "Bench", orderIndex: 0, session: session, sets: [])
+        let topSet = SetLog(tag: SetTag.S.rawValue, weightKg: 100, reps: 8, enteredUnit: .kg, exercise: exercise)
+        exercise.sets.append(topSet)
+        session.exercises.append(exercise)
+
+        let guidance = WorkoutSessionHistory.guidanceRange(from: exercise, displayUnit: .kg)
+        XCTAssertTrue(guidance.contains("Warmup"))
+        XCTAssertTrue(guidance.contains("Working"))
+        XCTAssertTrue(guidance.contains("kg"))
+    }
+
+    @MainActor
     private func makeStore() -> (HistoryStore, ModelContext) {
         let schema = Schema([WorkoutSession.self, ExerciseLog.self, SetLog.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
