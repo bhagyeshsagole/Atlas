@@ -149,16 +149,18 @@ struct AtlasHeaderIconButton: View {
 struct AtlasPillButton: View {
     let title: String
     let systemImage: String?
+    let role: ButtonRole?
     let action: () -> Void
 
-    init(_ title: String, systemImage: String? = nil, action: @escaping () -> Void) {
+    init(_ title: String, systemImage: String? = nil, role: ButtonRole? = nil, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
+        self.role = role
         self.action = action
     }
 
     var body: some View {
-        Button(action: action) {
+        Button(role: role, action: action) {
             HStack(spacing: AppStyle.pillContentSpacing) {
                 if let systemImage {
                     Image(systemName: systemImage)

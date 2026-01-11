@@ -87,32 +87,20 @@ struct RoutinePreStartView: View {
         .atlasBackground()
         .atlasBackgroundTheme(.workout)
         .safeAreaInset(edge: .bottom) {
-            bottomActions
+            WorkoutActionBar(
+                left: .init(title: "End Session", role: .destructive) {
+                    Haptics.playLightTap()
+                    dismiss()
+                },
+                right: .init(title: "Start Workout", role: nil) {
+                    Haptics.playLightTap()
+                    showSession = true
+                }
+            )
         }
         .navigationDestination(isPresented: $showSession) {
             WorkoutSessionView(routine: routine)
         }
-    }
-
-    private var bottomActions: some View {
-        HStack(spacing: AppStyle.sectionSpacing) {
-            AtlasPillButton("End Session") {
-                Haptics.playLightTap()
-                dismiss()
-            }
-            .frame(maxWidth: .infinity)
-            AtlasPillButton("Start Workout") {
-                Haptics.playLightTap()
-                showSession = true
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal, AppStyle.screenHorizontalPadding)
-        .padding(.bottom, bottomActionPadding)
-        .background(
-            Color.black.opacity(0.65)
-                .ignoresSafeArea(edges: .bottom)
-        )
     }
 
     private func sectionHeader(_ text: String) -> some View {

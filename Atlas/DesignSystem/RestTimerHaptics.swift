@@ -16,13 +16,13 @@ enum RestTimerHaptics {
             let engine = try CHHapticEngine()
             try engine.start()
             var events: [CHHapticEvent] = []
-            let pulseCount = 8
-            let interval: TimeInterval = 0.35
+            let pulseCount = 5
+            let interval: TimeInterval = 0.25
 
             for i in 0..<pulseCount {
-                let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(0.6 + (Double(i) / Double(pulseCount)) * 0.2))
-                let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.6)
-                let event = CHHapticEvent(eventType: .hapticTransient, parameters: [intensity, sharpness], relativeTime: Double(i) * interval, duration: 0.12)
+                let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(0.75 + (Double(i) / Double(pulseCount)) * 0.15))
+                let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.7)
+                let event = CHHapticEvent(eventType: .hapticTransient, parameters: [intensity, sharpness], relativeTime: Double(i) * interval, duration: 0.1)
                 events.append(event)
             }
 
@@ -41,8 +41,8 @@ enum RestTimerHaptics {
     private static func playFallbackPattern() {
         let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.prepare()
-        let pulses = 8
-        let interval: TimeInterval = 0.35
+        let pulses = 5
+        let interval: TimeInterval = 0.25
         for i in 0..<pulses {
             DispatchQueue.main.asyncAfter(deadline: .now() + (Double(i) * interval)) {
                 generator.impactOccurred()

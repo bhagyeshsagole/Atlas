@@ -107,13 +107,21 @@ struct SettingsView: View {
 
                     // Instagram row.
                     SettingsSectionLabel(text: "INSTAGRAM")
-                    SettingsGroupCard {
-                        SettingsRow(
-                            title: "Tag and explore @bhagyeshsagole",
-                            value: nil,
-                            showsChevron: false,
-                            action: {}
-                        )
+                    if let instagramURL = URL(string: "https://www.instagram.com/bhagyeshsagole?igsh=bndhaGx6c3loMnZ3") {
+                        SettingsGroupCard {
+                            Link(destination: instagramURL) {
+                                HStack {
+                                    Text("Tag & explore @bhagyeshsagole")
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                        }
                     }
 
                     // Account / auth debug entry point.

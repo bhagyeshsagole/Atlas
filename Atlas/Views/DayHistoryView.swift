@@ -46,56 +46,67 @@ struct DayHistoryView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
-                Text(titleString)
-                    .appFont(.title, weight: .semibold)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, AppStyle.screenHorizontalPadding)
-                    .padding(.top, AppStyle.screenTopPadding)
+        ZStack {
+            Color.clear
+                .atlasBackground()
+                .atlasBackgroundTheme(.workout)
+                .ignoresSafeArea()
 
-                if sessionsForDay.isEmpty {
-                    GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                        Text("No sessions for this day")
-                            .appFont(.title3, weight: .semibold)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(AppStyle.glassContentPadding)
-                    }
-                    .padding(.horizontal, AppStyle.screenHorizontalPadding)
-                } else {
-                    VStack(spacing: AppStyle.cardContentSpacing) {
-                        ForEach(sessionsForDay, id: \.id) { session in
-                            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(session.routineTitle)
-                                        .appFont(.title3, weight: .semibold)
-                                        .foregroundStyle(.primary)
-                                    Text(timeLine(for: session))
-                                        .appFont(.footnote, weight: .regular)
-                                        .foregroundStyle(.secondary)
-                                    Text(statsLine(for: session))
-                                        .appFont(.footnote, weight: .medium)
-                                        .foregroundStyle(.secondary)
-                                }
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
+                    Text(titleString)
+                        .appFont(.title, weight: .semibold)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                        .padding(.top, AppStyle.screenTopPadding)
+
+                    if sessionsForDay.isEmpty {
+                        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                            Text("No sessions for this day")
+                                .appFont(.title3, weight: .semibold)
+                                .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(AppStyle.glassContentPadding)
+                        }
+                        .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                    } else {
+                        VStack(spacing: AppStyle.cardContentSpacing) {
+                            ForEach(sessionsForDay, id: \.id) { session in
+                                GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(session.routineTitle)
+                                            .appFont(.title3, weight: .semibold)
+                                            .foregroundStyle(.primary)
+                                        Text(timeLine(for: session))
+                                            .appFont(.footnote, weight: .regular)
+                                            .foregroundStyle(.secondary)
+                                        Text(statsLine(for: session))
+                                            .appFont(.footnote, weight: .medium)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(AppStyle.glassContentPadding)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    onSelectSession?(session)
+                                }
                             }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                onSelectSession?(session)
-        }
-        .atlasBackground()
-        .atlasBackgroundTheme(.workout)
-    }
+                        }
+                        .padding(.horizontal, AppStyle.screenHorizontalPadding)
+                        .padding(.bottom, AppStyle.screenTopPadding)
                     }
-                    .padding(.horizontal, AppStyle.screenHorizontalPadding)
-                    .padding(.bottom, AppStyle.screenTopPadding)
                 }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        #if DEBUG
+        .onAppear {
+            let dayString = DateFormatter.localizedString(from: day, dateStyle: .medium, timeStyle: .none)
+            print("[DAYHISTORY] appear day=\(dayString) sessions=\(sessionsForDay.count)")
+        }
+        #endif
     }
 
     private var titleString: String {

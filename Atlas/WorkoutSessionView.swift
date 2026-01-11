@@ -104,6 +104,7 @@ struct WorkoutSessionView: View {
     @State private var showConfirmDelete2 = false
     @State private var frozenThisSessionPlan: String = ""
     @State private var frozenExerciseId: UUID?
+    @State private var showTimerDoneOverlay = false
 
     init(routine: Routine) {
         self.routine = routine
@@ -114,22 +115,15 @@ struct WorkoutSessionView: View {
 
     var body: some View {
         ZStack {
-            Color.clear
-                .atlasBackground()
-                .atlasBackgroundTheme(.workout)
-                .ignoresSafeArea()
-            VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                topPager
-                    .padding(.horizontal, AppStyle.contentPaddingLarge)
-                    .padding(.top, AppStyle.contentPaddingLarge)
-                setLogSection
-                    .padding(.horizontal, AppStyle.contentPaddingLarge)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            sessionBackground
+            sessionContent
         }
         .onAppear {
             reloadForCurrentExercise()
+            if let remaining = timerRemaining, remaining > 0 {
+                let endsAt = Date().addingTimeInterval(TimeInterval(remaining))
+                RestTimerLiveActivityController.start(endsAt: endsAt, exerciseName: currentExercise.name)
+            }
         }
         .onChange(of: exerciseIndex) { _, newIndex in
             clearFocus()
@@ -144,52 +138,11 @@ struct WorkoutSessionView: View {
         .navigationBarBackButtonHidden(true)
         .atlasBackgroundTheme(.workout)
         .tint(.primary)
-        .safeAreaInset(edge: .bottom) {
-            if !isEditingSetFields {
-                bottomActions
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(AppStyle.popupAnimation, value: isEditingSetFields)
-            }
-        }
-        .sheet(isPresented: $showSummary) {
-            if let sessionId = completedSessionId {
-                PostWorkoutSummaryView(sessionID: sessionId) {
-                    dismiss()
-                }
-            }
-        }
-        .sheet(isPresented: $showTimerSheet) {
-            timerSheet
-        }
-        .sheet(isPresented: $showNewWorkoutSheet) {
-            newWorkoutSheet
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 8) {
-                    if let remaining = timerRemaining {
-                        Text(formattedTime(remaining))
-                            .appFont(.footnote, weight: .semibold)
-                            .foregroundStyle(.primary)
-                    }
-                    Button {
-                        Haptics.playLightTap()
-                        showTimerSheet = true
-                    } label: {
-                        Image(systemName: "timer")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                }
-            }
-        }
+        .safeAreaInset(edge: .bottom) { actionBarInset }
+        .sheet(isPresented: $showSummary) { summarySheet }
+        .sheet(isPresented: $showTimerSheet) { timerSheet }
+        .sheet(isPresented: $showNewWorkoutSheet) { newWorkoutSheet }
+        .toolbar { sessionToolbar }
         .onReceive(timer) { _ in
             guard let remaining = timerRemaining, remaining >= 0 else { return }
             if remaining > 1 {
@@ -198,7 +151,16 @@ struct WorkoutSessionView: View {
                 timerRemaining = nil
                 if !didFireCompletionHaptic {
                     didFireCompletionHaptic = true
-                    RestTimerHaptics.playCompletionPattern()
+                    RestTimerNotifier.cancelNotification()
+                    RestTimerNotifier.playCompletion()
+                    RestTimerLiveActivityController.end()
+                    showTimerDoneOverlay = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        if showTimerDoneOverlay {
+                            showTimerDoneOverlay = false
+                            RestTimerNotifier.stopCompletion()
+                        }
+                    }
                 }
             }
         }
@@ -207,57 +169,167 @@ struct WorkoutSessionView: View {
                 reloadForCurrentExercise()
             }
         }
-        .overlay {
-            if showConfirmDelete1 {
-                GlassConfirmPopup(
-                    title: "Remove this set?",
-                    message: "This action cannot be undone.",
-                    primaryTitle: "Continue",
-                    secondaryTitle: "Cancel",
-                    isDestructive: true,
-                    isPresented: $showConfirmDelete1,
-                    onPrimary: {
-                        showConfirmDelete2 = true
-                    },
-                    onSecondary: {
-                        pendingDeleteSetID = nil
-                    }
-                )
+        .overlay { overlays }
+    }
+
+    // MARK: - View composition
+
+    @ViewBuilder private var sessionBackground: some View {
+        Color.clear
+            .atlasBackground()
+            .atlasBackgroundTheme(.workout)
+            .ignoresSafeArea()
+    }
+
+    @ViewBuilder private var sessionContent: some View {
+        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+            topPager
+                .padding(.horizontal, AppStyle.contentPaddingLarge)
+                .padding(.top, AppStyle.contentPaddingLarge)
+            setLogSection
+                .padding(.horizontal, AppStyle.contentPaddingLarge)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    @ToolbarContentBuilder private var sessionToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .semibold))
             }
-            if showConfirmDelete2 {
-                GlassConfirmPopup(
-                    title: "Are you absolutely sure?",
-                    message: "Remove this set permanently.",
-                    primaryTitle: "Remove",
-                    secondaryTitle: "Cancel",
-                    isDestructive: true,
-                    isPresented: $showConfirmDelete2,
-                    onPrimary: {
-                        if let id = pendingDeleteSetID, let set = loggedSetsForCurrent.first(where: { $0.id == id }) {
-                            deleteSet(set)
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            HStack(spacing: 8) {
+                if let remaining = timerRemaining {
+                    Text(formattedTime(remaining))
+                        .appFont(.footnote, weight: .semibold)
+                        .foregroundStyle(.primary)
+                }
+                Button {
+                    Haptics.playLightTap()
+                    showTimerSheet = true
+                } label: {
+                    Image(systemName: "timer")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var actionBarInset: some View {
+        if !isEditingSetFields {
+            WorkoutActionBar(
+                left: .init(title: "New Workout", role: nil) {
+                    Haptics.playLightTap()
+                    showNewWorkoutSheet = true
+                },
+                right: .init(title: "End", role: .destructive) {
+                    Haptics.playLightTap()
+                    showEndConfirm = true
+                }
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .animation(AppStyle.popupAnimation, value: isEditingSetFields)
+        }
+    }
+
+    @ViewBuilder private var overlays: some View {
+        if showConfirmDelete1 {
+            GlassConfirmPopup(
+                title: "Remove this set?",
+                message: "This action cannot be undone.",
+                primaryTitle: "Continue",
+                secondaryTitle: "Cancel",
+                isDestructive: true,
+                isPresented: $showConfirmDelete1,
+                onPrimary: {
+                    showConfirmDelete2 = true
+                },
+                onSecondary: {
+                    pendingDeleteSetID = nil
+                }
+            )
+        }
+        if showConfirmDelete2 {
+            GlassConfirmPopup(
+                title: "Are you absolutely sure?",
+                message: "Remove this set permanently.",
+                primaryTitle: "Remove",
+                secondaryTitle: "Cancel",
+                isDestructive: true,
+                isPresented: $showConfirmDelete2,
+                onPrimary: {
+                    if let id = pendingDeleteSetID, let set = loggedSetsForCurrent.first(where: { $0.id == id }) {
+                        deleteSet(set)
+                    }
+                    pendingDeleteSetID = nil
+                    showConfirmDelete1 = false
+                },
+                onSecondary: {
+                    pendingDeleteSetID = nil
+                    showConfirmDelete1 = false
+                }
+            )
+        }
+        if showEndConfirm {
+            GlassConfirmPopup(
+                title: "End workout?",
+                message: "This will finish the session and save your logged sets.",
+                primaryTitle: "End",
+                secondaryTitle: "Keep Going",
+                isDestructive: true,
+                isPresented: $showEndConfirm,
+                onPrimary: {
+                    endSession()
+                },
+                onSecondary: { }
+            )
+        }
+        if showTimerDoneOverlay {
+            timerDoneOverlay
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+
+    @ViewBuilder private var timerDoneOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showTimerDoneOverlay = false
+                    RestTimerNotifier.stopCompletion()
+                }
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Timer Done")
+                        .appFont(.title3, weight: .semibold)
+                        .foregroundStyle(.primary)
+                    Text("Rest complete.")
+                                .appFont(.body, weight: .medium)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Spacer()
+                        AtlasPillButton("OK") {
+                            showTimerDoneOverlay = false
+                            RestTimerNotifier.stopCompletion()
                         }
-                        pendingDeleteSetID = nil
-                        showConfirmDelete1 = false
-                    },
-                    onSecondary: {
-                        pendingDeleteSetID = nil
-                        showConfirmDelete1 = false
+                        .frame(maxWidth: 140)
                     }
-                )
+                }
+                .padding(AppStyle.glassContentPadding)
             }
-            if showEndConfirm {
-                GlassConfirmPopup(
-                    title: "End workout?",
-                    message: "This will finish the session and save your logged sets.",
-                    primaryTitle: "End",
-                    secondaryTitle: "Keep Going",
-                    isDestructive: true,
-                    isPresented: $showEndConfirm,
-                    onPrimary: {
-                        endSession()
-                    },
-                    onSecondary: { }
-                )
+            .padding(AppStyle.contentPaddingLarge)
+        }
+    }
+
+    @ViewBuilder private var summarySheet: some View {
+        if let sessionId = completedSessionId {
+            PostWorkoutSummaryView(sessionID: sessionId) {
+                dismiss()
             }
         }
     }
@@ -837,6 +909,9 @@ struct WorkoutSessionView: View {
                     AtlasPillButton("Stop") {
                         timerRemaining = nil
                         didFireCompletionHaptic = false
+                        showTimerDoneOverlay = false
+                        RestTimerNotifier.cancelNotification()
+                        RestTimerNotifier.stopCompletion()
                         Haptics.playLightTap()
                         showTimerSheet = false
                         #if DEBUG
@@ -850,6 +925,11 @@ struct WorkoutSessionView: View {
                         let total = (timerMinutes * 60) + timerSeconds
                         timerRemaining = total
                         didFireCompletionHaptic = false
+                        showTimerDoneOverlay = false
+                        RestTimerNotifier.cancelNotification()
+                        RestTimerNotifier.scheduleNotification(in: total)
+                        let endsAt = Date().addingTimeInterval(TimeInterval(total))
+                        RestTimerLiveActivityController.start(endsAt: endsAt, exerciseName: currentExercise.name)
                         Haptics.playLightTap()
                         showTimerSheet = false
                         #if DEBUG
