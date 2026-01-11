@@ -28,8 +28,8 @@
 //  DEV MAP:
 //  - See: DEV_MAP.md → F) Popups / Menus / Haptics
 //
-
 import SwiftUI
+import Supabase
 
 struct SettingsView: View {
     let onDismiss: () -> Void
@@ -135,6 +135,30 @@ struct SettingsView: View {
                         )
                     }
 
+                    #if DEBUG
+                    SettingsSectionLabel(text: "DEBUG")
+                    SettingsGroupCard {
+                        SettingsRow(
+                            title: "Session Status",
+                            value: debugSessionStatus,
+                            showsChevron: false,
+                            action: {}
+                        )
+                        SettingsRow(
+                            title: "Access Token Present",
+                            value: debugTokenPresent,
+                            showsChevron: false,
+                            action: {}
+                        )
+                        SettingsRow(
+                            title: "Debug: Print Auth Session",
+                            value: nil,
+                            showsChevron: false,
+                            action: debugPrintAuthSession
+                        )
+                    }
+                    #endif
+
                     Spacer(minLength: AppStyle.settingsBottomPadding)
                 }
                 .padding(.horizontal, AppStyle.screenHorizontalPadding)
@@ -176,6 +200,29 @@ struct SettingsView: View {
         /// VISUAL TWEAK: Swap the base `Color.black`/`Color.white` if you want a different base hue.
         appearanceMode == "dark" ? Color.black.opacity(AppStyle.settingsBackgroundOpacityDark) : Color.white.opacity(AppStyle.settingsBackgroundOpacityLight)
     }
+
+    #if DEBUG
+    private var debugSessionStatus: String {
+        if let session = authStore.session {
+            let prefix = session.user.id.uuidString.prefix(8)
+            let clientId = authStore.supabaseClient.map { Unmanaged.passUnretained($0 as AnyObject).toOpaque() }
+            return "Signed In (\(prefix)... | client=\(clientId.map { "\($0)" } ?? "nil"))"
+        }
+        return "Signed Out"
+    }
+
+    private var debugTokenPresent: String {
+        let token = authStore.session?.accessToken ?? authStore.supabaseClient?.auth.currentSession?.accessToken
+        return (token?.isEmpty == false) ? "Yes" : "No"
+    }
+
+    private func debugPrintAuthSession() {
+        let session = authStore.supabaseClient?.auth.currentSession
+        let userId = session?.user.id.uuidString ?? "nil"
+        let hasSession = session != nil
+        print("[DEBUG][AUTH] session_present=\(hasSession) user_id=\(userId)")
+    }
+    #endif
 
 }
 

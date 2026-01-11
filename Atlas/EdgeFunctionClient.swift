@@ -1,27 +1,16 @@
 import Foundation
 import Supabase
 
-/// Stable, non-experimental client for Supabase Edge Functions.
+/// Supabase Edge Function client with shared Supabase instance, auth headers, and refresh-on-401.
 enum EdgeFunctionClient {
     typealias Response = (Data, HTTPURLResponse)
-
-    enum HTTPMethod: String {
-        case get = "GET"
-        case post = "POST"
-    }
 
     private static let projectRef = "nqaodudipodgtrnxcknv"
     private static let functionName = AIProxy.functionName
 
-    private static var supabaseURL: URL? {
-        SupabaseConfig.url ?? URL(string: "https://\(projectRef).supabase.co")
-    }
-
-    private static var jsonEncoder: JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }
+    #if DEBUG
+    static var allowUnauthenticatedInDebug = false
+    #endif
 
     private static var jsonDecoder: JSONDecoder {
         let decoder = JSONDecoder()
@@ -29,118 +18,119 @@ enum EdgeFunctionClient {
         return decoder
     }
 
-    private static func buildURL(function: String, path: String?) -> URL? {
-        guard let base = supabaseURL else { return nil }
-        var url = base.appendingPathComponent("functions/v1").appendingPathComponent(function)
-        if let path, path.isEmpty == false {
-            let cleaned = path.hasPrefix("/") ? String(path.dropFirst()) : path
-            url = url.appendingPathComponent(cleaned)
+    private static func requireClient() throws -> SupabaseClient {
+        guard let client = SupabaseService.shared else {
+            throw OpenAIError(statusCode: nil, message: "Supabase client unavailable.")
         }
-        return url
+        return client
     }
 
-    private static func defaultHeaders(includeAuthIfAvailable: Bool) -> [String: String] {
-        var headers: [String: String] = [
-            "Content-Type": "application/json"
-        ]
+    private static func fetchAccessToken(requiresAuth: Bool) async throws -> (token: String?, userId: String?) {
+        let client = try requireClient()
+        do {
+            let session = try await client.auth.session
+            return (session.accessToken, session.user.id.uuidString)
+        } catch {
+            if let current = client.auth.currentSession {
+                _ = try? await client.auth.refreshSession(refreshToken: current.refreshToken)
+            }
+            if let refreshed = try? await client.auth.session {
+                return (refreshed.accessToken, refreshed.user.id.uuidString)
+            }
+            if requiresAuth {
+                #if DEBUG
+                if allowUnauthenticatedInDebug == false {
+                    throw OpenAIError(statusCode: 401, message: "Session expired — sign in again.")
+                }
+                #else
+                throw OpenAIError(statusCode: 401, message: "Session expired — sign in again.")
+                #endif
+            }
+            let fallback = client.auth.currentSession
+            return (fallback?.accessToken, fallback?.user.id.uuidString)
+        }
+    }
 
+    private static func invokeFunction(
+        path: String?,
+        method: FunctionInvokeOptions.Method,
+        body: Encodable?,
+        requiresAuth: Bool
+    ) async throws -> Response {
+        let client = try requireClient()
+        var headers: [String: String] = [:]
         if let anonKey = SupabaseConfig.anonKey {
             headers["apikey"] = anonKey
         }
 
-        if includeAuthIfAvailable,
-           let token = OpenAIConfig.supabaseClient?.auth.currentSession?.accessToken,
-           token.isEmpty == false {
-            headers["Authorization"] = "Bearer \(token)"
+        var lastError: OpenAIError?
+
+        for attempt in 0...1 {
+            let (token, userId) = try await fetchAccessToken(requiresAuth: requiresAuth)
+            if let token, token.isEmpty == false {
+                headers["Authorization"] = "Bearer \(token)"
+            }
+
+            let name = path.map { "\(functionName)/\($0)" } ?? functionName
+            let options: FunctionInvokeOptions
+            if let body {
+                options = FunctionInvokeOptions(method: method, headers: headers, body: AnyEncodable(body))
+            } else {
+                options = FunctionInvokeOptions(method: method, headers: headers)
+            }
+
+            let requestId = UUID().uuidString.prefix(6)
+            #if DEBUG
+            let clientId = Unmanaged.passUnretained(client as AnyObject).toOpaque()
+            print("[AI][EDGE][REQ \(requestId)] func=\(name) method=\(method.rawValue) auth=\(token?.isEmpty == false) user=\(userId ?? "nil") client=\(clientId)")
+            #endif
+
+            do {
+                let response: Response = try await client.functions.invoke(
+                    name,
+                    options: options
+                ) { data, response in
+                    (data, response)
+                }
+                #if DEBUG
+                print("[AI][EDGE][RES \(requestId)] status=\(response.1.statusCode)")
+                #endif
+                return response
+            } catch let error as FunctionsError {
+                switch error {
+                case let .httpError(code, data):
+                    let snippet = String(data: data, encoding: .utf8)?.prefix(120) ?? ""
+                    #if DEBUG
+                    print("[AI][EDGE][RES \(requestId)] status=\(code) body=\(snippet)")
+                    #endif
+                    if code == 401 && attempt == 0 {
+                        _ = try? await client.auth.refreshSession()
+                        continue
+                    }
+                    if code == 401 {
+                        lastError = OpenAIError(statusCode: code, message: "AI locked behind sign-in. Please sign in again.")
+                    } else if code == 403 {
+                        lastError = OpenAIError(statusCode: code, message: "AI blocked by server policy. \(snippet)")
+                    } else {
+                        lastError = OpenAIError(statusCode: code, message: snippet.isEmpty ? "HTTP \(code)" : String(snippet))
+                    }
+                case .relayError:
+                    lastError = OpenAIError(statusCode: nil, message: "Edge relay error.")
+                }
+            } catch {
+                lastError = OpenAIError(statusCode: nil, message: error.localizedDescription)
+            }
         }
 
-        return headers
-    }
-
-    /// Low-level invoke that performs a request to an Edge Function.
-    static func invoke(
-        function: String = functionName,
-        path: String? = nil,
-        method: HTTPMethod = .post,
-        body: Encodable? = nil,
-        headers: [String: String] = [:],
-        includeAuthIfAvailable: Bool = true
-    ) async throws -> Response {
-        guard let url = buildURL(function: function, path: path) else {
-            throw OpenAIError(statusCode: nil, message: "Supabase URL missing.")
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = method.rawValue
-
-        var requestHeaders = defaultHeaders(includeAuthIfAvailable: includeAuthIfAvailable)
-        headers.forEach { requestHeaders[$0.key] = $0.value }
-        requestHeaders.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
-
-        if let body {
-            request.httpBody = try jsonEncoder.encode(AnyEncodable(body))
-        }
-
-        let requestId = UUID().uuidString.prefix(6)
-        #if DEBUG
-        print("[AI][EDGE][REQ \(requestId)] \(method.rawValue) url=\(url.absoluteString)")
-        #endif
-
-        let start = Date()
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw OpenAIError(statusCode: nil, message: "Invalid response.")
-        }
-        let elapsed = Int(Date().timeIntervalSince(start) * 1000)
-
-        #if DEBUG
-        if http.statusCode >= 300 {
-            let snippet = String(data: data, encoding: .utf8) ?? ""
-            print("[AI][EDGE][RES \(requestId)] status=\(http.statusCode) ms=\(elapsed) error=\(snippet.prefix(300))")
-        } else {
-            print("[AI][EDGE][RES \(requestId)] status=\(http.statusCode) ms=\(elapsed)")
-        }
-        #endif
-
-        guard 200..<300 ~= http.statusCode else {
-            let parsedError = parseErrorMessage(data) ?? "HTTP \(http.statusCode)"
-            let snippet = String(data: data, encoding: .utf8)?.prefix(300) ?? ""
-            throw OpenAIError(
-                statusCode: http.statusCode,
-                message: "\(parsedError) \(snippet)"
-            )
-        }
-
-        return (data, http)
-    }
-
-    /// Convenience to decode JSON responses.
-    static func invokeJSON<T: Decodable>(
-        function: String = functionName,
-        path: String? = nil,
-        method: HTTPMethod = .post,
-        body: Encodable? = nil,
-        headers: [String: String] = [:],
-        includeAuthIfAvailable: Bool = true,
-        decode type: T.Type
-    ) async throws -> T {
-        let (data, _) = try await invoke(
-            function: function,
-            path: path,
-            method: method,
-            body: body,
-            headers: headers,
-            includeAuthIfAvailable: includeAuthIfAvailable
-        )
-        return try jsonDecoder.decode(type, from: data)
+        throw lastError ?? OpenAIError(statusCode: nil, message: "Unknown error.")
     }
 
     static func callChat(payload: Encodable) async throws -> Response {
-        try await invoke(path: "chat", method: .post, body: payload, includeAuthIfAvailable: true)
+        try await invokeFunction(path: "chat", method: .post, body: payload, requiresAuth: true)
     }
 
     static func checkHealth() async throws -> Response {
-        try await invoke(path: "health", method: .get, body: nil, includeAuthIfAvailable: false)
+        try await invokeFunction(path: "health", method: .get, body: nil, requiresAuth: true)
     }
 
     #if DEBUG
@@ -154,26 +144,6 @@ enum EdgeFunctionClient {
         }
     }
     #endif
-
-    private static func parseErrorMessage(_ data: Data) -> String? {
-        guard let envelope = try? jsonDecoder.decode(ErrorEnvelope.self, from: data) else {
-            return nil
-        }
-
-        if let message = envelope.message, message.isEmpty == false {
-            return message
-        }
-        if let error = envelope.error, error.isEmpty == false {
-            return error
-        }
-        return nil
-    }
-}
-
-private struct ErrorEnvelope: Decodable {
-    let error: String?
-    let message: String?
-    let code: String?
 }
 
 /// Type erasure for encoding arbitrary payloads.

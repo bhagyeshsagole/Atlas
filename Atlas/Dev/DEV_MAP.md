@@ -57,8 +57,9 @@ Update Protocol: When you add/edit features, update this map with what changed a
 ### Supabase AI function (openai-proxy)
 - Deploy: `tools/deploy_openai_proxy.sh` (uses linked project; falls back with `supabase link --project-ref <PROJECT_REF>` if needed).
 - Manual deploy: `supabase functions deploy openai-proxy` (project ref must match `SUPABASE_URL` in Info.plist).
-- Health verify: `curl -i https://<PROJECT_REF>.supabase.co/functions/v1/openai-proxy/health` → expect HTTP 200 with `{ "ok": true, "function": "openai-proxy" }`.
+- Health verify: `curl -i https://<PROJECT_REF>.supabase.co/functions/v1/openai-proxy/health -H "Authorization: Bearer <ACCESS_TOKEN>"` → expect HTTP 200 with `{ "ok": true, "function": "openai-proxy" }` (Verify JWT is ON; auth required).
 - NOT_FOUND means the function name is wrong or the app points at a different project ref.
+- Auth/token source: `SupabaseService.shared` holds the single Supabase client. `AuthStore` listens for auth state and stores `session`; `EdgeFunctionClient` fetches tokens via `client.auth.session` (with refresh-on-401 retry) and invokes the function through `supabase.functions.invoke`, adding `Authorization` + `apikey` headers to every AI call. DEBUG logs include client identity to confirm shared usage.
 
 ### Design System / shared UI
 - `DesignSystem/AppStyle.swift` — Typography, spacing, padding tokens. Changing values adjusts the entire app; avoid deleting tokens used by views.

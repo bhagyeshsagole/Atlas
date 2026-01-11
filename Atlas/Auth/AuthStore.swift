@@ -45,7 +45,7 @@ final class AuthStore: ObservableObject {
     }
 
     init(client: SupabaseClient? = nil) {
-        let resolvedClient = client ?? SupabaseClientProvider.makeClient()
+        let resolvedClient = client ?? SupabaseService.shared
         self.client = resolvedClient
         if let resolvedClient {
             profileService = ProfileService(client: resolvedClient)
@@ -55,17 +55,12 @@ final class AuthStore: ObservableObject {
         #if DEBUG
         print("[AUTH] supabase configured=\(resolvedClient != nil)")
         #endif
-        if let current = resolvedClient?.auth.currentSession, current.isExpired == false {
-            isAuthenticated = true
-            session = current
-            userId = current.user.id.uuidString
-            email = current.user.email
-            isProfileLoaded = false
-            Task { await refreshProfile() }
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            if let resolvedClient {
+                await self.loadInitialSession(client: resolvedClient)
+            }
         }
-        #if DEBUG
-        print("[AUTH] boot session present=\(isAuthenticated)")
-        #endif
     }
 
     deinit {
@@ -201,17 +196,35 @@ final class AuthStore: ObservableObject {
         }
 
         Task.detached(priority: .utility) { [weak self, client] in
+            await self?.loadInitialSession(client: client)
+            await MainActor.run { [weak self] in
+                self?.isRestoring = false
+            }
+        }
+    }
+
+    private func loadInitialSession(client: SupabaseClient) async {
+        do {
+            let session = try await client.auth.session
+            let expired = session.isExpired
+            let authenticated = expired == false
+            await MainActor.run { [weak self] in
+                self?.apply(session: authenticated ? session : nil, event: nil)
+            }
+            #if DEBUG
+            let uid = session.user.id.uuidString
+            print("[AUTH] initial session loaded authenticated=\(authenticated) user=\(uid)")
+            #endif
+        } catch {
             let session = client.auth.currentSession
             let expired = session?.isExpired ?? false
             let authenticated = session != nil && expired == false
             await MainActor.run { [weak self] in
-                guard let self else { return }
-                defer { self.isRestoring = false }
-                self.apply(session: session, event: nil)
-                #if DEBUG
-                print("[AUTH] restore end authenticated=\(authenticated)")
-                #endif
+                self?.apply(session: authenticated ? session : nil, event: nil)
             }
+            #if DEBUG
+            print("[AUTH] initial session fallback authenticated=\(authenticated)")
+            #endif
         }
     }
 

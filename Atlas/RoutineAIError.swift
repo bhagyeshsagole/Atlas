@@ -15,7 +15,7 @@ enum RoutineAIError: Error, LocalizedError, Sendable, Equatable {
     var errorDescription: String? {
         switch self {
         case .serviceUnavailable: return "AI service unavailable."
-        case .notAuthenticated: return "Sign in to use AI."
+        case .notAuthenticated: return "AI is locked behind sign-in. Please sign in and try again."
         case .functionMissing: return "Edge function missing or not deployed."
         case .invalidURL: return "Invalid request URL."
         case .requestFailed(let underlying): return underlying

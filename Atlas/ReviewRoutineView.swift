@@ -219,13 +219,12 @@ struct ReviewRoutineView: View {
             let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
             return "AI function missing (expected \(AIProxy.functionName) at \(base)/functions/v1/\(AIProxy.functionName)). Run tools/deploy_openai_proxy.sh then retry."
         case .notAuthenticated:
-            let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
-            return "Edge function blocked by auth/JWT policy at \(base)/functions/v1/\(AIProxy.functionName). Sign in and ensure invoke policy allows this user."
+            return "Sign in required to use AI."
         case .httpStatus(let status, let body):
             let safeBody = body ?? ""
             let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
             if status == 403 {
-                return "Edge function blocked by auth/JWT policy (HTTP 403) at \(base)/functions/v1/\(AIProxy.functionName). \(safeBody)"
+                return "Sign in required to use AI. (HTTP 403) \(safeBody)"
             } else if status == 500 {
                 return "Edge function deployed but crashing (HTTP 500) at \(base)/functions/v1/\(AIProxy.functionName). \(safeBody)"
             }

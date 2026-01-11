@@ -33,7 +33,7 @@ struct OpenAIConfig {
     static let model: String = "gpt-4o-mini"
 
     static var supabaseClient: SupabaseClient? {
-        SupabaseClientProvider.makeClient()
+        SupabaseService.shared
     }
 
     static var functionName: String { AIProxy.functionName }

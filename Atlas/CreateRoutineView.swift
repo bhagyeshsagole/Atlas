@@ -193,15 +193,14 @@ struct CreateRoutineView: View {
                     }
                 case .notAuthenticated:
                     DispatchQueue.main.async {
-                        let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
-                        alertMessage = "Edge function blocked by auth/JWT policy at \(base)/functions/v1/\(AIProxy.functionName). Sign in and ensure invoke policy allows this user."
+                        alertMessage = "Sign in required to use AI."
                     }
                 case .httpStatus(let status, let body):
                     DispatchQueue.main.async {
                         let detail = body ?? "Request failed."
                         let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
                         if status == 403 {
-                            alertMessage = "Edge function blocked by auth/JWT policy (HTTP 403) at \(base)/functions/v1/\(AIProxy.functionName). \(detail)"
+                            alertMessage = "Sign in required to use AI. (HTTP 403) \(detail)"
                         } else if status == 500 {
                             alertMessage = "Edge function deployed but crashing (HTTP 500) at \(base)/functions/v1/\(AIProxy.functionName). \(detail)"
                         } else {
