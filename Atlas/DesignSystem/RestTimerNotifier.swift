@@ -53,8 +53,8 @@ enum RestTimerNotifier {
     }
 
     private static func playSound() {
-        // Use a short system alert sound; avoids bundling new assets.
-        AudioServicesPlayAlertSound(SystemSoundID(1005))
+        // Use a short built-in notification tone (no looping).
+        AudioServicesPlayAlertSound(SystemSoundID(1322))
     }
 
     private static func requestNotificationAuthIfNeeded() {

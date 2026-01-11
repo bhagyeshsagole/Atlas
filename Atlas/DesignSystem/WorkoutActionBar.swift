@@ -17,15 +17,14 @@ struct WorkoutActionBar: View {
     let right: Action
 
     var body: some View {
-        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-            HStack(spacing: AppStyle.sectionSpacing) {
-                AtlasPillButton(left.title, role: left.role, action: left.action)
-                    .frame(maxWidth: .infinity)
-                AtlasPillButton(right.title, role: right.role, action: right.action)
-                    .frame(maxWidth: .infinity)
-            }
-            .padding(AppStyle.glassContentPadding)
+        HStack(spacing: AppStyle.sectionSpacing) {
+            AtlasPillButton(left.title, role: left.role, action: left.action)
+                .frame(maxWidth: .infinity)
+            AtlasPillButton(right.title, role: right.role, action: right.action)
+                .frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, AppStyle.glassContentPadding)
+        .padding(.vertical, AppStyle.glassContentPadding * 0.75)
         .padding(.horizontal, AppStyle.screenHorizontalPadding)
         .padding(.bottom, AppStyle.startButtonBottomPadding)
     }

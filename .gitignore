@@ -9,3 +9,52 @@ xcuserdata/
 **/Secrets*.plist
 **/*.xcuserstate
 **/xcuserdata/
+
+# Agent / CI / sandbox caches
+.agent_cache/
+.agent_home/
+.agent_tmp/
+.ci_cache/
+.ci_derived/
+.ci_home/
+.ci_module_cache/
+.ci_tmp/
+.sandbox_cache/
+.sandbox_home/
+.sandbox_tmp/
+.derivedData/
+.derived/
+.home/
+.modulecache/
+.sourcepackages/
+.spm/
+.tmp/
+temp/
+tmp/
+.cache/
+
+# Xcode / build artifacts
+DerivedData/
+**/DerivedData/
+*.xcresult
+*.xcworkspace
+*.xccheckout
+*.xcuserstate
+*.xcuserdata/
+
+# SwiftPM / local build caches
+/.build/
+/.swiftpm/
+SourcePackages/
+**/SourcePackages/
+.sourcepackages/
+.spm/
+
+# macOS cruft
+.DS_Store
+
+# Node
+node_modules/
+
+# Supabase local state
+SupabaseMigrations/.supabase
