@@ -34,6 +34,7 @@
 //
 
 import Foundation
+import Supabase
 
 struct ParsedWorkout: Identifiable, Codable, Hashable {
     let id: UUID
@@ -99,12 +100,38 @@ struct RoutineAIService {
     /// VISUAL TWEAK: Change `minWorkoutCount` to require more/less exercises.
     private static let minWorkoutCount = 5
 
+    @discardableResult
+    private static func assertAIReady() throws -> SupabaseClient {
+        guard let client = OpenAIConfig.supabaseClient else {
+            throw RoutineAIError.serviceUnavailable
+        }
+        guard let session = client.auth.currentSession, session.isExpired == false else {
+            throw RoutineAIError.notAuthenticated
+        }
+        return client
+    }
+
+    private static func mapOpenAIError(_ error: OpenAIError) -> RoutineAIError {
+        let lowered = error.message.lowercased()
+        if error.statusCode == 401 {
+            return .notAuthenticated
+        }
+        if lowered.contains("supabase url missing") {
+            return .serviceUnavailable
+        }
+        if error.statusCode == 404 || lowered.contains("not_found") || lowered.contains("\"code\":\"not_found\"") {
+            return .functionMissing
+        }
+        if lowered.contains("supabase client unavailable") {
+            return .serviceUnavailable
+        }
+        return .httpStatus(error.statusCode ?? -1, body: error.message)
+    }
+
     /// Generates a concise summary for a routine using OpenAI.
     /// Change impact: Adjust prompt or fallback text to tweak summary style without blocking save.
     static func generateRoutineSummary(routineTitle: String, workouts: [RoutineWorkout]) async throws -> String {
-        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
-            throw RoutineAIError.missingAPIKey
-        }
+        try assertAIReady()
 
         #if DEBUG
         print("[AI][SUMMARY] start routine=\(routineTitle)")
@@ -121,7 +148,7 @@ struct RoutineAIService {
             let trimmed = summary.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "Summary unavailable. Try again." : trimmed
         } catch let error as OpenAIError {
-            throw RoutineAIError.httpStatus(error.statusCode ?? -1, body: nil)
+            throw mapOpenAIError(error)
         } catch {
             throw RoutineAIError.requestFailed(underlying: error.localizedDescription)
         }
@@ -137,7 +164,7 @@ struct RoutineAIService {
         lastSessionDate: Date?,
         preferredUnit: WorkoutUnits
     ) async -> ExerciseSuggestion {
-        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
+        guard OpenAIConfig.isAIAvailable else {
             return defaultSuggestion()
         }
 
@@ -221,9 +248,7 @@ struct RoutineAIService {
 
     /// Stage pipeline: Generate → Repair → Parse → Guarantee.
     private static func generateRoutineWorkouts(fromRequest request: String) async throws -> [ParsedWorkout] {
-        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
-            throw RoutineAIError.missingAPIKey
-        }
+        try assertAIReady()
 
         let constraints = extractConstraints(from: request)
         let requestId = makeRequestId()
@@ -243,8 +268,7 @@ struct RoutineAIService {
                 return parsed
             }
         } catch let error as OpenAIError {
-            let bodyString: String? = nil
-            throw RoutineAIError.httpStatus(error.statusCode ?? -1, body: bodyString)
+            throw mapOpenAIError(error)
         } catch {
             throw RoutineAIError.requestFailed(underlying: error.localizedDescription)
         }
@@ -369,15 +393,15 @@ struct RoutineAIService {
         previousSessionsByExercise: [String: ExerciseLog?],
         unitPreference: WorkoutUnits
     ) async -> (payload: PostWorkoutSummaryPayload, rawJSON: String, model: String)? {
-        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
+        guard OpenAIConfig.isAIAvailable else {
             #if DEBUG
-            print("[AI][POST] Key present: false model=\(OpenAIConfig.model)")
+            print("[AI][POST] AI available: false model=\(OpenAIConfig.model)")
             #endif
             return fallbackSummary(session: session)
         }
 
         #if DEBUG
-        print("[AI][POST] Key present: true model=\(OpenAIConfig.model)")
+        print("[AI][POST] AI available: true model=\(OpenAIConfig.model)")
         print("[AI][POST] session=\(session.id) model=\(OpenAIConfig.model) start")
         #endif
 
@@ -559,7 +583,7 @@ extension RoutineAIService {
         let trimmedPrompt = workoutsPrompt.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         let fallback = trimmedTitle.isEmpty ? "Routine" : titleCased(trimmedTitle)
 
-        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+        guard OpenAIConfig.isAIAvailable else {
             return fallback
         }
 
@@ -575,7 +599,7 @@ extension RoutineAIService {
 
     static func cleanWorkoutName(_ raw: String) async -> String {
         let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+        guard OpenAIConfig.isAIAvailable else {
             return cleanExerciseName(trimmed)
         }
         do {
@@ -598,7 +622,7 @@ extension RoutineAIService {
 
     static func cleanExerciseNameAsync(_ raw: String) async -> String {
         let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+        guard OpenAIConfig.isAIAvailable else {
             return cleanExerciseName(trimmed)
         }
         do {

@@ -213,11 +213,23 @@ struct ReviewRoutineView: View {
 
     private func summaryErrorMessage(for error: RoutineAIError) -> String {
         switch error {
-        case .missingAPIKey:
-            return "Missing API key. Add it in LocalSecrets.openAIAPIKey."
+        case .serviceUnavailable:
+            return "AI service not configured. Check Supabase URL/anon key."
+        case .functionMissing:
+            let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
+            return "AI function missing (expected \(AIProxy.functionName) at \(base)/functions/v1/\(AIProxy.functionName)). Run tools/deploy_openai_proxy.sh then retry."
+        case .notAuthenticated:
+            let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
+            return "Edge function blocked by auth/JWT policy at \(base)/functions/v1/\(AIProxy.functionName). Sign in and ensure invoke policy allows this user."
         case .httpStatus(let status, let body):
             let safeBody = body ?? ""
-            return "OpenAI error (\(status)). \(safeBody)"
+            let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
+            if status == 403 {
+                return "Edge function blocked by auth/JWT policy (HTTP 403) at \(base)/functions/v1/\(AIProxy.functionName). \(safeBody)"
+            } else if status == 500 {
+                return "Edge function deployed but crashing (HTTP 500) at \(base)/functions/v1/\(AIProxy.functionName). \(safeBody)"
+            }
+            return "AI error (HTTP \(status)) at \(base)/functions/v1/\(AIProxy.functionName). \(safeBody)"
         case .requestFailed(let underlying):
             return underlying
         case .decodeFailed:

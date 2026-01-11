@@ -111,7 +111,7 @@ struct SettingsView: View {
                         SettingsGroupCard {
                             Link(destination: instagramURL) {
                                 HStack {
-                                    Text("Tag & explore @bhagyeshsagole")
+                                    Text("Tag & Explore @BhagyeshSagole")
                                         .appFont(.body, weight: .semibold)
                                         .foregroundStyle(.primary)
                                     Spacer()

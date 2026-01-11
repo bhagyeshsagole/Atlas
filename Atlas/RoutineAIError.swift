@@ -1,7 +1,9 @@
 import Foundation
 
 enum RoutineAIError: Error, LocalizedError, Sendable, Equatable {
-    case missingAPIKey
+    case serviceUnavailable
+    case notAuthenticated
+    case functionMissing
     case invalidURL
     case requestFailed(underlying: String)
     case httpStatus(Int, body: String?)
@@ -12,7 +14,9 @@ enum RoutineAIError: Error, LocalizedError, Sendable, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .missingAPIKey: return "Missing API key."
+        case .serviceUnavailable: return "AI service unavailable."
+        case .notAuthenticated: return "Sign in to use AI."
+        case .functionMissing: return "Edge function missing or not deployed."
         case .invalidURL: return "Invalid request URL."
         case .requestFailed(let underlying): return underlying
         case .httpStatus(let code, _): return "Request failed (HTTP \(code))."

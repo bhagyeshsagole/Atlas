@@ -32,8 +32,8 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `EditRoutineView.swift` — Simple edit form for existing routines. Calls `onSave` with the draft. Keep trims so blank workouts are prevented. Example: add a toggle to mark favorite routines before saving.
 - `RoutinePreStartView.swift` — Pre-start summary of a routine; navigates into `WorkoutSessionView`. Change copy/layout freely; keep `showSession` navigation intact. Example: add a “Regenerate summary” button that re-calls AI before starting.
 - `RoutineAIService.swift` — High-level AI pipeline (generate → repair → parse, coaching, summaries). Called by creation/logging flows. Includes title/workout name cleaners (`cleanRoutineTitle`, `cleanWorkoutName`, `cleanExerciseNameAsync`). Change prompts/defaults, but keep error handling and caching. Example: tweak `defaultSets`/`defaultReps` to change auto-filled targets.
-- `OpenAIChatClient.swift` — Low-level OpenAI HTTP client, shared prompts, repair/parse helpers. Used by `RoutineAIService`. Change prompts or temperatures; keep JSON parsing and fence stripping aligned with callers. Example: adjust `repairSystemPrompt` if models start returning markdown.
-- `OpenAIConfig.swift` — Reads API key from `LocalSecrets` and sets default model. Change model name safely; keep empty-key guard to avoid crashes.
+- `OpenAIChatClient.swift` — Low-level AI client (Supabase Edge Function proxy to OpenAI), shared prompts, repair/parse helpers. Used by `RoutineAIService`. Change prompts or temperatures; keep JSON parsing and fence stripping aligned with callers. Example: adjust `repairSystemPrompt` if models start returning markdown.
+- `OpenAIConfig.swift` — Routes AI calls through the Supabase Edge Function (`openai-proxy`) and sets the default model. Change model name safely; keep auth-required guardrails intact.
 
 ### Workout sessions & history (SwiftData)
 - `Models/HistoryModels.swift` — SwiftData models (`WorkoutSession`, `ExerciseLog`, `SetLog`, `SetTag`, format helpers). Deleting fields breaks stored data; add new optionals with defaults. Example: add `mood` to `WorkoutSession` with a default value and migrate.
@@ -54,6 +54,12 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `Models/PostWorkoutSummaryModels.swift` — Codable schema for AI summary JSON. Add optional fields when expanding prompts; keep compatibility with cached data.
 - `Models/ExerciseMuscleMap.swift` — Keyword-based muscle lookup fallback for summaries. Extend with new keyword-to-muscle mappings as needed.
 
+### Supabase AI function (openai-proxy)
+- Deploy: `tools/deploy_openai_proxy.sh` (uses linked project; falls back with `supabase link --project-ref <PROJECT_REF>` if needed).
+- Manual deploy: `supabase functions deploy openai-proxy` (project ref must match `SUPABASE_URL` in Info.plist).
+- Health verify: `curl -i https://<PROJECT_REF>.supabase.co/functions/v1/openai-proxy/health` → expect HTTP 200 with `{ "ok": true, "function": "openai-proxy" }`.
+- NOT_FOUND means the function name is wrong or the app points at a different project ref.
+
 ### Design System / shared UI
 - `DesignSystem/AppStyle.swift` — Typography, spacing, padding tokens. Changing values adjusts the entire app; avoid deleting tokens used by views.
 - `DesignSystem/AtlasControls.swift` — Shared controls (glass pills, header icons, menus) and sizing tokens. Keep tap targets and modifiers intact when restyling.
@@ -67,14 +73,13 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - `FriendDetailModel.swift` — Fetches friend sessions/stats via `FriendHistoryService`. Holds sessions list; view computes range-filtered metrics.
 
 ### Config, secrets, and supporting files
-- `Config/LocalSecrets.swift` — Local-only API keys. Do not commit real credentials. Missing keys cause AI calls to throw.
-- `Secrets.plist` — Plist placeholder with `OPENAI_API_KEY`. Useful for plist-based loading if needed; keep real keys out of source control.
-- `OpenAIConfig.swift` (also in AI section) — Reads the key above; keep trimming logic.
+- Supabase app config — Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_REDIRECT_URL` in Info.plist. AI/auth rely on this client being present.
+- Supabase Edge Function secrets — `supabase/functions/openai-proxy` reads `OPENAI_API_KEY` from Supabase secrets. No LocalSecrets/Secrets plist is required in the app bundle.
+- `OpenAIConfig.swift` (also in AI section) — Holds the default model and Edge Function name for AI calls.
 - `Atlas.entitlements` — Empty entitlements plist. Add capabilities here via Xcode if needed; avoid hand-editing XML.
 - `Info.plist` — Minimal app plist (background modes array empty). Add permissions/capabilities here via Xcode; malformed XML will break builds.
 - `Assets.xcassets/` (AppIcon, AccentColor, Contents.json) — App icons and colors managed by Xcode’s asset catalog. Edit with the asset editor; keep JSON structure intact.
 - Project files (.xcodeproj/.xcworkspace) — Not checked into this folder. Open the project from Xcode; edit targets/capabilities there instead of hand-editing pbxproj files.
-- `.gitignore` — Not present in this repo; add one at the root if you need to ignore DerivedData or build artifacts (does not affect runtime logic).
 
 ### Dev docs and notes
 - `Dev/DEV_MAP.md` — This guide. Update whenever files/flows change so newcomers can navigate quickly.
@@ -98,14 +103,14 @@ Update Protocol: When you add/edit features, update this map with what changed a
 - History logs: `[HISTORY]` messages from `HistoryStore` (start/addSet/endSession/repairs) help confirm writes and totals.
 - Persistence flush: DEBUG logs print the SwiftData store URL on boot, verify saved sessions after `endSession`, log the most recent ended session on first appear, and log `[HISTORY] flush ok` when the scene goes inactive/background.
 - Persistence QA: On device, run without the debugger attached (Xcode Run > “Wait for the executable to be launched”), start and end a session, force-quit, relaunch, and confirm the session remains. Repeat with an archived/installed Release build.
-- AI logs: `[AI]`, `[AI][SUMMARY]`, `[AI][COACH]` from `RoutineAIService` + `OpenAIChatClient` show request stages, status codes, and timing; missing API key logs `[AI] Key present: false` before throwing.
+- AI logs: `[AI]`, `[AI][SUMMARY]`, `[AI][COACH]` from `RoutineAIService` + `OpenAIChatClient` show request stages, status codes, and timing; auth/config issues short-circuit with fallback text or user-facing errors.
 - Routine logs: `[ROUTINE]` debug prints in routine list/menu actions.
 - Where to view: Xcode console while running on device/simulator. If summaries fail, check `errorMessage` in `PostWorkoutSummaryView` and OpenAI status codes. If SwiftData queries look empty, verify `modelContainer` is shared and inspect Application Support for `Atlas.store`.
 
 ## Supabase setup (dashboard)
 - Auth providers: Enable Apple, Google, and Email. Add redirect URL `atlas://auth-callback` to each provider and to the project-wide Redirect URLs list.
 - Profiles SQL: Apply `supabase/schema.sql` in the Supabase SQL Editor (or via `supabase db push`). It creates `public.profiles` (id/email/display_name/avatar_url/created_at/updated_at), enables RLS, adds select/insert/update self policies, auto-updates `updated_at` via trigger, lowers emails via trigger, and adds an auth.users trigger to upsert the profile row on signup.
-- App config: Add the Supabase Swift package to the Xcode project and fill `LocalSecrets.supabaseURLString`, `supabaseAnonKey`, and `supabaseRedirectURLString` (match the URL scheme in Info.plist).
+- App config: Add the Supabase Swift package to the Xcode project and fill `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_REDIRECT_URL` in Info.plist (match the URL scheme in Info.plist).
 - Profile service: `Auth/ProfileService.swift` upserts `public.profiles` via the shared Supabase client. `AuthStore` calls it after auth changes or session restores (guarded, idempotent). DEBUG logs: `[AUTH] ensureProfile begin userId=...`, `[AUTH] ensureProfile ok`, `[AUTH][ERROR] ensureProfile failed: ...`.
 - Verify: After applying SQL, sign up and confirm `public.profiles` has the user id/email; log out/in and see the row persists; on fresh install with a valid session, ensure restore triggers profile ensure.
 - Profiles RLS SQL: `supabase/atlas_profiles.sql` creates `public.profiles` (id/email/display_name/avatar_url + timestamps), enables RLS, and adds self-only select/insert/update policies, email lowercase trigger, and an `updated_at` trigger. Apply via Supabase SQL editor. Table/columns match the iOS `ProfileService` upsert target. Friends/broader access will be added later.

@@ -182,14 +182,31 @@ struct CreateRoutineView: View {
             } catch let error as RoutineAIError {
                 await MainActor.run { focusedField = nil }
                 switch error {
-                case .missingAPIKey:
+                case .serviceUnavailable:
                     DispatchQueue.main.async {
-                        alertMessage = "Missing API key. Add it in LocalSecrets.openAIAPIKey."
+                        alertMessage = "AI service not configured. Check Supabase URL/anon key in Info.plist."
+                    }
+                case .functionMissing:
+                    DispatchQueue.main.async {
+                        let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
+                        alertMessage = "AI function missing (expected \(AIProxy.functionName) at \(base)/functions/v1/\(AIProxy.functionName)). Run tools/deploy_openai_proxy.sh then retry."
+                    }
+                case .notAuthenticated:
+                    DispatchQueue.main.async {
+                        let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
+                        alertMessage = "Edge function blocked by auth/JWT policy at \(base)/functions/v1/\(AIProxy.functionName). Sign in and ensure invoke policy allows this user."
                     }
                 case .httpStatus(let status, let body):
                     DispatchQueue.main.async {
                         let detail = body ?? "Request failed."
-                        alertMessage = "OpenAI error (\(status)). \(detail)"
+                        let base = SupabaseConfig.url?.absoluteString ?? "unknown Supabase URL"
+                        if status == 403 {
+                            alertMessage = "Edge function blocked by auth/JWT policy (HTTP 403) at \(base)/functions/v1/\(AIProxy.functionName). \(detail)"
+                        } else if status == 500 {
+                            alertMessage = "Edge function deployed but crashing (HTTP 500) at \(base)/functions/v1/\(AIProxy.functionName). \(detail)"
+                        } else {
+                            alertMessage = "AI error (HTTP \(status)) at \(base)/functions/v1/\(AIProxy.functionName). \(detail)"
+                        }
                     }
                 case .requestFailed(let underlying):
                     DispatchQueue.main.async { alertMessage = underlying }

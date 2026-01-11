@@ -14,6 +14,7 @@ xcuserdata/
 .agent_cache/
 .agent_home/
 .agent_tmp/
+.agent_temp/
 .ci_cache/
 .ci_derived/
 .ci_home/
@@ -32,6 +33,15 @@ xcuserdata/
 temp/
 tmp/
 .cache/
+agent_cache/
+agent_home/
+agent_tmp/
+agent_temp/
+ci_cache/
+ci_derived/
+ci_home/
+ci_module_cache/
+ci_tmp/
 
 # Xcode / build artifacts
 DerivedData/

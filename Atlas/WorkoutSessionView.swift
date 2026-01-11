@@ -860,7 +860,7 @@ struct WorkoutSessionView: View {
 
     private func cleanExerciseName(_ raw: String) async -> String {
         let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+        guard OpenAIConfig.isAIAvailable else {
             return fallbackCleanName(trimmed)
         }
         let cleaned = await RoutineAIService.cleanExerciseNameAsync(trimmed)

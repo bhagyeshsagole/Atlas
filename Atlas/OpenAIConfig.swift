@@ -3,47 +3,49 @@
 //  Atlas
 //
 //  What this file is:
-//  - Central place to read the OpenAI API key and set the model name used by AI requests.
+//  - Central place to configure AI calls (model + Supabase function routing).
 //
 //  Where it’s used:
-//  - Read by `RoutineAIService` and `OpenAIChatClient` before any network call.
+//  - Read by `RoutineAIService` and `OpenAIChatClient` before any AI network call.
 //
 //  Called from:
-//  - `RoutineAIService` and `OpenAIChatClient` access `apiKey`/`model` before sending requests.
+//  - `RoutineAIService` and `OpenAIChatClient` access `model` before sending requests.
 //
 //  Key concepts:
-//  - API key is pulled from `LocalSecrets` at call time so the app can start without a key present.
+//  - OpenAI API key is never bundled in the app; calls are proxied through a Supabase Edge Function.
 //
 //  Safe to change:
 //  - Default model string or debug logging.
 //
 //  NOT safe to change:
-//  - How the key is trimmed/checked; skipping the empty check will crash when the key is missing.
+//  - Supabase routing without also updating the Edge Function name/contract.
 //
 //  Common bugs / gotchas:
-//  - Committing a real API key is unsafe; keep real keys in local-only files.
-//  - If you leave the key empty, AI features will throw `missingAPIKey` errors.
+//  - Supabase client must be configured and authenticated before AI calls will succeed.
 //
 //  DEV MAP:
 //  - See: DEV_MAP.md → D) AI / OpenAI
 //
 import Foundation
+import Supabase
 
 struct OpenAIConfig {
-    static var apiKey: String? {
-        let localKey = LocalSecrets.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !localKey.isEmpty {
-            #if DEBUG
-            print("[AI] Key present: true")
-            #endif
-            return localKey
-        }
+    static let model: String = "gpt-4o-mini"
 
-        #if DEBUG
-        print("[AI] Key present: false")
-        #endif
-        return nil
+    static var supabaseClient: SupabaseClient? {
+        SupabaseClientProvider.makeClient()
     }
 
-    static var model: String = "gpt-4o-mini"
+    static var functionName: String { AIProxy.functionName }
+
+    static var functionURLString: String? {
+        guard let base = SupabaseConfig.url else { return nil }
+        return AIProxy.endpointString(baseURL: base)
+    }
+
+    static var isAIAvailable: Bool {
+        guard let client = supabaseClient else { return false }
+        guard let session = client.auth.currentSession, session.isExpired == false else { return false }
+        return true
+    }
 }

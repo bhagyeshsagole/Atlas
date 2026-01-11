@@ -20,7 +20,7 @@ struct CoachChatMessage: Identifiable, Hashable {
 
 enum CoachChatService {
     static func reply(to userMessage: String, context: MuscleCoachContext) async throws -> String {
-        guard let apiKey = OpenAIConfig.apiKey, apiKey.isEmpty == false else {
+        guard OpenAIConfig.isAIAvailable else {
             return fallbackReply(for: context, userMessage: userMessage)
         }
 

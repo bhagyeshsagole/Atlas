@@ -13,7 +13,7 @@
 //  - `RoutineAIService` generate/repair/summary/coaching functions invoke these helpers before parsing responses.
 //
 //  Key concepts:
-//  - Each OpenAI request is built from `ChatMessage` arrays and executed via URLSession.
+//  - Each OpenAI request is built from `ChatMessage` arrays and proxied through a Supabase Edge Function (server-side key).
 //  - Responses may include code fences; we strip them before decoding JSON.
 //
 //  Safe to change:
@@ -24,7 +24,7 @@
 //  - Error handling paths that surface status codes to the UI.
 //
 //  Common bugs / gotchas:
-//  - If the API key is missing, requests throw; make sure Config/LocalSecrets.swift holds a valid key in development.
+//  - Supabase auth is required; unauthenticated requests will throw/return fallback responses.
 //  - Returning anything other than valid JSON in repair flows will trip the decoding guardrails.
 //
 //  DEV MAP:
@@ -35,6 +35,7 @@
 //
 
 import Foundation
+import Supabase
 
 fileprivate struct ChatMessage: Codable {
     let role: String
@@ -72,9 +73,9 @@ struct OpenAIChatClient {
         let messages: [ChatMessage] = [
             .init(role: "user", content: prompt)
         ]
-        let request = try buildRequest(messages: messages, temperature: 0.2, responseFormat: nil)
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.2, responseFormat: nil)
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
         #if DEBUG
         print("[AI][CHAT] status=\(response.statusCode) ms=\(elapsed)")
@@ -92,8 +93,8 @@ struct OpenAIChatClient {
             .init(role: "developer", content: Self.parserPrompt),
             .init(role: "user", content: rawText)
         ]
-        let request = try buildRequest(messages: messages, temperature: 0.2, responseFormat: ResponseFormat(type: "json_object"))
-        let (data, _) = try await perform(request: request)
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.2, responseFormat: ResponseFormat(type: "json_object"))
+        let (data, _) = try await perform(payload: payload)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
         guard let content = chatResponse.choices.first?.message.content else {
@@ -131,9 +132,9 @@ struct OpenAIChatClient {
             .init(role: "user", content: userContent)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.3, responseFormat: nil)
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.3, responseFormat: nil)
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -173,9 +174,9 @@ Return JSON now.
             .init(role: "user", content: userContent)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: ResponseFormat(type: "json_object"))
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.1, responseFormat: ResponseFormat(type: "json_object"))
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -223,9 +224,9 @@ Return 2-5 short lines, plain text only. No markdown, no bullets.
             .init(role: "user", content: userContent)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: nil)
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.25, responseFormat: nil)
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -243,9 +244,9 @@ Return 2-5 short lines, plain text only. No markdown, no bullets.
             .init(role: "user", content: raw)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: nil)
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.1, responseFormat: nil)
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -273,9 +274,9 @@ Return ONLY the title text.
             .init(role: "user", content: userContent)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.15, responseFormat: nil)
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.15, responseFormat: nil)
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -302,9 +303,9 @@ Return ONLY the cleaned name.
             .init(role: "user", content: userContent)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: nil)
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.1, responseFormat: nil)
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -337,9 +338,9 @@ Last session sets (if any):
             .init(role: "user", content: userContent)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -372,9 +373,9 @@ Last session sets (if any):
             .init(role: "user", content: contextString)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.25, responseFormat: ResponseFormat(type: "json_object"))
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -393,9 +394,9 @@ Last session sets (if any):
             .init(role: "user", content: rawText)
         ]
 
-        let request = try buildRequest(messages: messages, temperature: 0.1, responseFormat: ResponseFormat(type: "json_object"))
+        let payload = try buildRequestPayload(messages: messages, temperature: 0.1, responseFormat: ResponseFormat(type: "json_object"))
         let start = Date()
-        let (data, response) = try await perform(request: request)
+        let (data, response) = try await perform(payload: payload)
         let elapsed = Int(Date().timeIntervalSince(start) * 1000)
 
         let chatResponse = try JSONDecoder().decode(OpenAIChatResponse.self, from: data)
@@ -638,48 +639,19 @@ private struct CoachingSuggestionResponse: Codable {
 }
 
 private extension OpenAIChatClient {
-    /// Builds an authorized OpenAI chat completion request using the current config.
-    /// Change impact: Adjust headers or payload fields to alter how the app talks to OpenAI.
-    static func buildRequest(messages: [ChatMessage], temperature: Double, responseFormat: ResponseFormat?) throws -> URLRequest {
-        guard let apiKey = OpenAIConfig.apiKey, !apiKey.isEmpty else {
-            throw OpenAIError(statusCode: nil, message: "Missing OpenAI API key.")
-        }
-
-        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 25
-
-        let payload = OAChatRequest(
+    /// Builds the chat payload that the Supabase Edge Function will forward to OpenAI.
+    static func buildRequestPayload(messages: [ChatMessage], temperature: Double, responseFormat: ResponseFormat?) throws -> OAChatRequest {
+        OAChatRequest(
             model: OpenAIConfig.model,
             messages: messages,
             temperature: temperature,
             response_format: responseFormat
         )
-        request.httpBody = try JSONEncoder().encode(payload)
-        return request
     }
 
-    /// Executes a URL request and ensures an HTTP response is returned.
-    /// Change impact: Update error handling or logging to change how network failures surface in-app.
-    static func perform(request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw OpenAIError(statusCode: nil, message: "Invalid response.")
-        }
-
-        #if DEBUG
-        print("[AI] HTTP status: \(http.statusCode)")
-        #endif
-
-        guard 200..<300 ~= http.statusCode else {
-            let snippet = String(data: data, encoding: .utf8) ?? ""
-            let message = String(snippet.prefix(200))
-            throw OpenAIError(statusCode: http.statusCode, message: message)
-        }
-
-        return (data, http)
+    /// Invokes the Supabase Edge Function that proxies to OpenAI using server-held secrets.
+    static func perform(payload: OAChatRequest) async throws -> (Data, HTTPURLResponse) {
+        try await AIProxy.ensureHealthy()
+        return try await EdgeFunctionClient.callChat(payload: payload)
     }
 }

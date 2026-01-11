@@ -108,6 +108,9 @@ struct AtlasApp: App {
                     authStore.startIfNeeded()
                     await cloudSyncCoordinator.startIfNeeded()
                     await syncService.processOutboxAndPull()
+                    #if DEBUG
+                    await EdgeFunctionClient.debugLogHealth()
+                    #endif
                 }
                 .onOpenURL { url in
                     authStore.handleAuthRedirect(url)
