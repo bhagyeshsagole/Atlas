@@ -1,34 +1,3 @@
-//
-//  PostWorkoutSummaryView.swift
-//  Atlas
-//
-//  What this file is:
-//  - Post-session screen that shows AI-generated or cached summaries for a completed workout.
-//
-//  Where it’s used:
-//  - Presented from `WorkoutSessionView` after ending a session.
-//
-//  Called from:
-//  - Shown as a sheet when `WorkoutSessionView` finishes and passes the completed `sessionID`.
-//
-//  Key concepts:
-//  - Fetches the stored session by ID using SwiftData and reuses cached AI text to avoid repeat calls.
-//  - Uses `@AppStorage` to format weight units consistently.
-//
-//  Safe to change:
-//  - Text layout, spacing, or fallback copy for missing summaries.
-//
-//  NOT safe to change:
-//  - Removing the cache check before calling AI; it would trigger unnecessary network calls.
-//  - Formatting lines without keeping kg/lb conversions; totals rely on both units.
-//
-//  Common bugs / gotchas:
-//  - Forgetting to handle empty `aiPostSummaryJSON` leaves the screen in a loading state.
-//  - Fetch predicates must stay in sync with stored session IDs or summaries will not load.
-//
-//  DEV MAP:
-//  - See: DEV_MAP.md → Post-Workout Summary (AI)
-//
 import SwiftUI
 import SwiftData
 
@@ -39,11 +8,7 @@ struct PostWorkoutSummaryView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
 
-    @State private var session: WorkoutSession? // Loaded SwiftData session to display.
-    @State private var payload: PostWorkoutSummaryPayload? // Decoded AI JSON payload.
-    @State private var isLoading = false // Controls loading state text.
-    @State private var errorMessage: String?
-    @State private var renderedText: String = "" // Cached formatted summary text.
+    @StateObject private var loader: PostWorkoutSummaryLoader
 
     /// VISUAL TWEAK: Change `bodyLineSpacing` to make the text tighter/looser.
     private let bodyLineSpacing: CGFloat = 6
@@ -54,7 +19,12 @@ struct PostWorkoutSummaryView: View {
     /// VISUAL TWEAK: Adjust `minScale` if text feels too tight.
     private let minScale: CGFloat = 0.9
 
-    /// DEV NOTE: This screen caches `aiPostSummaryJSON` and `aiPostSummaryText` so the API is called once per session.
+    init(sessionID: UUID, onDone: @escaping () -> Void = {}, loader: PostWorkoutSummaryLoader? = nil) {
+        self.sessionID = sessionID
+        self.onDone = onDone
+        _loader = StateObject(wrappedValue: loader ?? PostWorkoutSummaryLoader())
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
             VStack(alignment: .leading, spacing: 6) {
@@ -63,7 +33,7 @@ struct PostWorkoutSummaryView: View {
                     .scaleEffect(titleScale, anchor: .leading)
                     .lineLimit(1)
                     .minimumScaleFactor(minScale)
-                Text(payload?.sessionDate ?? formattedSessionDate())
+                Text(sessionDateText)
                     .appFont(.body, weight: .regular)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -94,22 +64,36 @@ struct PostWorkoutSummaryView: View {
             .padding(.horizontal, AppStyle.contentPaddingLarge)
             .padding(.bottom, AppStyle.startButtonBottomPadding)
         }
-        .task {
-            await load()
-        }
+        .task { await loader.preload(sessionID: sessionID, modelContext: modelContext) }
     }
 
+    // MARK: - Content builders
+
     private func contentText() -> String {
-        if !renderedText.isEmpty {
-            return renderedText
+        if let cached = loader.session?.aiPostSummaryText, cached.isEmpty == false {
+            return cached
         }
-        if isLoading {
+        if let payload = loader.payload, let session = loader.session {
+            return buildDisplayText(with: payload, for: session)
+        }
+        if loader.isLoading {
             return "Generating summary…"
         }
-        if let errorMessage {
+        if let errorMessage = loader.errorMessage {
             return "Summary unavailable.\n\(errorMessage)"
         }
         return "Summary unavailable."
+    }
+
+    private var sessionTitle: String {
+        loader.session?.routineTitle.isEmpty == false ? loader.session!.routineTitle : "Workout Summary"
+    }
+
+    private var sessionDateText: String {
+        guard let session = loader.session else { return "Summary" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "LLLL dd, yyyy (EEEE)"
+        return formatter.string(from: session.startedAt)
     }
 
     private func computeTotals(session: WorkoutSession) -> (volumeKg: Double, sets: Int, reps: Int) {
@@ -126,17 +110,6 @@ struct PostWorkoutSummaryView: View {
             }
         }
         return (volume, setsCount, repsCount)
-    }
-
-    private var sessionTitle: String {
-        session?.routineTitle.isEmpty == false ? session!.routineTitle : "Workout Summary"
-    }
-
-    private func formattedSessionDate() -> String {
-        guard let session else { return "Summary" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "LLLL dd, yyyy (EEEE)"
-        return formatter.string(from: session.startedAt)
     }
 
     private func buildDisplayText(with payload: PostWorkoutSummaryPayload?, for session: WorkoutSession) -> String {
@@ -182,108 +155,5 @@ struct PostWorkoutSummaryView: View {
             "• \(name): match last top set and add 1–2 reps if strong.",
             "• Add one accessory if time allows."
         ]
-    }
-
-    private func load() async {
-        await MainActor.run {
-            isLoading = true
-        }
-        var descriptor = FetchDescriptor<WorkoutSession>(
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 30
-        let loadedSession = (try? modelContext.fetch(descriptor))?.first(where: { $0.id == sessionID })
-        await MainActor.run {
-            self.session = loadedSession
-        }
-        guard let session = loadedSession else {
-            await MainActor.run {
-                isLoading = false
-                errorMessage = "Session not found."
-            }
-            return
-        }
-
-        if !session.aiPostSummaryText.isEmpty {
-            await MainActor.run {
-                renderedText = session.aiPostSummaryText
-                isLoading = false
-            }
-            if let data = session.aiPostSummaryJSON.data(using: .utf8),
-               let payload = try? JSONDecoder().decode(PostWorkoutSummaryPayload.self, from: data) {
-                await MainActor.run {
-                    self.payload = payload
-                }
-            }
-            return
-        }
-
-        if !session.aiPostSummaryJSON.isEmpty,
-           let data = session.aiPostSummaryJSON.data(using: .utf8),
-           let storedPayload = try? JSONDecoder().decode(PostWorkoutSummaryPayload.self, from: data) {
-            let text = buildDisplayText(with: storedPayload, for: session)
-            await MainActor.run {
-                payload = storedPayload
-                renderedText = text
-                session.aiPostSummaryText = text
-                saveContext(reason: "post summary cached text from stored JSON")
-                isLoading = false
-            }
-            return
-        }
-
-        var previousDescriptor = FetchDescriptor<ExerciseLog>(
-            sortBy: [SortDescriptor(\ExerciseLog.session?.startedAt, order: .reverse)]
-        )
-        previousDescriptor.fetchLimit = 80
-        let previousLogs = (try? modelContext.fetch(previousDescriptor)) ?? []
-        let previousByExercise: [String: ExerciseLog?] = previousLogs
-            .filter { log in
-                guard let session = log.session else { return false }
-                return session.isCompleted && session.id != sessionID
-            }
-            .reduce(into: [:]) { dict, log in
-            let key = log.name.lowercased()
-            if dict[key] == nil {
-                dict[key] = log
-            }
-        }
-
-        let unitPref = WorkoutUnits(from: weightUnit)
-        if let result = await RoutineAIService.generatePostWorkoutSummary(session: session, previousSessionsByExercise: previousByExercise, unitPreference: unitPref) {
-            let text = buildDisplayText(with: result.payload, for: session)
-            await MainActor.run {
-                payload = result.payload
-                renderedText = text
-                session.aiPostSummaryJSON = result.rawJSON
-                session.aiPostSummaryText = text
-                session.aiPostSummaryGeneratedAt = Date()
-                session.aiPostSummaryModel = result.model
-                saveContext(reason: "post summary AI write")
-                isLoading = false
-            }
-        } else {
-            let fallbackText = buildDisplayText(with: nil, for: session)
-            await MainActor.run {
-                renderedText = fallbackText
-                session.aiPostSummaryText = fallbackText
-                saveContext(reason: "post summary fallback write")
-                isLoading = false
-                errorMessage = "Unable to generate summary."
-            }
-        }
-    }
-
-    @MainActor
-    private func saveContext(reason: String) {
-        do {
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
-        } catch {
-            #if DEBUG
-            print("[HISTORY][ERROR] \(reason) save failed: \(error)")
-            #endif
-        }
     }
 }

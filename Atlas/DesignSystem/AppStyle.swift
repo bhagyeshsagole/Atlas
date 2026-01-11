@@ -34,6 +34,7 @@ enum AppTypeScale {
     case brand
     case title
     case title3
+    case headline
     case section
     case body
     case footnote
@@ -62,6 +63,8 @@ enum AppStyle {
     /// VISUAL TWEAK: Change `title3BaseSize` to resize secondary headings between title and body.
     /// VISUAL TWEAK: Raise for louder mid-headlines; lower for calmer subheads.
     static let title3BaseSize: CGFloat = 18
+    /// VISUAL TWEAK: Change `headlineBaseSize` to resize mid-headlines (between title3 and body).
+    static let headlineBaseSize: CGFloat = 17
 
     /// VISUAL TWEAK: Change `bodyBaseSize` to resize standard body text.
     /// VISUAL TWEAK: Use this to affect most rows and descriptive copy at once.
@@ -90,6 +93,8 @@ enum AppStyle {
     /// VISUAL TWEAK: Change `title3Weight` to alter secondary heading emphasis.
     /// VISUAL TWEAK: Use `.medium` for softer mid-headlines or `.bold` for stronger emphasis.
     static let title3Weight: Font.Weight = .semibold
+    /// VISUAL TWEAK: Change `headlineWeight` to alter mid-headline emphasis.
+    static let headlineWeight: Font.Weight = .semibold
 
     /// VISUAL TWEAK: Change `sectionWeight` to alter section label emphasis.
     /// VISUAL TWEAK: Drop to `.medium` for calmer dividers, raise to `.bold` for stronger grouping.
@@ -444,6 +449,8 @@ enum AppStyle {
             return (titleBaseSize + fontBump, titleWeight, false)
         case .title3:
             return (title3BaseSize + fontBump, title3Weight, false) // VISUAL TWEAK: Change `title3Size` to tune medium headings globally.
+        case .headline:
+            return (headlineBaseSize + fontBump, headlineWeight, false)
         case .section:
             return (sectionBaseSize + fontBump, sectionWeight, false)
         case .body:

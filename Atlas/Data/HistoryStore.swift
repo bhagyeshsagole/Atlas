@@ -183,6 +183,9 @@ final class HistoryStore: ObservableObject {
     /// Returns true if the session was stored, false if discarded for zero sets.
     func endSession(session: WorkoutSession) -> Bool {
         let liveSession = resolvedSession(for: session.id) ?? session
+        if liveSession.isCompleted || liveSession.endedAt != nil {
+            return true
+        }
         let totals = computeTotals(for: liveSession)
 
         liveSession.totalSets = totals.sets

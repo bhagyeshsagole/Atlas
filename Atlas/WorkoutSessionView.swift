@@ -53,6 +53,7 @@ struct WorkoutSessionView: View {
     }
 
     let routine: Routine
+    var preloader: WorkoutSessionPreloader?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var historyStore: HistoryStore
@@ -90,7 +91,6 @@ struct WorkoutSessionView: View {
     @State private var showEndConfirm = false
     @State private var showTipsSheet = false
     @State private var showPlanSheet = false
-    @State private var showAllSetsSheet = false
     @State private var showPickerSheet = false
     @State private var pickerWeightInt: Int = 0
     @State private var pickerWeightDec: Int = 0
@@ -99,15 +99,16 @@ struct WorkoutSessionView: View {
     @State private var pickerTag: SetTag = .W
     @State private var setDraftWeightKg: Double?
     @State private var setDraftRepsInt: Int = 0
-    @State private var pendingDeleteSetID: UUID?
-    @State private var showConfirmDelete1 = false
-    @State private var showConfirmDelete2 = false
     @State private var frozenThisSessionPlan: String = ""
     @State private var frozenExerciseId: UUID?
     @State private var showTimerDoneOverlay = false
+    @StateObject private var summaryLoader = PostWorkoutSummaryLoader()
+    @State private var isEnding = false
+    @State private var showSetHistorySheet = false
 
-    init(routine: Routine) {
+    init(routine: Routine, preloader: WorkoutSessionPreloader? = nil) {
         self.routine = routine
+        self.preloader = preloader
         _sessionExercises = State(initialValue: routine.workouts.enumerated().map { index, workout in
             SessionExercise(id: workout.id, name: workout.name, orderIndex: index)
         })
@@ -238,43 +239,6 @@ struct WorkoutSessionView: View {
     }
 
     @ViewBuilder private var overlays: some View {
-        if showConfirmDelete1 {
-            GlassConfirmPopup(
-                title: "Remove this set?",
-                message: "This action cannot be undone.",
-                primaryTitle: "Continue",
-                secondaryTitle: "Cancel",
-                isDestructive: true,
-                isPresented: $showConfirmDelete1,
-                onPrimary: {
-                    showConfirmDelete2 = true
-                },
-                onSecondary: {
-                    pendingDeleteSetID = nil
-                }
-            )
-        }
-        if showConfirmDelete2 {
-            GlassConfirmPopup(
-                title: "Are you absolutely sure?",
-                message: "Remove this set permanently.",
-                primaryTitle: "Remove",
-                secondaryTitle: "Cancel",
-                isDestructive: true,
-                isPresented: $showConfirmDelete2,
-                onPrimary: {
-                    if let id = pendingDeleteSetID, let set = loggedSetsForCurrent.first(where: { $0.id == id }) {
-                        deleteSet(set)
-                    }
-                    pendingDeleteSetID = nil
-                    showConfirmDelete1 = false
-                },
-                onSecondary: {
-                    pendingDeleteSetID = nil
-                    showConfirmDelete1 = false
-                }
-            )
-        }
         if showEndConfirm {
             GlassConfirmPopup(
                 title: "End workout?",
@@ -328,9 +292,9 @@ struct WorkoutSessionView: View {
 
     @ViewBuilder private var summarySheet: some View {
         if let sessionId = completedSessionId {
-            PostWorkoutSummaryView(sessionID: sessionId) {
+            PostWorkoutSummaryView(sessionID: sessionId, onDone: {
                 dismiss()
-            }
+            }, loader: summaryLoader)
         }
     }
 
@@ -497,89 +461,56 @@ struct WorkoutSessionView: View {
                 .atlasBackground()
             }
         }
-        .sheet(isPresented: $showAllSetsSheet) {
-            SetLogSheetView(
-                sets: loggedSetsForCurrent,
-                weightText: weightText(for:),
-                onDelete: { set in
-                    pendingDeleteSetID = set.id
-                    showConfirmDelete1 = true
-                }
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-        }
     }
 
     private var setLogSection: some View {
-        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Logged Sets")
-                        .appFont(.section, weight: .bold)
-                    Spacer()
-                    Button {
-                        showAllSetsSheet = true
-                    } label: {
-                        Text("View All")
-                            .appFont(.footnote, weight: .semibold)
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(loggedSetsForCurrent.isEmpty ? 0 : 1)
+        VStack(alignment: .leading, spacing: AppStyle.rowSpacing) {
+            HStack {
+                Text("Sets")
+                    .appFont(.section, weight: .bold)
+                Spacer()
+                AtlasPillButton("Add Set") {
+                    presentPicker()
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !loggedSetsForCurrent.isEmpty {
-                        showAllSetsSheet = true
-                    }
-                }
-                let previewSets = Array(loggedSetsForCurrent.suffix(1))
-                if previewSets.isEmpty {
-                    Text("No sets yet.")
-                        .appFont(.body, weight: .regular)
-                        .foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(previewSets, id: \.id) { set in
-                            HStack(spacing: 10) {
-                               if let tag = SetTag(rawValue: set.tag) {
-                                    Text(tag.displayName)
-                                        .appFont(.caption, weight: .bold)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Capsule().fill(.white.opacity(0.1)))
-                                }
-                                Text("\(weightText(for: set)) × \(set.reps)")
-                                    .appFont(.body, weight: .semibold)
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                            }
-                            .padding(AppStyle.glassContentPadding)
-                            .atlasGlassCard()
-                        }
-                        if loggedSetsForCurrent.count > previewSets.count {
-                            Text("View all \(loggedSetsForCurrent.count) sets")
-                                .appFont(.footnote, weight: .semibold)
-                                .foregroundStyle(.secondary)
-                                .onTapGesture { showAllSetsSheet = true }
-                        }
-                    }
-                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(maxWidth: 120)
+                .buttonStyle(.plain)
             }
 
-            AtlasRowPill {
-                HStack(spacing: AppStyle.rowSpacing) {
-                    Text("Logged Sets")
-                        .appFont(.body, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    AtlasPillButton("Log Set") {
-                        presentPicker()
+            if let lastSet = loggedSetsForCurrent.last {
+                Button {
+                    showSetHistorySheet = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("Last Set")
+                            .appFont(.caption, weight: .bold)
+                            .foregroundStyle(.secondary)
+                        if let tag = SetTag(rawValue: lastSet.tag) {
+                            Text(tag.displayName)
+                                .appFont(.caption, weight: .bold)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(.white.opacity(0.08)))
+                        }
+                        Text("\(weightText(for: lastSet)) × \(lastSet.reps)")
+                            .appFont(.body, weight: .semibold)
+                            .monospacedDigit()
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.secondary)
                     }
-                    .frame(maxWidth: 180)
+                    .padding(AppStyle.glassContentPadding)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .atlasGlassCard()
                 }
+                .buttonStyle(.plain)
+            } else {
+                Text("No sets yet. Add your first set to start tracking.")
+                    .appFont(.body, weight: .regular)
+                    .foregroundStyle(.secondary)
             }
         }
         .sheet(isPresented: $showPickerSheet) {
@@ -606,6 +537,17 @@ struct WorkoutSessionView: View {
             .atlasBackground()
             .presentationBackground(.clear)
         }
+        .sheet(isPresented: $showSetHistorySheet) {
+            SetHistorySheet(
+                sets: loggedSetsForCurrent.sorted { ($0.createdAt ?? Date.distantPast) > ($1.createdAt ?? Date.distantPast) },
+                weightText: weightText(for:),
+                onDelete: { set in
+                    Haptics.playLightTap()
+                    deleteSet(set)
+                }
+            )
+            .presentationDetents([.large])
+        }
     }
 
     private var bottomActions: some View {
@@ -628,6 +570,7 @@ struct WorkoutSessionView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .tint(.red)
+                .disabled(isEnding)
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
             }
@@ -786,20 +729,34 @@ struct WorkoutSessionView: View {
     }
 
     private func endSession() {
-        guard let session else {
-            dismiss()
-            return
-        }
-
-        let didStore = historyStore.endSession(session: session)
-        if didStore || session.totalSets > 0 {
-            completedSessionId = session.id
-            showSummary = true
-            if routine.expiresOnCompletion {
-                routineStore.deleteRoutine(id: routine.id)
+        guard isEnding == false else { return }
+        isEnding = true
+        Task {
+            guard let session else {
+                await MainActor.run {
+                    isEnding = false
+                    dismiss()
+                }
+                return
             }
-        } else {
-            dismiss()
+
+            let didStore = historyStore.endSession(session: session)
+            if didStore || session.totalSets > 0 {
+                completedSessionId = session.id
+                await summaryLoader.preload(sessionID: session.id, modelContext: modelContext)
+                await MainActor.run {
+                    showSummary = true
+                    if routine.expiresOnCompletion {
+                        routineStore.deleteRoutine(id: routine.id)
+                    }
+                    isEnding = false
+                }
+            } else {
+                await MainActor.run {
+                    isEnding = false
+                    dismiss()
+                }
+            }
         }
     }
 
@@ -808,18 +765,24 @@ struct WorkoutSessionView: View {
         let exerciseName = currentExercise.name
         let exerciseId = currentExercise.id
         let unit = preferredUnit
-        let lastLog = WorkoutSessionHistory.latestCompletedExerciseLog(
-            for: exerciseName,
-            excluding: session?.id,
-            context: modelContext
-        )
-        lastSessionDate = lastLog?.session?.endedAt ?? lastLog?.session?.startedAt
-        if let lastLog {
-            lastSessionLines = WorkoutSessionFormatter.lastSessionLines(for: lastLog, preferred: unit)
-            derivedThisSessionPlan = WorkoutSessionHistory.guidanceRange(from: lastLog, displayUnit: unit)
+        if let preloader, let cachedLines = preloader.lastLines[exerciseId] {
+            lastSessionLines = cachedLines
+            lastSessionDate = preloader.lastDates[exerciseId] ?? nil
+            derivedThisSessionPlan = preloader.plans[exerciseId] ?? "Warmup: light × 8–12 reps\nWorking: 3–4 sets × 6–10 reps."
         } else {
-            lastSessionLines = []
-            derivedThisSessionPlan = "Warmup: light × 8–12 reps\nWorking: 3–4 sets × 6–10 reps."
+            let lastLog = WorkoutSessionHistory.latestCompletedExerciseLog(
+                for: exerciseName,
+                excluding: session?.id,
+                context: modelContext
+            )
+            lastSessionDate = lastLog?.session?.endedAt ?? lastLog?.session?.startedAt
+            if let lastLog {
+                lastSessionLines = WorkoutSessionFormatter.lastSessionLines(for: lastLog, preferred: unit)
+                derivedThisSessionPlan = WorkoutSessionHistory.guidanceRange(from: lastLog, displayUnit: unit)
+            } else {
+                lastSessionLines = []
+                derivedThisSessionPlan = "Warmup: light × 8–12 reps\nWorking: 3–4 sets × 6–10 reps."
+            }
         }
         frozenThisSessionPlan = derivedThisSessionPlan
         frozenExerciseId = exerciseId
@@ -836,24 +799,32 @@ struct WorkoutSessionView: View {
         exerciseRefreshToken = UUID()
         let lastSessionText = lastSessionLines.joined(separator: "\n")
 
-        Task {
-            let suggestion = await RoutineAIService.generateExerciseCoaching(
-                routineTitle: routine.name,
-                routineId: routine.id,
-                exerciseName: exerciseName,
-                lastSessionSetsText: lastSessionText,
-                lastSessionDate: lastSessionDate,
-                preferredUnit: unit
-            )
-            await MainActor.run {
-                guard exerciseId == currentExercise.id else { return }
-                suggestions[currentExercise.id] = suggestion
-                #if DEBUG
-                let planPreview = suggestion.thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80)
-                print("[SESSION][PLAN] suggestion loaded exerciseId=\(exerciseId) preview=\"\(planPreview)\"")
-                #endif
-                exerciseRefreshToken = UUID()
-                isLoadingCoaching = false
+        if let cachedSuggestion = preloader?.suggestions[exerciseId] {
+            suggestions[currentExercise.id] = cachedSuggestion
+            isLoadingCoaching = false
+            #if DEBUG
+            print("[SESSION][PLAN] using cached suggestion exerciseId=\(exerciseId)")
+            #endif
+        } else {
+            Task {
+                let suggestion = await RoutineAIService.generateExerciseCoaching(
+                    routineTitle: routine.name,
+                    routineId: routine.id,
+                    exerciseName: exerciseName,
+                    lastSessionSetsText: lastSessionText,
+                    lastSessionDate: lastSessionDate,
+                    preferredUnit: unit
+                )
+                await MainActor.run {
+                    guard exerciseId == currentExercise.id else { return }
+                    suggestions[currentExercise.id] = suggestion
+                    #if DEBUG
+                    let planPreview = suggestion.thisSessionPlan.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80)
+                    print("[SESSION][PLAN] suggestion loaded exerciseId=\(exerciseId) preview=\"\(planPreview)\"")
+                    #endif
+                    exerciseRefreshToken = UUID()
+                    isLoadingCoaching = false
+                }
             }
         }
     }

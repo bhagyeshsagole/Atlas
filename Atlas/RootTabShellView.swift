@@ -16,7 +16,6 @@ struct RootTabShellView: View {
     let startWorkout: () -> Void
     let openSettings: () -> Void
 
-    private let tabTransition: AnyTransition = .move(edge: .bottom).combined(with: .opacity)
     private let tabHeight: CGFloat = 70
     private let tabBottomPadding: CGFloat = 10
     private let startButtonGapAboveTab: CGFloat = 16
@@ -30,18 +29,14 @@ struct RootTabShellView: View {
                         startWorkout: { startWorkout() },
                         openSettings: openSettings
                     )
-                        .transition(tabTransition)
                 case .friends:
                     FriendsView()
-                        .transition(tabTransition)
                 case .stats:
                     StatsView()
-                        .transition(tabTransition)
                 }
             }
             .atlasBackground()
             .atlasBackgroundTheme(backgroundTheme(for: selectedTab))
-            .animation(.spring(response: 0.55, dampingFraction: 0.9), value: selectedTab)
 
             if let bannerMessage {
                 Text(bannerMessage)

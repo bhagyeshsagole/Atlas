@@ -2,9 +2,6 @@ import SwiftUI
 
 struct FloatingPillTabBar: View {
     @Binding var selectedTab: AppTab
-    @Namespace private var selectionNamespace
-    @State private var pressedTab: AppTab?
-
     private let tabHeight: CGFloat = 76
     private let pressedScale: CGFloat = 0.96
 
@@ -37,21 +34,12 @@ struct FloatingPillTabBar: View {
         let isSelected = selectedTab == tab
         return Button {
             Haptics.playLightTap()
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                selectedTab = tab
-                pressedTab = tab
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.9)) {
-                    pressedTab = nil
-                }
-            }
+            selectedTab = tab
         } label: {
             ZStack {
                 if isSelected {
                     Capsule()
                         .fill(Color.white.opacity(0.08))
-                        .matchedGeometryEffect(id: "highlight", in: selectionNamespace)
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 VStack(spacing: 6) {
@@ -70,7 +58,6 @@ struct FloatingPillTabBar: View {
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-        .scaleEffect(pressedTab == tab ? pressedScale : 1.0)
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: pressedTab == tab)
+        .scaleEffect(isSelected ? pressedScale : 1.0)
     }
 }

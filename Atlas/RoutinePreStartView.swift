@@ -31,12 +31,21 @@ import SwiftUI
 struct RoutinePreStartView: View {
     let routine: Routine
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var historyStore: HistoryStore
+    @AppStorage("weightUnit") private var weightUnit: String = "lb"
     @State private var showSession = false // When true, navigates to the live WorkoutSessionView.
+    @StateObject private var preloader: WorkoutSessionPreloader
 
     /// VISUAL TWEAK: Adjust the summary card height by changing `summaryCardMaxHeight`.
     private let summaryCardMaxHeight: CGFloat = 480
     /// VISUAL TWEAK: Adjust bottom button spacing via `bottomActionPadding`.
     private let bottomActionPadding: CGFloat = 16
+
+    init(routine: Routine) {
+        self.routine = routine
+        _preloader = StateObject(wrappedValue: WorkoutSessionPreloader(routine: routine))
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -94,12 +103,17 @@ struct RoutinePreStartView: View {
                 },
                 right: .init(title: "Start Workout", role: nil) {
                     Haptics.playLightTap()
+                    preloader.startPrefetch(preferredUnit: WorkoutUnits(from: weightUnit))
                     showSession = true
                 }
             )
         }
         .navigationDestination(isPresented: $showSession) {
-            WorkoutSessionView(routine: routine)
+            WorkoutSessionView(routine: routine, preloader: preloader)
+        }
+        .task {
+            preloader.configure(historyStore: historyStore, modelContext: modelContext)
+            preloader.startPrefetch(preferredUnit: WorkoutUnits(from: weightUnit))
         }
     }
 
