@@ -41,6 +41,7 @@ struct FloatingPillTabBar: View {
                     Capsule()
                         .fill(Color.white.opacity(0.08))
                         .frame(maxWidth: .infinity, minHeight: 44)
+                        .transaction { $0.animation = nil }
                 }
                 VStack(spacing: 6) {
                     Image(systemName: systemName)
@@ -59,5 +60,6 @@ struct FloatingPillTabBar: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .scaleEffect(isSelected ? pressedScale : 1.0)
+        .animation(nil, value: isSelected)
     }
 }

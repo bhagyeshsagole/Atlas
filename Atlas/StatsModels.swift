@@ -156,6 +156,7 @@ struct MetricDetailModel: Identifiable {
     let baseline: BaselineResult?
     let contextLines: [String]
     let breakdown: [BreakdownItem]
+    let learnMore: [String]
 }
 
 struct StatsDashboardResult {
@@ -166,6 +167,7 @@ struct StatsDashboardResult {
     let minimumStrip: [MinimumStripMetric]
     let sections: [StatsSectionModel]
     let alerts: [AlertModel]
+    let muscles: [MuscleOverviewModel]
     let detail: [StatsMetricKind: MetricDetailModel]
 
     static func empty(mode: StatsMode, range: StatsRange, filter: StatsExerciseFilter) -> StatsDashboardResult {
@@ -177,8 +179,22 @@ struct StatsDashboardResult {
             minimumStrip: [],
             sections: [],
             alerts: [],
+            muscles: [],
             detail: [:]
         )
+    }
+}
+
+struct MuscleOverviewModel: Identifiable {
+    var id: MuscleGroup { muscle }
+    let muscle: MuscleGroup
+    let weekly: [WeeklyMetricValue]
+    let floor: Double
+    let band: ClosedRange<Double>
+    let topExercises: [BreakdownItem]
+
+    var latestSets: Int {
+        Int(weekly.last?.value ?? 0)
     }
 }
 

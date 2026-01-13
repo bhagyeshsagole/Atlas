@@ -105,6 +105,10 @@ struct WorkoutSessionView: View {
     @State private var isEnding = false
     @State private var showSetHistorySheet = false
     @State private var showJumpSheet = false
+    @AppStorage("atlas_swipe_hint_shown") private var hasShownSwipeHint = false
+    @State private var showSwipeHint = false
+    @State private var showFullMuscleLine = false
+    @State private var showCoachSheet = false
 
     init(routine: Routine, preloader: WorkoutSessionPreloader? = nil) {
         self.routine = routine
@@ -121,6 +125,10 @@ struct WorkoutSessionView: View {
         }
         .onAppear {
             reloadForCurrentExercise()
+            if hasShownSwipeHint == false {
+                showSwipeHint = true
+                hasShownSwipeHint = true
+            }
             if let remaining = timerRemaining, remaining > 0 {
                 let endsAt = Date().addingTimeInterval(TimeInterval(remaining))
                 RestTimerLiveActivityController.start(endsAt: endsAt, exerciseName: currentExercise.name)
@@ -130,6 +138,7 @@ struct WorkoutSessionView: View {
             clearFocus()
             resetDraftForNewExercise()
             reloadForCurrentExercise()
+            showFullMuscleLine = false
             #if DEBUG
             print("[SESSION][PAGER] index=\(newIndex) exercise=\(currentExercise.name)")
             #endif
@@ -144,6 +153,13 @@ struct WorkoutSessionView: View {
         .sheet(isPresented: $showTimerSheet) { timerSheet }
         .sheet(isPresented: $showNewWorkoutSheet) { newWorkoutSheet }
         .sheet(isPresented: $showJumpSheet) { jumpSheet }
+        .sheet(isPresented: $showCoachSheet) {
+            CoachQuickSheet(
+                statsContext: nil,
+                exerciseName: currentExercise.name,
+                balanceContext: nil
+            )
+        }
         .toolbar { sessionToolbar }
         .onReceive(timer) { _ in
             guard let remaining = timerRemaining, remaining >= 0 else { return }
@@ -226,12 +242,6 @@ struct WorkoutSessionView: View {
         if !isEditingSetFields {
             GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
                 HStack(spacing: 12) {
-                    AtlasPillButton("Add Set") {
-                        Haptics.playLightTap()
-                        presentPicker()
-                    }
-                    .frame(maxWidth: .infinity)
-
                     AtlasPillButton("Add Exercise") {
                         Haptics.playLightTap()
                         showNewWorkoutSheet = true
@@ -361,6 +371,20 @@ struct WorkoutSessionView: View {
                 Spacer()
                 Button {
                     Haptics.playLightTap()
+                    showCoachSheet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bolt.fill")
+                        Text("Coach")
+                    }
+                    .appFont(.footnote, weight: .semibold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                Button {
+                    Haptics.playLightTap()
                     showJumpSheet = true
                 } label: {
                     HStack(spacing: 6) {
@@ -374,6 +398,20 @@ struct WorkoutSessionView: View {
                 }
                 .buttonStyle(.plain)
             }
+            if showSwipeHint {
+                Text("Tip: swipe to switch exercises")
+                    .appFont(.caption, weight: .semibold)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                showSwipeHint = false
+                            }
+                        }
+                    }
+            }
             Text(currentExercise.name)
                 .appFont(.title, weight: .semibold)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -383,7 +421,14 @@ struct WorkoutSessionView: View {
                     .appFont(.caption, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
+                    .lineLimit(showFullMuscleLine ? nil : 1)
+                    .truncationMode(.tail)
                     .transition(.opacity)
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showFullMuscleLine.toggle()
+                        }
+                    }
             }
 
             GlassCard {
@@ -823,6 +868,9 @@ struct WorkoutSessionView: View {
                 ensureSession()
             }
             guard let session else {
+                #if DEBUG
+                print("[SESSION][ERROR] end: no session to end")
+                #endif
                 await MainActor.run {
                     isEnding = false
                     dismiss()
@@ -830,8 +878,14 @@ struct WorkoutSessionView: View {
                 return
             }
 
+            let totalSetCount = session.exercises.reduce(0) { $0 + $1.sets.count }
             let didStore = historyStore.endSession(session: session)
-            if didStore || session.totalSets > 0 {
+
+            #if DEBUG
+            print("[SESSION] end: didStore=\(didStore) totalSets=\(totalSetCount) sessionId=\(session.id)")
+            #endif
+
+            if didStore && totalSetCount > 0 {
                 completedSessionId = session.id
                 await summaryLoader.preload(sessionID: session.id, modelContext: modelContext, unitPreference: preferredUnit)
                 await MainActor.run {
@@ -842,6 +896,9 @@ struct WorkoutSessionView: View {
                     isEnding = false
                 }
             } else {
+                #if DEBUG
+                print("[SESSION] end: session discarded or empty, dismissing")
+                #endif
                 await MainActor.run {
                     isEnding = false
                     dismiss()

@@ -35,6 +35,7 @@ struct StatsMetricEngine {
         let weeklyTonnage: [Date: Double]
         let weeklyHardSets: [Date: Int]
         let weeklyHardSetsByMuscle: [Date: [MuscleGroup: Int]]
+        let hardSetContributors: [MuscleGroup: [String: Int]]
         let weeklyOverloadEvents: [Date: Int]
         let weeklyTopSetByExercise: [Date: [String: Double]]
         let weeklyLaRTByExercise: [Date: [String: Double]]
@@ -143,88 +144,88 @@ struct StatsMetricEngine {
 
         let laRTCard = TrendCardModel(
             metric: .strengthCapacity,
-            title: "Strength Capacity",
+            title: "Heaviest lift",
             primaryValue: weightText(laRTSeries.last?.value ?? 0, unit: preferredUnit),
             rawValue: laRTSeries.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: laRTSeries.last?.value ?? 0, previous: laRTSeries.dropLast().last?.value ?? 0),
-            comparisonText: laRTBaseline?.statusText ?? "No baseline",
-            streakText: "\(laRTBaseline?.streakWeeks ?? 0)W above floor",
-            context: laRTSeries.last?.value ?? 0 > 0 ? keyLiftContext(from: processed.weeklyLaRTByExercise, pinned: pinnedLifts) : "No key lift logged"
+            comparisonText: friendlyStatus(laRTBaseline),
+            streakText: friendlyStreak(laRTBaseline),
+            context: "Your strongest weight this week"
         )
 
         let topSetCard = TrendCardModel(
             metric: .topSetOutput,
-            title: "Top Set Output",
+            title: "Best performance",
             primaryValue: formatNumber(topSetSeries.last?.value ?? 0),
             rawValue: topSetSeries.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: topSetSeries.last?.value ?? 0, previous: topSetSeries.dropLast().last?.value ?? 0),
-            comparisonText: topSetBaseline?.statusText ?? "No baseline",
-            streakText: "\(topSetBaseline?.streakWeeks ?? 0)W above floor",
-            context: filterTitle(filter)
+            comparisonText: friendlyStatus(topSetBaseline),
+            streakText: friendlyStreak(topSetBaseline),
+            context: "Top weight × reps combo"
         )
 
         let overloadCard = TrendCardModel(
             metric: .overloadEvents,
-            title: "Overload Events",
-            primaryValue: "\(Int(overloadSeries.last?.value ?? 0)) / wk",
+            title: "New records",
+            primaryValue: "\(Int(overloadSeries.last?.value ?? 0)) this wk",
             rawValue: overloadSeries.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: overloadSeries.last?.value ?? 0, previous: overloadSeries.dropLast().last?.value ?? 0),
-            comparisonText: overloadBaseline?.statusText ?? "No baseline",
-            streakText: "\(overloadBaseline?.streakWeeks ?? 0)W above floor",
-            context: "Auto floor uses 8W P20"
+            comparisonText: "Personal records this week",
+            streakText: friendlyStreak(overloadBaseline),
+            context: "Times you beat a previous best"
         )
 
         let restValue = restSeries.last?.value ?? 0
         let restCard = TrendCardModel(
             metric: .restDiscipline,
-            title: "Rest Discipline",
+            title: "Rest time",
             primaryValue: String(format: "%.0fs", restValue),
             rawValue: restValue,
             direction: StatsBaselineEngine.trend(current: restValue, previous: restSeries.dropLast().last?.value ?? 0),
-            comparisonText: restBaseline?.statusText ?? "Within band",
-            streakText: "\(restBaseline?.streakWeeks ?? 0)W above floor",
-            context: "Heavy sets (≤6 reps)"
+            comparisonText: friendlyStatus(restBaseline),
+            streakText: friendlyStreak(restBaseline),
+            context: "Average break between sets"
         )
 
         let cards = [laRTCard, topSetCard, overloadCard, restCard]
 
         let minimumStrip: [MinimumStripMetric] = [
-            MinimumStripMetric(metric: .workload, title: "Workload", weekly: weeklySeries(from: processed.weeklyTonnage, weeks: weeks), baseline: StatsBaselineEngine.baseline(series: weeklySeries(from: processed.weeklyTonnage, weeks: processed.weeks))),
-            MinimumStripMetric(metric: .progressEvents, title: "Progress", weekly: overloadSeries, baseline: overloadBaseline),
-            MinimumStripMetric(metric: .coverage, title: "Coverage", weekly: coverageTrend, baseline: coverageBaseline),
+            MinimumStripMetric(metric: .workload, title: "Total work", weekly: weeklySeries(from: processed.weeklyTonnage, weeks: weeks), baseline: StatsBaselineEngine.baseline(series: weeklySeries(from: processed.weeklyTonnage, weeks: processed.weeks))),
+            MinimumStripMetric(metric: .progressEvents, title: "New records", weekly: overloadSeries, baseline: overloadBaseline),
+            MinimumStripMetric(metric: .coverage, title: "Muscle groups", weekly: coverageTrend, baseline: coverageBaseline),
             MinimumStripMetric(metric: .balance, title: "Balance", weekly: balanceTrend, baseline: balanceBaseline),
-            MinimumStripMetric(metric: .efficiency, title: "Efficiency", weekly: weeklySeries(from: processed.weeklyDensity, weeks: weeks), baseline: StatsBaselineEngine.baseline(series: weeklySeries(from: processed.weeklyDensity, weeks: processed.weeks)))
+            MinimumStripMetric(metric: .efficiency, title: "Training pace", weekly: weeklySeries(from: processed.weeklyDensity, weeks: weeks), baseline: StatsBaselineEngine.baseline(series: weeklySeries(from: processed.weeklyDensity, weeks: processed.weeks)))
         ]
 
         let sections: [StatsSectionModel] = [
             StatsSectionModel(
                 metric: .strengthCapacity,
-                title: "LaRT-5",
-                description: "Best load at ≥5 reps",
+                title: "Strength over time",
+                description: "Your heaviest lift each week",
                 series: laRTSeries,
                 baseline: laRTBaseline,
                 breakdown: breakdownTopExercises(from: processed.weeklyLaRTByExercise, weeks: weeks, preferredUnit: preferredUnit)
             ),
             StatsSectionModel(
                 metric: .overloadEvents,
-                title: "Overload Events",
-                description: "New bests by rep band",
+                title: "Personal records",
+                description: "Times you beat a previous best",
                 series: overloadSeries,
                 baseline: overloadBaseline,
                 breakdown: []
             ),
             StatsSectionModel(
                 metric: .restDiscipline,
-                title: "Rest Times",
-                description: "Median rest for heavy sets",
+                title: "Rest between sets",
+                description: "Average break time",
                 series: restSeries,
                 baseline: restBaseline,
                 breakdown: []
             ),
             StatsSectionModel(
                 metric: .topSetOutput,
-                title: "Heavy Set Distribution",
-                description: "% of sets by rep band",
+                title: "Rep range breakdown",
+                description: "How your sets are distributed",
                 series: topSetSeries,
                 baseline: topSetBaseline,
                 breakdown: repDistributionBreakdown(from: processed.weeklyRepExposure, weeks: weeks)
@@ -233,14 +234,16 @@ struct StatsMetricEngine {
 
         let alerts = strengthAlerts(laRTSeries: laRTSeries, repExposure: processed.weeklyRepExposure, weeks: weeks, restSeries: restSeries)
 
+        let muscles = muscleOverview(from: processed, weeks: weeks)
+
         let detail: [StatsMetricKind: MetricDetailModel] = [
-            .strengthCapacity: MetricDetailModel(metric: .strengthCapacity, title: "Strength Capacity", series: laRTSeries, baseline: laRTBaseline, contextLines: ["Floor uses 8W P20", laRTBaseline?.statusText ?? ""], breakdown: breakdownTopExercises(from: processed.weeklyLaRTByExercise, weeks: weeks, preferredUnit: preferredUnit)),
-            .topSetOutput: MetricDetailModel(metric: .topSetOutput, title: "Top Set Output", series: topSetSeries, baseline: topSetBaseline, contextLines: ["Best set (weight × reps)"], breakdown: breakdownTopExercises(from: processed.weeklyTopSetByExercise, weeks: weeks, preferredUnit: preferredUnit)),
-            .overloadEvents: MetricDetailModel(metric: .overloadEvents, title: "Overload Events", series: overloadSeries, baseline: overloadBaseline, contextLines: ["Counts new bests per exercise/rep band"], breakdown: []),
-            .restDiscipline: MetricDetailModel(metric: .restDiscipline, title: "Rest Discipline", series: restSeries, baseline: restBaseline, contextLines: ["Median rest between heavy sets"], breakdown: [])
+            .strengthCapacity: MetricDetailModel(metric: .strengthCapacity, title: "Heaviest Lift", series: laRTSeries, baseline: laRTBaseline, contextLines: ["Your strongest weight each week."], breakdown: breakdownTopExercises(from: processed.weeklyLaRTByExercise, weeks: weeks, preferredUnit: preferredUnit), learnMore: ["We track your best load at 5+ reps (called LaRT-5). Your baseline is calculated from the past 8 weeks to show if you're above or below your usual strength level."] ),
+            .topSetOutput: MetricDetailModel(metric: .topSetOutput, title: "Best Performance", series: topSetSeries, baseline: topSetBaseline, contextLines: ["Your top weight × reps combo each week."], breakdown: breakdownTopExercises(from: processed.weeklyTopSetByExercise, weeks: weeks, preferredUnit: preferredUnit), learnMore: ["This measures your best single set performance by multiplying weight times reps. It helps you see if you're getting stronger even when using different rep ranges."]),
+            .overloadEvents: MetricDetailModel(metric: .overloadEvents, title: "New Records", series: overloadSeries, baseline: overloadBaseline, contextLines: ["Times you beat a previous best."], breakdown: [], learnMore: ["Every time you beat your best weight for a given rep range, we count it as a record. More records means you're making steady progress."]),
+            .restDiscipline: MetricDetailModel(metric: .restDiscipline, title: "Rest Time", series: restSeries, baseline: restBaseline, contextLines: ["Average break between heavy sets."], breakdown: [], learnMore: ["We calculate the typical rest you take between heavy sets (6 reps or fewer). Longer rest helps with strength, but if it's creeping up while performance drops, you might be overreaching."])
         ]
 
-        return StatsDashboardResult(mode: .strength, range: range, filter: filter, cards: cards, minimumStrip: minimumStrip, sections: sections, alerts: alerts, detail: detail)
+        return StatsDashboardResult(mode: .strength, range: range, filter: filter, cards: cards, minimumStrip: minimumStrip, sections: sections, alerts: alerts, muscles: muscles, detail: detail)
     }
 
     // MARK: - Hypertrophy
@@ -268,48 +271,48 @@ struct StatsMetricEngine {
         let lowestMuscle = lowestMuscleSet(from: processed.weeklyHardSetsByMuscle, weeks: weeks)
         let hardSetsCard = TrendCardModel(
             metric: .hardSets,
-            title: "Hard Sets",
+            title: "Growth sets",
             primaryValue: "\(lowestMuscle.value) sets",
             rawValue: Double(lowestMuscle.value),
             direction: StatsBaselineEngine.trend(current: hardSetsSeries.last?.value ?? 0, previous: hardSetsSeries.dropLast().last?.value ?? 0),
-            comparisonText: "Floor \(defaultFloor(for: lowestMuscle.muscle))",
-            streakText: "\(hardSetsBaseline?.streakWeeks ?? 0)W above floor",
-            context: "\(lowestMuscle.muscle.displayName) lowest"
+            comparisonText: friendlyStatus(hardSetsBaseline),
+            streakText: friendlyStreak(hardSetsBaseline),
+            context: "\(lowestMuscle.muscle.displayName) got the least work"
         )
 
         let volumeCard = TrendCardModel(
             metric: .weeklyVolume,
-            title: "Weekly Volume",
+            title: "Total work",
             primaryValue: weightText(tonnageSeries.last?.value ?? 0, unit: preferredUnit, isTonnage: true),
             rawValue: tonnageSeries.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: tonnageSeries.last?.value ?? 0, previous: tonnageSeries.dropLast().last?.value ?? 0),
-            comparisonText: tonnageBaseline?.statusText ?? "No baseline",
-            streakText: "\(tonnageBaseline?.streakWeeks ?? 0)W above floor",
-            context: filterTitle(filter)
+            comparisonText: friendlyStatus(tonnageBaseline),
+            streakText: friendlyStreak(tonnageBaseline),
+            context: "All weight moved this week"
         )
 
         let coverageCard = TrendCardModel(
             metric: .coverage,
-            title: "Coverage",
-            primaryValue: "\(Int(coverage.last?.value ?? 0))/\(MuscleGroup.allCases.count) muscles",
+            title: "Muscles trained",
+            primaryValue: "\(Int(coverage.last?.value ?? 0))/\(MuscleGroup.allCases.count)",
             rawValue: coverage.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: coverage.last?.value ?? 0, previous: coverage.dropLast().last?.value ?? 0),
-            comparisonText: coverageBaseline?.statusText ?? "Touches vs floor",
-            streakText: "\(coverageBaseline?.streakWeeks ?? 0)W above floor",
-            context: "Muscles meeting weekly minimums"
+            comparisonText: friendlyStatus(coverageBaseline),
+            streakText: friendlyStreak(coverageBaseline),
+            context: "Groups that hit your target"
         )
 
         let varietyPrimary = varietyBreakdown.first
         let varietyRaw = Double(varietyPrimary?.valueText.components(separatedBy: " ").first ?? "") ?? 0
         let varietyCard = TrendCardModel(
             metric: .variety,
-            title: "Exercise Variety",
+            title: "Exercise variety",
             primaryValue: varietyPrimary?.valueText ?? "—",
             rawValue: varietyRaw,
             direction: .flat,
-            comparisonText: "Band 2–4 per muscle",
-            streakText: "4W window",
-            context: varietyPrimary?.title ?? "—"
+            comparisonText: "Best: 2-4 exercises per muscle",
+            streakText: "Past 4 weeks",
+            context: varietyPrimary?.title ?? "Mix"
         )
 
         let cards = [hardSetsCard, volumeCard, coverageCard, varietyCard]
@@ -318,11 +321,11 @@ struct StatsMetricEngine {
         let overloadBaseline = StatsBaselineEngine.baseline(series: overloadSeries, defaultFloor: 3)
 
         let minimumStrip: [MinimumStripMetric] = [
-            MinimumStripMetric(metric: .workload, title: "Workload", weekly: tonnageSeries, baseline: tonnageBaseline),
-            MinimumStripMetric(metric: .progressEvents, title: "Progress", weekly: overloadSeries, baseline: overloadBaseline),
-            MinimumStripMetric(metric: .coverage, title: "Coverage", weekly: coverage, baseline: coverageBaseline),
+            MinimumStripMetric(metric: .workload, title: "Total work", weekly: tonnageSeries, baseline: tonnageBaseline),
+            MinimumStripMetric(metric: .progressEvents, title: "New records", weekly: overloadSeries, baseline: overloadBaseline),
+            MinimumStripMetric(metric: .coverage, title: "Muscle groups", weekly: coverage, baseline: coverageBaseline),
             MinimumStripMetric(metric: .balance, title: "Balance", weekly: balanceTrend, baseline: balanceBaseline),
-            MinimumStripMetric(metric: .efficiency, title: "Efficiency", weekly: weeklySeries(from: processed.weeklyDensity, weeks: weeks), baseline: StatsBaselineEngine.baseline(series: weeklySeries(from: processed.weeklyDensity, weeks: processed.weeks)))
+            MinimumStripMetric(metric: .efficiency, title: "Training pace", weekly: weeklySeries(from: processed.weeklyDensity, weeks: weeks), baseline: StatsBaselineEngine.baseline(series: weeklySeries(from: processed.weeklyDensity, weeks: processed.weeks)))
         ]
 
         let junkBreakdown = processed.junk.byExercise
@@ -331,23 +334,25 @@ struct StatsMetricEngine {
             .map { BreakdownItem(title: $0.key, valueText: "\($0.value) sets", detail: nil) }
 
         let sections: [StatsSectionModel] = [
-            StatsSectionModel(metric: .hardSets, title: "Hard Sets by Muscle", description: "Sets 5–30 reps", series: hardSetsSeries, baseline: hardSetsBaseline, breakdown: muscleBreakdown(from: processed.weeklyHardSetsByMuscle, weeks: weeks)),
-            StatsSectionModel(metric: .weeklyVolume, title: "Volume Load", description: "Weekly tonnage", series: tonnageSeries, baseline: tonnageBaseline, breakdown: []),
-            StatsSectionModel(metric: .junkVolume, title: "Junk Volume", description: "Sets below 70% of rolling median", series: [WeeklyMetricValue(weekStart: weeks.last ?? Date(), value: Double(processed.junk.totalJunkSets))], baseline: nil, breakdown: junkBreakdown),
-            StatsSectionModel(metric: .variety, title: "Exercise Variety", description: "4W window per muscle", series: [], baseline: nil, breakdown: varietyBreakdown)
+            StatsSectionModel(metric: .hardSets, title: "Growth sets per muscle", description: "Working sets for each group", series: hardSetsSeries, baseline: hardSetsBaseline, breakdown: muscleBreakdown(from: processed.weeklyHardSetsByMuscle, weeks: weeks)),
+            StatsSectionModel(metric: .weeklyVolume, title: "Total weight moved", description: "All your training volume", series: tonnageSeries, baseline: tonnageBaseline, breakdown: []),
+            StatsSectionModel(metric: .junkVolume, title: "Too-light sets", description: "Sets that might not do much", series: [WeeklyMetricValue(weekStart: weeks.last ?? Date(), value: Double(processed.junk.totalJunkSets))], baseline: nil, breakdown: junkBreakdown),
+            StatsSectionModel(metric: .variety, title: "Exercise variety", description: "Different movements per muscle", series: [], baseline: nil, breakdown: varietyBreakdown)
         ]
 
         let alerts = hypertrophyAlerts(hardSetsSeries: hardSetsSeries, junk: processed.junk.totalJunkSets, overloadSeries: overloadSeries)
 
+        let muscles = muscleOverview(from: processed, weeks: weeks)
+
         let detail: [StatsMetricKind: MetricDetailModel] = [
-            .hardSets: MetricDetailModel(metric: .hardSets, title: "Hard Sets", series: hardSetsSeries, baseline: hardSetsBaseline, contextLines: ["Floor uses 8W P20"], breakdown: muscleBreakdown(from: processed.weeklyHardSetsByMuscle, weeks: weeks)),
-            .weeklyVolume: MetricDetailModel(metric: .weeklyVolume, title: "Volume Load", series: tonnageSeries, baseline: tonnageBaseline, contextLines: ["Warmups excluded"], breakdown: []),
-            .coverage: MetricDetailModel(metric: .coverage, title: "Coverage", series: coverage, baseline: coverageBaseline, contextLines: ["Touches/week meeting minimums"], breakdown: []),
-            .variety: MetricDetailModel(metric: .variety, title: "Variety", series: [], baseline: nil, contextLines: ["Band 2–4 per muscle"], breakdown: varietyBreakdown),
-            .junkVolume: MetricDetailModel(metric: .junkVolume, title: "Junk Volume", series: [], baseline: nil, contextLines: ["Weight <70% of 8W median"], breakdown: junkBreakdown)
+            .hardSets: MetricDetailModel(metric: .hardSets, title: "Growth Sets", series: hardSetsSeries, baseline: hardSetsBaseline, contextLines: ["Working sets that build muscle (5-30 reps)."], breakdown: muscleBreakdown(from: processed.weeklyHardSetsByMuscle, weeks: weeks), learnMore: ["Growth sets are any working sets between 5-30 reps. Your baseline is based on your lowest muscle group over the past 8 weeks to help you maintain balance."]),
+            .weeklyVolume: MetricDetailModel(metric: .weeklyVolume, title: "Total Work", series: tonnageSeries, baseline: tonnageBaseline, contextLines: ["All weight you moved this week."], breakdown: [], learnMore: ["This is your total training volume: weight multiplied by reps for every set (warmups excluded). More volume generally means more stimulus, but recovery matters too."]),
+            .coverage: MetricDetailModel(metric: .coverage, title: "Muscles Trained", series: coverage, baseline: coverageBaseline, contextLines: ["Muscle groups that hit your weekly target."], breakdown: [], learnMore: ["A muscle counts as 'covered' if you either hit its minimum set count or trained it on 2+ different days. This helps you stay balanced."]),
+            .variety: MetricDetailModel(metric: .variety, title: "Exercise Variety", series: [], baseline: nil, contextLines: ["Different movements you used per muscle."], breakdown: varietyBreakdown, learnMore: ["Best results come from 2-4 different exercises per muscle over 4 weeks. Too few limits development, too many can dilute your focus."]),
+            .junkVolume: MetricDetailModel(metric: .junkVolume, title: "Too-Light Sets", series: [], baseline: nil, contextLines: ["Sets that probably didn't challenge you much."], breakdown: junkBreakdown, learnMore: ["We flag sets that are much lighter than your usual for that rep range (less than 70% of your rolling median). These sets might not be hard enough to drive adaptation. Note: deload weeks are automatically excluded."])
         ]
 
-        return StatsDashboardResult(mode: .hypertrophy, range: range, filter: filter, cards: cards, minimumStrip: minimumStrip, sections: sections, alerts: alerts, detail: detail)
+        return StatsDashboardResult(mode: .hypertrophy, range: range, filter: filter, cards: cards, minimumStrip: minimumStrip, sections: sections, alerts: alerts, muscles: muscles, detail: detail)
     }
 
     // MARK: - Athletic
@@ -378,75 +383,77 @@ struct StatsMetricEngine {
 
         let workCapacityCard = TrendCardModel(
             metric: .density,
-            title: "Work Capacity",
+            title: "Training pace",
             primaryValue: formatNumber(densitySeries.last?.value ?? 0) + " / min",
             rawValue: densitySeries.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: densitySeries.last?.value ?? 0, previous: densitySeries.dropLast().last?.value ?? 0),
-            comparisonText: densityBaseline?.statusText ?? "No baseline",
-            streakText: "\(densityBaseline?.streakWeeks ?? 0)W above floor",
-            context: "Tonnage per minute"
+            comparisonText: friendlyStatus(densityBaseline),
+            streakText: friendlyStreak(densityBaseline),
+            context: "How much you moved per minute"
         )
 
         let strengthCard = TrendCardModel(
             metric: .strengthCapacity,
-            title: "Strength Anchor",
+            title: "Strength anchor",
             primaryValue: weightText(laRTSeries.last?.value ?? 0, unit: preferredUnit),
             rawValue: laRTSeries.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: laRTSeries.last?.value ?? 0, previous: laRTSeries.dropLast().last?.value ?? 0),
-            comparisonText: laRTBaseline?.statusText ?? "No baseline",
-            streakText: "\(laRTBaseline?.streakWeeks ?? 0)W above floor",
-            context: keyLiftContext(from: processed.weeklyLaRTByExercise, pinned: pinnedLifts)
+            comparisonText: friendlyStatus(laRTBaseline),
+            streakText: friendlyStreak(laRTBaseline),
+            context: "Your heaviest lift this week"
         )
 
         let hypertrophyCard = TrendCardModel(
             metric: .hypertrophyDose,
-            title: "Hypertrophy Dose",
+            title: "Growth volume",
             primaryValue: "\(Int(hardSetSeries.last?.value ?? 0)) sets",
             rawValue: hardSetSeries.last?.value ?? 0,
             direction: StatsBaselineEngine.trend(current: hardSetSeries.last?.value ?? 0, previous: hardSetSeries.dropLast().last?.value ?? 0),
-            comparisonText: hardSetBaseline?.statusText ?? "No baseline",
-            streakText: "\(hardSetBaseline?.streakWeeks ?? 0)W above floor",
-            context: "Hard sets 5–30 reps"
+            comparisonText: friendlyStatus(hardSetBaseline),
+            streakText: friendlyStreak(hardSetBaseline),
+            context: "Hard sets for muscle building"
         )
 
         let balanceCard = TrendCardModel(
             metric: .balance,
-            title: "Balance",
+            title: "Push/pull balance",
             primaryValue: balanceValueText(balanceTrend.last?.value ?? 0),
             rawValue: balanceTrend.last?.value ?? 0,
             direction: .flat,
-            comparisonText: "Push:pull & quad:hinge",
-            streakText: "Band 0.7–1.3",
-            context: "Stay inside band"
+            comparisonText: "Push vs pull • Quad vs hinge",
+            streakText: "Aim for even split",
+            context: "1.0 means perfectly balanced"
         )
 
         let cards = [workCapacityCard, strengthCard, hypertrophyCard, balanceCard]
 
         let minimumStrip: [MinimumStripMetric] = [
-            MinimumStripMetric(metric: .workload, title: "Workload", weekly: tonnageSeries, baseline: tonnageBaseline),
-            MinimumStripMetric(metric: .progressEvents, title: "Progress", weekly: overloadSeries, baseline: StatsBaselineEngine.baseline(series: overloadSeries, defaultFloor: 3)),
-            MinimumStripMetric(metric: .coverage, title: "Coverage", weekly: coverageTrend, baseline: StatsBaselineEngine.baseline(series: coverageTrend, defaultFloor: 4)),
+            MinimumStripMetric(metric: .workload, title: "Total work", weekly: tonnageSeries, baseline: tonnageBaseline),
+            MinimumStripMetric(metric: .progressEvents, title: "New records", weekly: overloadSeries, baseline: StatsBaselineEngine.baseline(series: overloadSeries, defaultFloor: 3)),
+            MinimumStripMetric(metric: .coverage, title: "Muscle groups", weekly: coverageTrend, baseline: StatsBaselineEngine.baseline(series: coverageTrend, defaultFloor: 4)),
             MinimumStripMetric(metric: .balance, title: "Balance", weekly: balanceTrend, baseline: balanceBaseline),
-            MinimumStripMetric(metric: .efficiency, title: "Efficiency", weekly: densitySeries, baseline: densityBaseline)
+            MinimumStripMetric(metric: .efficiency, title: "Training pace", weekly: densitySeries, baseline: densityBaseline)
         ]
 
         let sections: [StatsSectionModel] = [
-            StatsSectionModel(metric: .workload, title: "Weekly Workload", description: nil, series: tonnageSeries, baseline: tonnageBaseline, breakdown: []),
-            StatsSectionModel(metric: .density, title: "Density", description: "Tonnage/minute", series: densitySeries, baseline: densityBaseline, breakdown: []),
-            StatsSectionModel(metric: .overloadEvents, title: "Overload Events", description: "New bests", series: overloadSeries, baseline: StatsBaselineEngine.baseline(series: overloadSeries, defaultFloor: 3), breakdown: []),
-            StatsSectionModel(metric: .balance, title: "Balance Ratios", description: "Push:pull / Quad:hinge", series: balanceTrend, baseline: balanceBaseline, breakdown: balanceBreakdown(processed.weeklyPushPull, processed.weeklyQuadHinge, weeks: weeks))
+            StatsSectionModel(metric: .workload, title: "Total weight moved", description: "All training volume this week", series: tonnageSeries, baseline: tonnageBaseline, breakdown: []),
+            StatsSectionModel(metric: .density, title: "Training pace", description: "Work per minute", series: densitySeries, baseline: densityBaseline, breakdown: []),
+            StatsSectionModel(metric: .overloadEvents, title: "Personal records", description: "New bests logged", series: overloadSeries, baseline: StatsBaselineEngine.baseline(series: overloadSeries, defaultFloor: 3), breakdown: []),
+            StatsSectionModel(metric: .balance, title: "Push/pull balance", description: "Push vs pull • Quad vs hinge", series: balanceTrend, baseline: balanceBaseline, breakdown: balanceBreakdown(processed.weeklyPushPull, processed.weeklyQuadHinge, weeks: weeks))
         ]
 
         let alerts = athleticAlerts(densitySeries: densitySeries, balanceSeries: balanceTrend, overloadSeries: overloadSeries, tonnageSeries: tonnageSeries)
 
+        let muscles = muscleOverview(from: processed, weeks: weeks)
+
         let detail: [StatsMetricKind: MetricDetailModel] = [
-            .density: MetricDetailModel(metric: .density, title: "Work Capacity", series: densitySeries, baseline: densityBaseline, contextLines: ["Tonnage per minute"], breakdown: []),
-            .strengthCapacity: MetricDetailModel(metric: .strengthCapacity, title: "Strength Anchor", series: laRTSeries, baseline: laRTBaseline, contextLines: ["Key lift LaRT-5"], breakdown: breakdownTopExercises(from: processed.weeklyLaRTByExercise, weeks: weeks, preferredUnit: preferredUnit)),
-            .hypertrophyDose: MetricDetailModel(metric: .hypertrophyDose, title: "Hypertrophy Dose", series: hardSetSeries, baseline: hardSetBaseline, contextLines: ["Hard sets 5–30 reps"], breakdown: muscleBreakdown(from: processed.weeklyHardSetsByMuscle, weeks: weeks)),
-            .balance: MetricDetailModel(metric: .balance, title: "Balance", series: balanceTrend, baseline: balanceBaseline, contextLines: ["Band 0.7–1.3"], breakdown: balanceBreakdown(processed.weeklyPushPull, processed.weeklyQuadHinge, weeks: weeks))
+            .density: MetricDetailModel(metric: .density, title: "Training Pace", series: densitySeries, baseline: densityBaseline, contextLines: ["How much work you did per minute."], breakdown: [], learnMore: ["Training pace is calculated by dividing your total weekly volume by minutes trained. Higher pace means you're getting more done in less time, which can be useful for conditioning or time-efficient training."]),
+            .strengthCapacity: MetricDetailModel(metric: .strengthCapacity, title: "Strength Anchor", series: laRTSeries, baseline: laRTBaseline, contextLines: ["Your heaviest lift this week."], breakdown: breakdownTopExercises(from: processed.weeklyLaRTByExercise, weeks: weeks, preferredUnit: preferredUnit), learnMore: ["We track your best load at 5+ reps as your strength anchor. This gives you one clear number to gauge if your strength is holding steady or improving. Your baseline comes from the past 8 weeks."]),
+            .hypertrophyDose: MetricDetailModel(metric: .hypertrophyDose, title: "Growth Volume", series: hardSetSeries, baseline: hardSetBaseline, contextLines: ["Total growth sets this week (5-30 reps)."], breakdown: muscleBreakdown(from: processed.weeklyHardSetsByMuscle, weeks: weeks), learnMore: ["Growth volume counts all working sets between 5-30 reps. Warmups are excluded. Your baseline is based on the past 8 weeks to help you stay consistent."]),
+            .balance: MetricDetailModel(metric: .balance, title: "Push/Pull Balance", series: balanceTrend, baseline: balanceBaseline, contextLines: ["Push vs pull and quad vs hinge ratio."], breakdown: balanceBreakdown(processed.weeklyPushPull, processed.weeklyQuadHinge, weeks: weeks), learnMore: ["A healthy balance is between 0.7 and 1.3 for both push:pull and quad:hinge. This helps prevent muscle imbalances and keeps your training sustainable long-term."])
         ]
 
-        return StatsDashboardResult(mode: .athletic, range: range, filter: filter, cards: cards, minimumStrip: minimumStrip, sections: sections, alerts: alerts, detail: detail)
+        return StatsDashboardResult(mode: .athletic, range: range, filter: filter, cards: cards, minimumStrip: minimumStrip, sections: sections, alerts: alerts, muscles: muscles, detail: detail)
     }
 
     // MARK: - Processing
@@ -476,6 +483,7 @@ struct StatsMetricEngine {
         var exerciseVarietyByMuscle: [MuscleGroup: Set<String>] = [:]
         var weeklyDensitySamples: [Date: [Double]] = [:]
         var weeklyHardSetDensitySamples: [Date: [Double]] = [:]
+        var hardSetContributors: [MuscleGroup: [String: Int]] = [:]
 
         var bestByExerciseBucket: [String: Double] = [:]
         var lastHeavySetTimestamp: [String: Date] = [:]
@@ -498,6 +506,7 @@ struct StatsMetricEngine {
 
             for exercise in session.exercises {
                 let normalized = normalizeExerciseName(exercise.name)
+                let displayName = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let muscleInfo = StatsMuscleMapper.info(for: exercise.name)
 
                 for set in exercise.sets.sorted(by: { $0.createdAt < $1.createdAt }) {
@@ -525,10 +534,12 @@ struct StatsMetricEngine {
                         weeklyHardSetsByMuscle[weekStart, default: [:]][muscleInfo.primary, default: 0] += 1
                         weeklyCoverageTouches[weekStart, default: [:]][muscleInfo.primary, default: []].insert(calendar.startOfDay(for: endedAt))
                         exerciseVarietyByMuscle[muscleInfo.primary, default: []].insert(normalized)
+                        hardSetContributors[muscleInfo.primary, default: [:]][displayName, default: 0] += 1
                         for secondary in muscleInfo.secondary {
                             weeklyHardSetsByMuscle[weekStart, default: [:]][secondary, default: 0] += 1
                             weeklyCoverageTouches[weekStart, default: [:]][secondary, default: []].insert(calendar.startOfDay(for: endedAt))
                             exerciseVarietyByMuscle[secondary, default: []].insert(normalized)
+                            hardSetContributors[secondary, default: [:]][displayName, default: 0] += 1
                         }
 
                         if let bucket = JunkBucket.from(reps: reps) {
@@ -612,6 +623,7 @@ struct StatsMetricEngine {
             weeklyTonnage: weeklyTonnage,
             weeklyHardSets: weeklyHardSets,
             weeklyHardSetsByMuscle: weeklyHardSetsByMuscle,
+            hardSetContributors: hardSetContributors,
             weeklyOverloadEvents: weeklyOverloadEvents,
             weeklyTopSetByExercise: weeklyTopSetByExercise,
             weeklyLaRTByExercise: weeklyLaRTByExercise,
@@ -729,6 +741,23 @@ struct StatsMetricEngine {
             }
             return WeeklyMetricValue(weekStart: week, value: Double(met))
         }
+    }
+
+    private static func muscleOverview(from processed: ProcessedData, weeks: [Date]) -> [MuscleOverviewModel] {
+        MuscleGroup.allCases.map { muscle in
+            let series = weeks.sorted().map { week in
+                WeeklyMetricValue(weekStart: week, value: Double(processed.weeklyHardSetsByMuscle[week]?[muscle] ?? 0))
+            }
+            let floor = defaultFloor(for: muscle)
+            let band = floor...(floor + 6)
+            let contributors = processed.hardSetContributors[muscle] ?? [:]
+            let top = contributors
+                .sorted { $0.value > $1.value }
+                .prefix(3)
+                .map { BreakdownItem(title: $0.key, valueText: "\($0.value) sets", detail: nil) }
+            return MuscleOverviewModel(muscle: muscle, weekly: series, floor: floor, band: band, topExercises: top)
+        }
+        .sorted { $0.muscle.displayName < $1.muscle.displayName }
     }
 
     private static func muscleBreakdown(from map: [Date: [MuscleGroup: Int]], weeks: [Date]) -> [BreakdownItem] {
@@ -936,21 +965,37 @@ struct StatsMetricEngine {
         }
     }
 
+    private static func friendlyStatus(_ baseline: BaselineResult?) -> String {
+        guard let baseline else { return "Need more sessions to judge" }
+        if baseline.deltaPercent >= 0 {
+            return "Above your usual minimum"
+        } else {
+            return "Below your usual minimum"
+        }
+    }
+
+    private static func friendlyStreak(_ baseline: BaselineResult?) -> String {
+        guard let baseline else { return "Building consistency" }
+        let weeks = max(0, baseline.streakWeeks)
+        if weeks == 0 { return "Building consistency" }
+        return "Steady for \(weeks) wk\(weeks == 1 ? "" : "s")"
+    }
+
     // MARK: - Alerts
 
     private static func strengthAlerts(laRTSeries: [WeeklyMetricValue], repExposure: [Date: [RepBucket: Int]], weeks: [Date], restSeries: [WeeklyMetricValue]) -> [AlertModel] {
         var alerts: [AlertModel] = []
         if laRTSeries.suffix(4).allSatisfy({ $0.value <= (laRTSeries.dropLast().last?.value ?? 0) }) && (laRTSeries.last?.value ?? 0) > 0 {
-            alerts.append(AlertModel(message: "LaRT-5 flat for 3–4 weeks", metric: .strengthCapacity))
+            alerts.append(AlertModel(message: "Strength hasn't moved in a few weeks", metric: .strengthCapacity))
         }
         if let latestWeek = weeks.sorted().last {
             let heavySets = repExposure[latestWeek]?[.oneToSix] ?? 0
             if heavySets < 5 {
-                alerts.append(AlertModel(message: "Heavy work missing", metric: .topSetOutput))
+                alerts.append(AlertModel(message: "Not enough heavy sets this week", metric: .topSetOutput))
             }
         }
         if let rest = restSeries.last, let prev = restSeries.dropLast().last, rest.value > prev.value * 1.15, (laRTSeries.last?.value ?? 0) <= (laRTSeries.dropLast().last?.value ?? 0) {
-            alerts.append(AlertModel(message: "Rest creep detected", metric: .restDiscipline))
+            alerts.append(AlertModel(message: "Rest times getting longer without gains", metric: .restDiscipline))
         }
         return alerts
     }
@@ -958,13 +1003,13 @@ struct StatsMetricEngine {
     private static func hypertrophyAlerts(hardSetsSeries: [WeeklyMetricValue], junk: Int, overloadSeries: [WeeklyMetricValue]) -> [AlertModel] {
         var alerts: [AlertModel] = []
         if hardSetsSeries.last?.value ?? 0 < 8 {
-            alerts.append(AlertModel(message: "Minimum effective dose missed", metric: .hardSets))
+            alerts.append(AlertModel(message: "Below minimum growth volume", metric: .hardSets))
         }
         if junk > 0 {
-            alerts.append(AlertModel(message: "Too much junk volume", metric: .junkVolume))
+            alerts.append(AlertModel(message: "Some sets were too light", metric: .junkVolume))
         }
         if let volume = overloadSeries.last, volume.value < (overloadSeries.dropLast().last?.value ?? 0) {
-            alerts.append(AlertModel(message: "Volume up, overload events down", metric: .overloadEvents))
+            alerts.append(AlertModel(message: "Doing more volume but fewer PRs", metric: .overloadEvents))
         }
         return alerts
     }
@@ -972,13 +1017,13 @@ struct StatsMetricEngine {
     private static func athleticAlerts(densitySeries: [WeeklyMetricValue], balanceSeries: [WeeklyMetricValue], overloadSeries: [WeeklyMetricValue], tonnageSeries: [WeeklyMetricValue]) -> [AlertModel] {
         var alerts: [AlertModel] = []
         if let latestBalance = balanceSeries.last, latestBalance.value < 0.7 || latestBalance.value > 1.3 {
-            alerts.append(AlertModel(message: "Progress up, balance drifting", metric: .balance))
+            alerts.append(AlertModel(message: "Balance needs attention", metric: .balance))
         }
         if let latestTonnage = tonnageSeries.last, let prevTonnage = tonnageSeries.dropLast().last, let latestDensity = densitySeries.last, latestTonnage.value > prevTonnage.value, latestDensity.value < (densitySeries.dropLast().last?.value ?? 0) {
-            alerts.append(AlertModel(message: "Workload up, density down", metric: .density))
+            alerts.append(AlertModel(message: "Training volume up but pace down", metric: .density))
         }
         if overloadSeries.suffix(3).allSatisfy({ $0.value < 2 }) {
-            alerts.append(AlertModel(message: "Monotony high", metric: .overloadEvents))
+            alerts.append(AlertModel(message: "Not seeing much progress lately", metric: .overloadEvents))
         }
         return alerts
     }

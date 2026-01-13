@@ -182,10 +182,21 @@ final class HistoryStore: ObservableObject {
 
     /// Returns true if the session was stored, false if discarded for zero sets.
     func endSession(session: WorkoutSession) -> Bool {
-        let liveSession = resolvedSession(for: session.id) ?? session
+        let registeredSession: WorkoutSession? = modelContext.registeredModel(for: session.id)
+        guard let liveSession = resolvedSession(for: session.id) ?? registeredSession ?? (session.modelContext != nil ? session : nil) else {
+            #if DEBUG
+            print("[HISTORY][ERROR] end session failed: session not found id=\(session.id)")
+            #endif
+            return false
+        }
+
         if liveSession.isCompleted || liveSession.endedAt != nil {
+            #if DEBUG
+            print("[HISTORY] end session already completed id=\(liveSession.id)")
+            #endif
             return true
         }
+
         let totals = computeTotals(for: liveSession)
 
         liveSession.totalSets = totals.sets
@@ -195,7 +206,7 @@ final class HistoryStore: ObservableObject {
         liveSession.endedAt = Date()
         liveSession.isCompleted = true
         if let end = liveSession.endedAt {
-            liveSession.durationSeconds = Int(end.timeIntervalSince(liveSession.startedAt))
+            liveSession.durationSeconds = max(0, Int(end.timeIntervalSince(liveSession.startedAt)))
         }
 
         let saved = saveContext(reason: "endSession")

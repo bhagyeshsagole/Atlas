@@ -72,7 +72,11 @@ struct PostWorkoutSummaryView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Session Summary")
                     .appFont(.section, weight: .bold)
-                if loader.localSummaryLines.isEmpty {
+                if loader.session == nil {
+                    Text("Loading session...")
+                        .appFont(.body, weight: .regular)
+                        .foregroundStyle(.secondary)
+                } else if loader.localSummaryLines.isEmpty {
                     Text("No sets logged.")
                         .appFont(.body, weight: .regular)
                         .foregroundStyle(.secondary)
@@ -128,7 +132,10 @@ struct PostWorkoutSummaryView: View {
     }
 
     private var sessionTitle: String {
-        loader.session?.routineTitle.isEmpty == false ? loader.session!.routineTitle : "Workout Summary"
+        guard let session = loader.session, !session.routineTitle.isEmpty else {
+            return "Workout Summary"
+        }
+        return session.routineTitle
     }
 
     private var sessionDateText: String {

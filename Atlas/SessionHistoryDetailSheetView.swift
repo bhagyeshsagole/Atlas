@@ -145,7 +145,7 @@ private struct SessionHeaderCard: View {
 
 private extension ExerciseLog {
     var hasLoggedWork: Bool {
-        sets.contains { $0.reps > 0 }
+        !sets.isEmpty && sets.contains { $0.reps > 0 }
     }
 }
 

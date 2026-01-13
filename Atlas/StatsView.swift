@@ -6,7 +6,9 @@ struct StatsView: View {
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var allSessions: [WorkoutSession]
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
     @State private var activeDetail: MetricDetailModel?
+    @State private var activeMuscle: MuscleOverviewModel?
     @State private var showManagePins = false
+    @State private var showCoachSheet = false
 
     private var preferredUnit: WorkoutUnits { WorkoutUnits(from: weightUnit) }
 
@@ -17,6 +19,7 @@ struct StatsView: View {
                 topControls
                 cardsRow
                 minimumStrip
+                musclesOverview
                 sections
                 alertsSection
             }
@@ -31,6 +34,10 @@ struct StatsView: View {
             MetricDetailView(detail: detail, unit: preferredUnit)
                 .presentationDetents([.medium, .large])
         }
+        .sheet(item: $activeMuscle) { muscle in
+            MuscleDetailView(muscle: muscle)
+                .presentationDetents([.medium, .large])
+        }
         .sheet(isPresented: $showManagePins) {
             KeyLiftManagerView(
                 pinned: Binding(
@@ -40,6 +47,13 @@ struct StatsView: View {
                 availableExercises: store.availableExercises
             )
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showCoachSheet) {
+            CoachQuickSheet(
+                statsContext: coachContext,
+                exerciseName: nil,
+                balanceContext: balanceContextText
+            )
         }
         .onAppear {
             store.updatePreferredUnit(preferredUnit)
@@ -54,13 +68,20 @@ struct StatsView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Stats")
-                .appFont(.title, weight: .semibold)
-                .foregroundStyle(.white)
-            Text(store.mode.title)
-                .appFont(.footnote, weight: .semibold)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Stats")
+                    .appFont(.title, weight: .semibold)
+                    .foregroundStyle(.white)
+                Text(store.mode.title)
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            CoachButton {
+                Haptics.playLightTap()
+                showCoachSheet = true
+            }
         }
     }
 
@@ -110,6 +131,21 @@ struct StatsView: View {
         }
     }
 
+    private var coachContext: String {
+        let mode = store.mode.title
+        let range = store.range.title
+        let filter = store.filter.title
+        let highlights = store.dashboard.cards.map { "\($0.title): \($0.primaryValue)" }.joined(separator: "; ")
+        return "Mode: \(mode). Range: \(range). Filter: \(filter). Highlights: \(highlights)"
+    }
+
+    private var balanceContextText: String? {
+        if let balanceCard = store.dashboard.cards.first(where: { $0.metric == .balance }) {
+            return "Balance status: \(balanceCard.primaryValue). \(balanceCard.comparisonText)"
+        }
+        return nil
+    }
+
     private var cardsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 14) {
@@ -142,6 +178,35 @@ struct StatsView: View {
                         MinimumStripView(metric: metric)
                     }
                 }
+            }
+        }
+    }
+
+    private var musclesOverview: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Muscles")
+                .appFont(.section, weight: .bold)
+                .foregroundStyle(.primary)
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if store.dashboard.muscles.isEmpty {
+                        GlassSkeleton(height: 80, width: UIScreen.main.bounds.width * 0.7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(store.dashboard.muscles) { muscle in
+                            MuscleRow(muscle: muscle)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    Haptics.playLightTap()
+                                    activeMuscle = muscle
+                                }
+                            if muscle.id != store.dashboard.muscles.last?.id {
+                                Divider().overlay(Color.white.opacity(0.08))
+                            }
+                        }
+                    }
+                }
+                .padding(AppStyle.glassContentPadding)
             }
         }
     }
@@ -194,6 +259,49 @@ private struct ChipButton: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct CoachButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 14, weight: .bold))
+                Text("Coach")
+                    .appFont(.footnote, weight: .semibold)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.08), in: Capsule())
+            .overlay(
+                Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct MuscleRow: View {
+    let muscle: MuscleOverviewModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(muscle.muscle.displayName)
+                    .appFont(.body, weight: .semibold)
+                Text("\(muscle.latestSets) sets / wk")
+                    .appFont(.caption, weight: .semibold)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if muscle.weekly.isEmpty == false {
+                MiniLineChart(series: muscle.weekly, baseline: nil)
+                    .frame(width: 90, height: 48)
+            }
+        }
     }
 }
 
@@ -431,6 +539,45 @@ private struct GlassSkeleton: View {
     }
 }
 
+private struct MuscleDetailView: View {
+    let muscle: MuscleOverviewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(muscle.muscle.displayName)
+                .appFont(.title3, weight: .semibold)
+            if !muscle.weekly.isEmpty {
+                MiniLineChart(series: muscle.weekly, baseline: BaselineResult(floor: muscle.floor, band: muscle.band, type: .default, streakWeeks: 0, deltaPercent: 0))
+                    .frame(height: 160)
+            }
+            Text("Top exercises")
+                .appFont(.section, weight: .bold)
+            if muscle.topExercises.isEmpty {
+                Text("Log a few sets to see contributors.")
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(muscle.topExercises) { item in
+                        HStack {
+                            Text(item.title)
+                                .appFont(.body, weight: .semibold)
+                            Spacer()
+                            Text(item.valueText)
+                                .appFont(.caption, weight: .semibold)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(AppStyle.contentPaddingLarge)
+        .atlasBackground()
+        .atlasBackgroundTheme(.stats)
+    }
+}
+
 // MARK: - Metric Detail
 
 struct MetricDetailView: View {
@@ -484,6 +631,18 @@ struct MetricDetailView: View {
                                 .appFont(.footnote, weight: .semibold)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                }
+            }
+
+            if !detail.learnMore.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Learn more")
+                        .appFont(.section, weight: .bold)
+                    ForEach(detail.learnMore, id: \.self) { line in
+                        Text(line)
+                            .appFont(.footnote, weight: .semibold)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -565,6 +724,170 @@ private struct KeyLiftManagerView: View {
 
     private func normalize(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+struct CoachQuickSheet: View {
+    enum Preset: String, CaseIterable, Identifiable {
+        case explainStats
+        case nextWorkout
+        case formCues
+        case fixBalance
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .explainStats: return "Explain my stats this week"
+            case .nextWorkout: return "What should I do next workout?"
+            case .formCues: return "Form cues for this exercise"
+            case .fixBalance: return "Fix my balance (push/pull, quad/hinge)"
+            }
+        }
+    }
+
+    let statsContext: String?
+    let exerciseName: String?
+    let balanceContext: String?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var isLoading = false
+    @State private var response: String = ""
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Coach")
+                    .appFont(.title3, weight: .semibold)
+                Text("Quick prompts")
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Preset.allCases) { preset in
+                        Button {
+                            ask(preset)
+                        } label: {
+                            HStack {
+                                Text(preset.title)
+                                    .appFont(.body, weight: .semibold)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if isLoading, response.isEmpty {
+                                    ProgressView()
+                                        .tint(.primary)
+                                }
+                            }
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 12)
+                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isLoading)
+                    }
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .appFont(.footnote, weight: .semibold)
+                        .foregroundStyle(.red)
+                }
+
+                if !response.isEmpty {
+                    GlassCard {
+                        Text(response)
+                            .appFont(.body, weight: .regular)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(AppStyle.glassContentPadding)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(AppStyle.contentPaddingLarge)
+            .atlasBackground()
+            .atlasBackgroundTheme(.stats)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func ask(_ preset: Preset) {
+        isLoading = true
+        response = ""
+        errorMessage = nil
+        Task {
+            let promptText = buildPrompt(for: preset)
+            if OpenAIConfig.isAIAvailable == false {
+                await MainActor.run {
+                    response = fallback(for: preset)
+                    isLoading = false
+                }
+                return
+            }
+            do {
+                let reply = try await OpenAIChatClient.chat(prompt: promptText)
+                await MainActor.run {
+                    response = reply
+                    isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = "Coach unavailable. Try again after logging."
+                    response = fallback(for: preset)
+                }
+            }
+        }
+    }
+
+    private func buildPrompt(for preset: Preset) -> String {
+        var context: [String] = []
+        if let statsContext { context.append("Stats: \(statsContext)") }
+        if let exerciseName { context.append("Exercise: \(exerciseName)") }
+        if let balanceContext { context.append("Balance: \(balanceContext)") }
+        let contextBlock = context.joined(separator: "\n")
+        let ask: String
+        switch preset {
+        case .explainStats:
+            ask = "Explain my training this week in simple terms and what to focus on next."
+        case .nextWorkout:
+            ask = "Recommend what to do next workout with sets/reps."
+        case .formCues:
+            let name = exerciseName ?? "my main lift"
+            ask = "Give concise form cues for \(name)."
+        case .fixBalance:
+            ask = "Help me fix push/pull and quad/hinge balance."
+        }
+
+        return """
+System:
+You are Titan, a concise lifting coach. Reply in 3–5 short lines. Be specific with sets/reps and keep tone calm.
+
+Context:
+\(contextBlock)
+
+User:
+\(ask)
+"""
+    }
+
+    private func fallback(for preset: Preset) -> String {
+        switch preset {
+        case .explainStats:
+            return "Focus on showing up 3x this week and repeating your heaviest sets. Add 1–2 reps if the last week felt easy."
+        case .nextWorkout:
+            return "Next workout: pick 3 big lifts (3–4×6–10) and 2 accessories (2–3×10–15). Keep rest ~2 min and log your top set."
+        case .formCues:
+            return "Brace hard, full feet on the floor, control the descent, drive evenly on the way up. Film a set to check depth and bar path."
+        case .fixBalance:
+            return "Add a pull for every push and a hinge for every quad lift this week. If short on time, swap one push for a row and one quad for an RDL."
+        }
     }
 }
 

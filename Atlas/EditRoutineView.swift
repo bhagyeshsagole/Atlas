@@ -27,6 +27,7 @@
 //  - See: DEV_MAP.md → B) Routines (templates)
 //
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EditRoutineView: View {
     @Environment(\.dismiss) private var dismiss
@@ -35,6 +36,8 @@ struct EditRoutineView: View {
     @State private var draftName: String
     @State private var editableWorkouts: [RoutineWorkoutDraft]
     @State private var newWorkoutName: String = ""
+    @State private var draggingWorkoutId: UUID?
+    @State private var lastHapticIndex: Int?
 
     let onSave: (Routine) -> Void
 
@@ -69,24 +72,17 @@ struct EditRoutineView: View {
                             Text("Workouts")
                                 .appFont(.section, weight: .bold)
                             ForEach($editableWorkouts) { $workout in
-                                HStack {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "line.3.horizontal")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .padding(10)
+                                        .background(Color.white.opacity(0.08), in: Circle())
+                                        .foregroundStyle(.primary)
+
                                     TextField("Workout", text: $workout.name)
                                         .padding(AppStyle.settingsGroupPadding)
                                         .atlasGlassCard()
-                                    VStack(spacing: 8) {
-                                        Button {
-                                            moveWorkout(id: workout.id, offset: -1)
-                                        } label: {
-                                            Image(systemName: "chevron.up")
-                                                .font(.system(size: 14, weight: .semibold))
-                                        }
-                                        Button {
-                                            moveWorkout(id: workout.id, offset: 1)
-                                        } label: {
-                                            Image(systemName: "chevron.down")
-                                                .font(.system(size: 14, weight: .semibold))
-                                        }
-                                    }
+
                                     Button(role: .destructive) {
                                         deleteWorkout(id: workout.id)
                                     } label: {
@@ -94,6 +90,18 @@ struct EditRoutineView: View {
                                             .font(.system(size: 16, weight: .semibold))
                                     }
                                 }
+                                .contentShape(Rectangle())
+                                .onDrag {
+                                    draggingWorkoutId = workout.id
+                                    lastHapticIndex = editableWorkouts.firstIndex(where: { $0.id == workout.id })
+                                    return NSItemProvider(object: workout.id.uuidString as NSString)
+                                }
+                                .onDrop(of: [.text], delegate: RoutineReorderDelegate(
+                                    item: workout,
+                                    items: $editableWorkouts,
+                                    draggingId: $draggingWorkoutId,
+                                    lastHapticIndex: $lastHapticIndex
+                                ))
                             }
                             TextField("New workout name", text: $newWorkoutName)
                                 .padding(AppStyle.settingsGroupPadding)
@@ -182,4 +190,37 @@ private struct RoutineWorkoutDraft: Identifiable {
     var name: String
     var wtsText: String
     var repsText: String
+}
+
+private struct RoutineReorderDelegate<Item: Identifiable>: DropDelegate where Item.ID == UUID {
+    let item: Item
+    @Binding var items: [Item]
+    @Binding var draggingId: UUID?
+    @Binding var lastHapticIndex: Int?
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingId, draggingId != item.id else { return }
+        guard let fromIndex = items.firstIndex(where: { $0.id == draggingId }),
+              let toIndex = items.firstIndex(where: { $0.id == item.id }) else { return }
+        if fromIndex != toIndex {
+            withAnimation(.easeInOut(duration: 0.08)) {
+                let moved = items.remove(at: fromIndex)
+                items.insert(moved, at: toIndex)
+            }
+            if lastHapticIndex != toIndex {
+                lastHapticIndex = toIndex
+                Haptics.playLightTap()
+            }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingId = nil
+        lastHapticIndex = nil
+        return true
+    }
 }

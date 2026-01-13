@@ -39,6 +39,7 @@ struct CreateRoutineView: View {
     @State private var isGenerating = false // Prevents duplicate AI calls.
     @State private var alertMessage: String?
     @FocusState private var focusedField: Field? // Moves the caret between title and workout text.
+    @State private var showCoachSheet = false
 
     let onGenerate: (String, [ParsedWorkout]) -> Void
 
@@ -55,7 +56,7 @@ struct CreateRoutineView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Routine Title")
                             .appFont(.section, weight: .bold)
@@ -69,9 +70,27 @@ struct CreateRoutineView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Workouts")
-                            .appFont(.section, weight: .bold)
-                            .foregroundStyle(.primary)
+                        HStack {
+                            Text("Workouts")
+                                .appFont(.section, weight: .bold)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Button {
+                                Haptics.playLightTap()
+                                showCoachSheet = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "bolt.fill")
+                                    Text("Coach")
+                                }
+                                .appFont(.footnote, weight: .semibold)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(Color.white.opacity(0.08)))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isGenerating)
+                        }
                         ZStack(alignment: .topLeading) {
                             TextEditor(text: $rawWorkouts)
                                 .frame(minHeight: 140)
@@ -138,6 +157,32 @@ struct CreateRoutineView: View {
         )) {
             Button("OK", role: .cancel) { }
         }
+        .sheet(isPresented: $showCoachSheet) {
+            CoachQuickSheet(
+                statsContext: routineCoachContext,
+                exerciseName: nil,
+                balanceContext: nil
+            )
+        }
+    }
+
+    private var routineCoachContext: String? {
+        let titleText = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let workoutsText = rawWorkouts.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if titleText.isEmpty && workoutsText.isEmpty {
+            return nil
+        }
+
+        var parts: [String] = []
+        if !titleText.isEmpty {
+            parts.append("Routine: \(titleText)")
+        }
+        if !workoutsText.isEmpty {
+            parts.append("Workouts: \(workoutsText)")
+        }
+
+        return parts.joined(separator: ". ")
     }
 
     private func generate() {

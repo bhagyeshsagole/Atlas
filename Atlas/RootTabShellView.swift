@@ -35,6 +35,7 @@ struct RootTabShellView: View {
                     StatsView()
                 }
             }
+            .animation(nil, value: selectedTab)
             .atlasBackground()
             .atlasBackgroundTheme(backgroundTheme(for: selectedTab))
 
