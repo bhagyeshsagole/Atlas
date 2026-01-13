@@ -108,7 +108,7 @@ private struct SessionRow: View {
                 if isExpanded {
                     Divider()
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(session.exercises.sorted(by: { $0.orderIndex < $1.orderIndex }), id: \.id) { exercise in
+                        ForEach(session.exercises.filter { $0.sets.contains { $0.reps > 0 } }.sorted(by: { $0.orderIndex < $1.orderIndex }), id: \.id) { exercise in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(exercise.name)
                                     .appFont(.footnote, weight: .semibold)

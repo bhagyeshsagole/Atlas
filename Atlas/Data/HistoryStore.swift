@@ -192,13 +192,6 @@ final class HistoryStore: ObservableObject {
         liveSession.totalReps = totals.reps
         liveSession.volumeKg = totals.volumeKg
 
-        // Drop drafts with zero sets so empty sessions do not clutter history.
-        guard totals.sets > 0 else {
-            modelContext.delete(liveSession)
-            saveContext(reason: "endSession discard zero-set")
-            return false
-        }
-
         liveSession.endedAt = Date()
         liveSession.isCompleted = true
         if let end = liveSession.endedAt {
@@ -214,7 +207,7 @@ final class HistoryStore: ObservableObject {
         }
         #endif
 
-        if saved, let coordinator = cloudSyncCoordinator {
+        if saved, totals.sets > 0, let coordinator = cloudSyncCoordinator {
             if let summary = liveSession.cloudSummary {
                 Task.detached {
                     await coordinator.sync(summary: summary)
@@ -222,7 +215,7 @@ final class HistoryStore: ObservableObject {
             }
         }
 
-        if saved {
+        if saved, totals.sets > 0 {
             Task.detached { [weak syncService] in
                 await syncService?.pushCompletedSessions(limit: 10)
             }

@@ -73,6 +73,20 @@ struct EditRoutineView: View {
                                     TextField("Workout", text: $workout.name)
                                         .padding(AppStyle.settingsGroupPadding)
                                         .atlasGlassCard()
+                                    VStack(spacing: 8) {
+                                        Button {
+                                            moveWorkout(id: workout.id, offset: -1)
+                                        } label: {
+                                            Image(systemName: "chevron.up")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        Button {
+                                            moveWorkout(id: workout.id, offset: 1)
+                                        } label: {
+                                            Image(systemName: "chevron.down")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                    }
                                     Button(role: .destructive) {
                                         deleteWorkout(id: workout.id)
                                     } label: {
@@ -115,6 +129,14 @@ struct EditRoutineView: View {
 
     private func deleteWorkout(id: UUID) {
         editableWorkouts.removeAll { $0.id == id }
+    }
+
+    private func moveWorkout(id: UUID, offset: Int) {
+        guard let idx = editableWorkouts.firstIndex(where: { $0.id == id }) else { return }
+        let newIndex = max(0, min(editableWorkouts.count - 1, idx + offset))
+        guard newIndex != idx else { return }
+        let item = editableWorkouts.remove(at: idx)
+        editableWorkouts.insert(item, at: newIndex)
     }
 
     private func addWorkout() {

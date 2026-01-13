@@ -98,7 +98,9 @@ private struct SessionDetailVM {
         summaryRepsText = "\(session.totalReps)"
         summaryVolumeText = WorkoutSessionFormatter.volumeString(volumeKg: session.volumeKg, unit: preferredUnit)
 
-        let exercises = session.exercises.sorted(by: { $0.orderIndex < $1.orderIndex })
+        let exercises = session.exercises
+            .filter { $0.hasLoggedWork }
+            .sorted(by: { $0.orderIndex < $1.orderIndex })
         exerciseSections = exercises.map { exercise in
             let sets = exercise.sets.sorted(by: { $0.createdAt < $1.createdAt })
             let rows: [SetRow] = sets.enumerated().map { idx, set in
@@ -138,6 +140,12 @@ private struct SessionHeaderCard: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private extension ExerciseLog {
+    var hasLoggedWork: Bool {
+        sets.contains { $0.reps > 0 }
     }
 }
 

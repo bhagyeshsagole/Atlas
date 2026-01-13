@@ -40,6 +40,19 @@ final class HistoryStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testEndSessionZeroSetsStoresSafely() throws {
+        let (store, context) = makeStore()
+        let session = store.startSession(routineId: nil, routineTitle: "Zero Sets", exercises: ["Bench"])
+        let stored = store.endSession(session: session)
+        XCTAssertTrue(stored)
+        let fetched = try context.fetch(FetchDescriptor<WorkoutSession>())
+        XCTAssertEqual(fetched.count, 1)
+        let ended = fetched.first
+        XCTAssertEqual(ended?.totalSets, 0)
+        XCTAssertNotNil(ended?.endedAt)
+    }
+
+    @MainActor
     func testLatestCompletedExerciseLogExcludesActiveSession() throws {
         let (store, context) = makeStore()
         let ended = store.startSession(routineId: nil, routineTitle: "Bench Day", exercises: ["Bench"])

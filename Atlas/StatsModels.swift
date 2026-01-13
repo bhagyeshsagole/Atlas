@@ -1,5 +1,189 @@
 import Foundation
 
+// MARK: - New Stats models
+
+enum StatsExerciseFilter: String, CaseIterable, Identifiable {
+    case allExercises
+    case keyLifts
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .allExercises: return "All exercises"
+        case .keyLifts: return "Key lifts"
+        }
+    }
+}
+
+enum TrendDirection {
+    case up
+    case down
+    case flat
+}
+
+enum BaselineType {
+    case auto
+    case user
+    case `default`
+}
+
+struct BaselineResult {
+    let floor: Double
+    let band: ClosedRange<Double>?
+    let type: BaselineType
+    let streakWeeks: Int
+    let deltaPercent: Double
+
+    var statusText: String {
+        if floor <= 0 { return "No baseline yet" }
+        let percentText = Self.percentFormatter.string(from: NSNumber(value: deltaPercent)) ?? "0%"
+        if deltaPercent >= 0 {
+            return "Cleared minimum by \(percentText)"
+        } else {
+            let cleanedPercent = percentText.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+            return "Below minimum by \(cleanedPercent)"
+        }
+    }
+
+    static let percentFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .percent
+        formatter.maximumFractionDigits = 0
+        formatter.minimumFractionDigits = 0
+        return formatter
+    }()
+}
+
+enum StatsMetricKind: String, CaseIterable, Identifiable {
+    case strengthCapacity
+    case topSetOutput
+    case overloadEvents
+    case restDiscipline
+    case hardSets
+    case weeklyVolume
+    case coverage
+    case variety
+    case density
+    case hypertrophyDose
+    case balance
+    case workload
+    case progressEvents
+    case efficiency
+    case recovery
+    case monotony
+    case junkVolume
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .strengthCapacity: return "Strength Capacity"
+        case .topSetOutput: return "Top Set Output"
+        case .overloadEvents: return "Overload Events"
+        case .restDiscipline: return "Rest Discipline"
+        case .hardSets: return "Hard Sets"
+        case .weeklyVolume: return "Weekly Volume Load"
+        case .coverage: return "Coverage"
+        case .variety: return "Exercise Variety"
+        case .density: return "Work Capacity"
+        case .hypertrophyDose: return "Hypertrophy Dose"
+        case .balance: return "Balance"
+        case .workload: return "Workload"
+        case .progressEvents: return "Progress Events"
+        case .efficiency: return "Efficiency"
+        case .recovery: return "Recovery"
+        case .monotony: return "Monotony"
+        case .junkVolume: return "Junk Volume"
+        }
+    }
+}
+
+struct TrendCardModel: Identifiable {
+    var id: StatsMetricKind { metric }
+    let metric: StatsMetricKind
+    let title: String
+    let primaryValue: String
+    let rawValue: Double
+    let direction: TrendDirection
+    let comparisonText: String
+    let streakText: String
+    let context: String?
+}
+
+struct WeeklyMetricValue: Identifiable, Equatable {
+    var id: Date { weekStart }
+    let weekStart: Date
+    let value: Double
+}
+
+struct MinimumStripMetric: Identifiable {
+    var id: StatsMetricKind { metric }
+    let metric: StatsMetricKind
+    let title: String
+    let weekly: [WeeklyMetricValue]
+    let baseline: BaselineResult?
+}
+
+struct BreakdownItem: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let valueText: String
+    let detail: String?
+}
+
+struct StatsSectionModel: Identifiable {
+    var id: StatsMetricKind { metric }
+    let metric: StatsMetricKind
+    let title: String
+    let description: String?
+    let series: [WeeklyMetricValue]
+    let baseline: BaselineResult?
+    let breakdown: [BreakdownItem]
+}
+
+struct AlertModel: Identifiable, Equatable {
+    let id = UUID()
+    let message: String
+    let metric: StatsMetricKind?
+}
+
+struct MetricDetailModel: Identifiable {
+    let id = UUID()
+    let metric: StatsMetricKind
+    let title: String
+    let series: [WeeklyMetricValue]
+    let baseline: BaselineResult?
+    let contextLines: [String]
+    let breakdown: [BreakdownItem]
+}
+
+struct StatsDashboardResult {
+    let mode: StatsMode
+    let range: StatsRange
+    let filter: StatsExerciseFilter
+    let cards: [TrendCardModel]
+    let minimumStrip: [MinimumStripMetric]
+    let sections: [StatsSectionModel]
+    let alerts: [AlertModel]
+    let detail: [StatsMetricKind: MetricDetailModel]
+
+    static func empty(mode: StatsMode, range: StatsRange, filter: StatsExerciseFilter) -> StatsDashboardResult {
+        StatsDashboardResult(
+            mode: mode,
+            range: range,
+            filter: filter,
+            cards: [],
+            minimumStrip: [],
+            sections: [],
+            alerts: [],
+            detail: [:]
+        )
+    }
+}
+
+// MARK: - Legacy stats models (used by Friend detail + coach)
+
 enum StatsLens: String, CaseIterable, Identifiable, Codable, Hashable {
     case week = "Week"
     case month = "Month"
@@ -7,9 +191,6 @@ enum StatsLens: String, CaseIterable, Identifiable, Codable, Hashable {
 
     var id: String { rawValue }
 }
-
-/// Back-compat alias so older code that referenced StatsRange continues to work.
-typealias StatsRange = StatsLens
 
 enum MuscleGroup: String, CaseIterable, Identifiable, Codable, Hashable {
     case legs = "Legs"

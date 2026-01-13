@@ -41,16 +41,14 @@ struct PostWorkoutSummaryView: View {
             }
 
             ScrollView(.vertical, showsIndicators: showsIndicators) {
-                Text(contentText())
-                    .appFont(.body, weight: .regular)
-                    .lineSpacing(bodyLineSpacing)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
+                    localSummaryCard
+                    aiSummaryCard
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-            Spacer(minLength: 0)
         }
         .padding(AppStyle.contentPaddingLarge)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -64,25 +62,69 @@ struct PostWorkoutSummaryView: View {
             .padding(.horizontal, AppStyle.contentPaddingLarge)
             .padding(.bottom, AppStyle.startButtonBottomPadding)
         }
-        .task { await loader.preload(sessionID: sessionID, modelContext: modelContext) }
+        .task { await loader.preload(sessionID: sessionID, modelContext: modelContext, unitPreference: WorkoutUnits(from: weightUnit)) }
     }
 
     // MARK: - Content builders
 
-    private func contentText() -> String {
-        if let cached = loader.session?.aiPostSummaryText, cached.isEmpty == false {
-            return cached
+    private var localSummaryCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Session Summary")
+                    .appFont(.section, weight: .bold)
+                if loader.localSummaryLines.isEmpty {
+                    Text("No sets logged.")
+                        .appFont(.body, weight: .regular)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(loader.localSummaryLines, id: \.self) { line in
+                        Text(line)
+                            .appFont(.body, weight: .regular)
+                            .lineSpacing(bodyLineSpacing)
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppStyle.glassContentPadding)
         }
-        if let payload = loader.payload, let session = loader.session {
-            return buildDisplayText(with: payload, for: session)
+    }
+
+    private var aiSummaryCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("AI Summary")
+                    .appFont(.section, weight: .bold)
+                if loader.payload != nil || (loader.aiSummaryText?.isEmpty == false) {
+                    Text(aiContentText())
+                        .appFont(.body, weight: .regular)
+                        .lineSpacing(bodyLineSpacing)
+                        .foregroundStyle(.primary)
+                } else if loader.isLoadingAI {
+                    VStack(alignment: .leading, spacing: 6) {
+                        skeletonLine(width: 0.8)
+                        skeletonLine(width: 0.65)
+                        skeletonLine(width: 0.5)
+                    }
+                } else if let errorMessage = loader.errorMessage {
+                    Text("Summary unavailable.\n\(errorMessage)")
+                        .appFont(.body, weight: .regular)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Summary unavailable.")
+                        .appFont(.body, weight: .regular)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppStyle.glassContentPadding)
         }
-        if loader.isLoading {
-            return "Generating summary…"
-        }
-        if let errorMessage = loader.errorMessage {
-            return "Summary unavailable.\n\(errorMessage)"
-        }
-        return "Summary unavailable."
+    }
+
+    private func skeletonLine(width: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 6)
+            .fill(Color.white.opacity(0.08))
+            .frame(width: UIScreen.main.bounds.width * width, height: 10)
     }
 
     private var sessionTitle: String {
@@ -96,56 +138,32 @@ struct PostWorkoutSummaryView: View {
         return formatter.string(from: session.startedAt)
     }
 
-    private func computeTotals(session: WorkoutSession) -> (volumeKg: Double, sets: Int, reps: Int) {
-        var volume: Double = 0
-        var setsCount = 0
-        var repsCount = 0
-        for exercise in session.exercises {
-            for set in exercise.sets {
-                setsCount += 1
-                repsCount += set.reps
-                if let w = set.weightKg {
-                    volume += w * Double(set.reps)
-                }
+    private func aiContentText() -> String {
+        if let text = loader.aiSummaryText, text.isEmpty == false {
+            return text
+        }
+        if let payload = loader.payload {
+            var lines: [String] = []
+            if let rating = payload.rating {
+                lines.append("Rating: \(String(format: "%.1f", rating))/10")
             }
+            if let insight = payload.insight, !insight.isEmpty {
+                lines.append("Insight: \(insight)")
+            }
+            if let prs = payload.prs, !prs.isEmpty {
+                lines.append("PRs:")
+                lines.append(contentsOf: prs.prefix(2).map { "• \($0)" })
+            }
+            if let improvements = payload.improvements, !improvements.isEmpty {
+                lines.append("Next time:")
+                lines.append(contentsOf: improvements.prefix(3).map { "• \($0)" })
+            }
+            return lines.joined(separator: "\n")
         }
-        return (volume, setsCount, repsCount)
-    }
-
-    private func buildDisplayText(with payload: PostWorkoutSummaryPayload?, for session: WorkoutSession) -> String {
-        let totals = computeTotals(session: session)
-        let unitPref = WorkoutUnits(from: weightUnit)
-        let volumeValue = unitPref == .kg ? totals.volumeKg : totals.volumeKg * WorkoutSessionFormatter.kgToLb
-        let volumeText = String(format: "%.0f %@", volumeValue, unitPref == .kg ? "kg" : "lb")
-        let setsRepsLine = "Sets / Reps: \(totals.sets) sets / \(totals.reps) reps"
-
-        let ratingValue = payload?.rating.map { String(format: "%.1f", $0) } ?? "—"
-        let insight = (payload?.insight?.isEmpty == false ? payload?.insight : nil) ?? "Summary unavailable."
-        let ratingLine = "\(ratingValue)/10 — \(insight)"
-
-        let prs = Array((payload?.prs ?? []).prefix(2)).filter { !$0.isEmpty }
-        let prLines: [String]
-        if prs.isEmpty {
-            prLines = ["PRs: None"]
-        } else {
-            prLines = ["PRs:"] + prs.map { "• \($0)" }
+        if let session = loader.session {
+            return fallbackImprovements(for: session).joined(separator: "\n")
         }
-
-        let improvementsRaw = Array((payload?.improvements ?? []).prefix(3)).filter { !$0.isEmpty }
-        let improvements: [String]
-        if improvementsRaw.isEmpty {
-            improvements = fallbackImprovements(for: session)
-        } else {
-            improvements = ["Improvements next time:"] + improvementsRaw.map { "• \($0)" }
-        }
-
-        var lines: [String] = []
-        lines.append("Training volume: \(volumeText)")
-        lines.append(setsRepsLine)
-        lines.append(ratingLine)
-        lines.append(contentsOf: prLines)
-        lines.append(contentsOf: improvements)
-        return lines.joined(separator: "\n")
+        return "Summary unavailable."
     }
 
     private func fallbackImprovements(for session: WorkoutSession) -> [String] {

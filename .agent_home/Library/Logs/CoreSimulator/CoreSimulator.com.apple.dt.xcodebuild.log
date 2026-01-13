@@ -66,3 +66,20 @@ Jan 11 14:40:31 Bhagyeshs-Laptop com.apple.dt.xcodebuild[26198] <Error>: Unable 
 	    request = "notification_subscription";
 	    "set_path" = "/Users/bhagyeshsagole/Library/Developer/CoreSimulator/Devices";
 	}) because we are not connected to CoreSimulatorService.
+Jan 13 01:09:28 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Error>: Unable to deliver request ({
+	    "developer_dir" = "/Applications/Xcode.app/Contents/Developer";
+	    request = "set_developer_dir";
+	}) because we are not connected to CoreSimulatorService.
+Jan 13 01:09:28 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Warning>: Unable to discover any Simulator runtimes. Developer Directory is /Applications/Xcode.app/Contents/Developer.
+Jan 13 01:09:28 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/bhagyeshsagole/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.
+Jan 13 01:09:28 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Error>: Could not kickstart simdiskimaged; SimDiskImageManager services will not be available: Error Domain=NSPOSIXErrorDomain Code=53 "Software caused connection abort" UserInfo={NSLocalizedDescription=Error returned in reply from CoreSimulatorService: Connection invalid}
+Jan 13 01:09:28 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jan 13 01:09:28 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Error>: simdiskimaged returned error (invalid), marking disconnected.
+Jan 13 01:09:28 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Error>: Could not get list of trusted mount directories: Error Domain=com.apple.CoreSimulator.SimError Code=410 "The service used to manage runtime disk images (simdiskimaged) crashed or is not responding" UserInfo={NSLocalizedDescription=The service used to manage runtime disk images (simdiskimaged) crashed or is not responding}
+Jan 13 01:09:29 Bhagyeshs-Laptop com.apple.dt.xcodebuild[71861] <Error>: Unable to deliver request ({
+	    request = "notification_subscription";
+	    "set_path" = "/Users/bhagyeshsagole/Library/Developer/CoreSimulator/Devices";
+	}) because we are not connected to CoreSimulatorService.

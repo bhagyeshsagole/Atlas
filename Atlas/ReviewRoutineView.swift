@@ -79,6 +79,20 @@ struct ReviewRoutineView: View {
                                             .appFont(.title, weight: .semibold)
                                             .foregroundStyle(.primary)
                                             .frame(maxWidth: .infinity, alignment: .leading)
+                                        Button {
+                                            moveWorkout(workout.id, offset: -1)
+                                        } label: {
+                                            Image(systemName: "chevron.up")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        .disabled(isSaving)
+                                        Button {
+                                            moveWorkout(workout.id, offset: 1)
+                                        } label: {
+                                            Image(systemName: "chevron.down")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        .disabled(isSaving)
                                         AtlasHeaderIconButton(systemName: "xmark") {
                                             removeWorkout(workout.id)
                                         }
@@ -139,6 +153,14 @@ struct ReviewRoutineView: View {
 
     private func removeWorkout(_ id: UUID) {
         editableWorkouts.removeAll { $0.id == id }
+    }
+
+    private func moveWorkout(_ id: UUID, offset: Int) {
+        guard let idx = editableWorkouts.firstIndex(where: { $0.id == id }) else { return }
+        let newIndex = max(0, min(editableWorkouts.count - 1, idx + offset))
+        guard newIndex != idx else { return }
+        let item = editableWorkouts.remove(at: idx)
+        editableWorkouts.insert(item, at: newIndex)
     }
 
     private func addNewWorkout() {

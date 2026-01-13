@@ -92,8 +92,7 @@ struct WorkoutSessionView: View {
     @State private var showTipsSheet = false
     @State private var showPlanSheet = false
     @State private var showPickerSheet = false
-    @State private var pickerWeightInt: Int = 0
-    @State private var pickerWeightDec: Int = 0
+    @State private var pickerWeightText: String = ""
     @State private var pickerReps: Int = 0
     @State private var pickerUnit: WorkoutUnits = .kg
     @State private var pickerTag: SetTag = .W
@@ -105,6 +104,7 @@ struct WorkoutSessionView: View {
     @StateObject private var summaryLoader = PostWorkoutSummaryLoader()
     @State private var isEnding = false
     @State private var showSetHistorySheet = false
+    @State private var showJumpSheet = false
 
     init(routine: Routine, preloader: WorkoutSessionPreloader? = nil) {
         self.routine = routine
@@ -143,6 +143,7 @@ struct WorkoutSessionView: View {
         .sheet(isPresented: $showSummary) { summarySheet }
         .sheet(isPresented: $showTimerSheet) { timerSheet }
         .sheet(isPresented: $showNewWorkoutSheet) { newWorkoutSheet }
+        .sheet(isPresented: $showJumpSheet) { jumpSheet }
         .toolbar { sessionToolbar }
         .onReceive(timer) { _ in
             guard let remaining = timerRemaining, remaining >= 0 else { return }
@@ -223,18 +224,32 @@ struct WorkoutSessionView: View {
 
     @ViewBuilder private var actionBarInset: some View {
         if !isEditingSetFields {
-            WorkoutActionBar(
-                left: .init(title: "New Workout", role: nil) {
-                    Haptics.playLightTap()
-                    showNewWorkoutSheet = true
-                },
-                right: .init(title: "End", role: .destructive) {
-                    Haptics.playLightTap()
-                    showEndConfirm = true
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                HStack(spacing: 12) {
+                    AtlasPillButton("Add Set") {
+                        Haptics.playLightTap()
+                        presentPicker()
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    AtlasPillButton("Add Exercise") {
+                        Haptics.playLightTap()
+                        showNewWorkoutSheet = true
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    AtlasPillButton("End") {
+                        Haptics.playLightTap()
+                        showEndConfirm = true
+                    }
+                    .tint(.red)
+                    .frame(maxWidth: .infinity)
+                    .disabled(isEnding)
                 }
-            )
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .animation(AppStyle.popupAnimation, value: isEditingSetFields)
+                .padding(AppStyle.glassContentPadding)
+            }
+            .padding(.horizontal, AppStyle.screenHorizontalPadding)
+            .padding(.bottom, AppStyle.startButtonBottomPadding)
         }
     }
 
@@ -298,12 +313,78 @@ struct WorkoutSessionView: View {
         }
     }
 
+    @ViewBuilder private var jumpSheet: some View {
+        NavigationStack {
+            List {
+                ForEach(sessionExercises) { exercise in
+                    Button {
+                        exerciseIndex = exercise.orderIndex
+                        showJumpSheet = false
+                    } label: {
+                        HStack {
+                            Text(exercise.name)
+                                .appFont(.body, weight: .semibold)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if let sets = loggedSets[exercise.id], sets.isEmpty == false {
+                                Circle()
+                                    .fill(Color.green.opacity(0.8))
+                                    .frame(width: 10, height: 10)
+                            } else {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                    .frame(width: 10, height: 10)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .scrollIndicators(.hidden)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .navigationTitle("Exercises")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { showJumpSheet = false }
+                }
+            }
+            .atlasBackground()
+        }
+        .presentationDetents([.medium, .large])
+    }
+
     private var topPager: some View {
         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-            pagerDots
+            HStack {
+                pagerDots
+                Spacer()
+                Button {
+                    Haptics.playLightTap()
+                    showJumpSheet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "list.bullet")
+                        Text("Exercises")
+                    }
+                    .appFont(.footnote, weight: .semibold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+            }
             Text(currentExercise.name)
                 .appFont(.title, weight: .semibold)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .transaction { $0.animation = nil }
+            if let muscleLine = muscleLineText, !muscleLine.isEmpty {
+                Text(muscleLine)
+                    .appFont(.caption, weight: .semibold)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .transition(.opacity)
+            }
 
             GlassCard {
                 VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
@@ -317,7 +398,7 @@ struct WorkoutSessionView: View {
             }
             .contentShape(Rectangle())
             .offset(x: dragOffset)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: dragOffset)
+            .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.9), value: dragOffset)
             .gesture(
                 DragGesture()
                     .onChanged { value in
@@ -333,11 +414,9 @@ struct WorkoutSessionView: View {
                         } else if value.translation.width > threshold && exerciseIndex > 0 {
                             newIndex -= 1
                         }
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                            dragOffset = 0
-                            if newIndex != exerciseIndex {
-                                exerciseIndex = newIndex
-                            }
+                        dragOffset = 0
+                        if newIndex != exerciseIndex {
+                            exerciseIndex = newIndex
                         }
                     }
             )
@@ -359,9 +438,7 @@ struct WorkoutSessionView: View {
                     }
                 }
                 .onTapGesture {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                        exerciseIndex = index
-                    }
+                    exerciseIndex = index
                 }
             }
         }
@@ -515,8 +592,7 @@ struct WorkoutSessionView: View {
         }
         .sheet(isPresented: $showPickerSheet) {
             SetEntrySheetView(
-                weightInt: $pickerWeightInt,
-                weightDec: $pickerWeightDec,
+                weightText: $pickerWeightText,
                 reps: $pickerReps,
                 unit: $pickerUnit,
                 tag: $pickerTag,
@@ -530,7 +606,7 @@ struct WorkoutSessionView: View {
                 preferredUnit: preferredUnit,
                 onUnitChange: { newUnit in
                     weightUnit = newUnit == .kg ? "kg" : "lb"
-                },
+                }
             )
             .presentationDetents([.large])
             .atlasBackgroundTheme(.workout)
@@ -591,6 +667,17 @@ struct WorkoutSessionView: View {
 
     private var currentSuggestion: RoutineAIService.ExerciseSuggestion? {
         suggestions[currentExercise.id]
+    }
+
+    private var muscleLineText: String? {
+        let muscles = ExerciseMuscleMap.detailedMuscles(for: currentExercise.name)
+        let primaryText = muscles.primary.joined(separator: ", ")
+        let secondaryText = muscles.secondary.joined(separator: ", ")
+        let lines = [
+            primaryText.isEmpty ? nil : "Primary: \(primaryText)",
+            secondaryText.isEmpty ? nil : "Secondary: \(secondaryText)"
+        ].compactMap { $0 }
+        return lines.isEmpty ? nil : lines.joined(separator: " • ")
     }
 
     private var isEditingSetFields: Bool {
@@ -732,6 +819,9 @@ struct WorkoutSessionView: View {
         guard isEnding == false else { return }
         isEnding = true
         Task {
+            if session == nil {
+                ensureSession()
+            }
             guard let session else {
                 await MainActor.run {
                     isEnding = false
@@ -743,7 +833,7 @@ struct WorkoutSessionView: View {
             let didStore = historyStore.endSession(session: session)
             if didStore || session.totalSets > 0 {
                 completedSessionId = session.id
-                await summaryLoader.preload(sessionID: session.id, modelContext: modelContext)
+                await summaryLoader.preload(sessionID: session.id, modelContext: modelContext, unitPreference: preferredUnit)
                 await MainActor.run {
                     showSummary = true
                     if routine.expiresOnCompletion {
@@ -1009,13 +1099,7 @@ struct WorkoutSessionView: View {
     }
 
     private func presentPicker() {
-        let parts = setDraft.weight.split(separator: ".")
-        pickerWeightInt = Int(parts.first ?? "0") ?? 0
-        if parts.count > 1 {
-            pickerWeightDec = Int(parts[1]) ?? 0
-        } else {
-            pickerWeightDec = 0
-        }
+        pickerWeightText = setDraft.weight
         pickerReps = Int(setDraft.reps) ?? 0
         pickerUnit = preferredUnit
         pickerTag = SetTag(rawValue: setDraft.tag) ?? .W
@@ -1032,8 +1116,7 @@ struct WorkoutSessionView: View {
     }
 
     private struct SetEntrySheetView: View {
-        @Binding var weightInt: Int
-        @Binding var weightDec: Int
+        @Binding var weightText: String
         @Binding var reps: Int
         @Binding var unit: WorkoutUnits
         @Binding var tag: SetTag
@@ -1043,6 +1126,7 @@ struct WorkoutSessionView: View {
         let onUnitChange: (WorkoutUnits) -> Void
 
         @Environment(\.dismiss) private var dismiss
+        @FocusState private var weightFieldFocused: Bool
 
         var body: some View {
             NavigationStack {
@@ -1067,24 +1151,45 @@ struct WorkoutSessionView: View {
                 unitToggle
                 tagSelector
 
-                HStack(spacing: 12) {
-                    pickerBlock(title: "Weight", value: Binding(
-                        get: { weightInt },
-                        set: { weightInt = $0; onChange() }
-                    ), range: 0...500)
-                    pickerBlock(title: ".", value: Binding(
-                        get: { weightDec },
-                        set: { weightDec = $0; onChange() }
-                    ), range: 0...9)
-                    Text(unit == .kg ? "kg" : "lb")
-                        .appFont(.body, weight: .semibold)
-                        .monospacedDigit()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Weight")
+                        .appFont(.footnote, weight: .semibold)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        TextField("0", text: $weightText)
+                            .keyboardType(.decimalPad)
+                            .focused($weightFieldFocused)
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                        Text(unit == .kg ? "kg" : "lb")
+                            .appFont(.body, weight: .semibold)
+                            .monospacedDigit()
+                            .padding(.trailing, 4)
+                    }
                 }
 
-                pickerBlock(title: "Reps", value: Binding(
-                    get: { reps },
-                    set: { reps = $0; onChange() }
-                ), range: 0...50)
+                VStack(alignment: .center, spacing: 8) {
+                    Text("Reps")
+                        .appFont(.footnote, weight: .semibold)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: Binding(
+                        get: { reps },
+                        set: { reps = $0; onChange() }
+                    )) {
+                        ForEach(0...50, id: \.self) { num in
+                            Text("\(num)")
+                                .tag(num)
+                                .appFont(.title, weight: .bold)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                }
+                .frame(maxWidth: .infinity)
 
                 Text("Values are stored in kilograms for history.")
                     .appFont(.footnote, weight: .regular)
@@ -1097,23 +1202,13 @@ struct WorkoutSessionView: View {
             .atlasBackgroundTheme(.workout)
         }
         .presentationDragIndicator(.visible)
-    }
-
-    private func pickerBlock(title: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
-        VStack(alignment: .center, spacing: 8) {
-            Text(title)
-                .appFont(.footnote, weight: .semibold)
-                .foregroundStyle(.secondary)
-            Picker("", selection: value) {
-                ForEach(range, id: \.self) { num in
-                    Text("\(num)")
-                        .tag(num)
-                        .appFont(.title, weight: .bold)
-                }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { weightFieldFocused = false }
+                    .appFont(.footnote, weight: .semibold)
             }
-            .pickerStyle(.wheel)
         }
-        .frame(maxWidth: .infinity)
     }
 
     private var unitToggle: some View {
@@ -1147,8 +1242,10 @@ struct WorkoutSessionView: View {
     }
 
     private func logAndDismiss() {
-        let weightValue = Double(weightInt) + Double(weightDec) / 10.0
-        let kgValue = unit == .kg ? weightValue : weightValue / WorkoutSessionFormatter.kgToLb
+        let trimmed = weightText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsed = Double(trimmed) ?? 0
+        let clamped = max(0, min(parsed, unit == .kg ? 900 : 2000))
+        let kgValue = unit == .kg ? clamped : clamped / WorkoutSessionFormatter.kgToLb
         Haptics.playMediumImpact()
         onLog(kgValue.isNaN ? nil : kgValue, reps, tag)
         dismiss()
