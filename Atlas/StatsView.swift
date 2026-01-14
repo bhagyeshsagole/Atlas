@@ -4,11 +4,18 @@ import SwiftData
 struct StatsView: View {
     @StateObject private var store = StatsDashboardStore()
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var allSessions: [WorkoutSession]
+    @EnvironmentObject var healthKitStore: HealthKitStore
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
+    @AppStorage("statsShowMinimums") private var statsShowMinimums = true
+    @AppStorage("statsShowMuscles") private var statsShowMuscles = true
+    @AppStorage("statsShowSections") private var statsShowSections = true
+    @AppStorage("statsShowAlerts") private var statsShowAlerts = true
     @State private var activeDetail: MetricDetailModel?
     @State private var activeMuscle: MuscleOverviewModel?
     @State private var showManagePins = false
     @State private var showCoachSheet = false
+    @State private var cardioWorkouts: [HealthWorkoutSummary] = []
+    @State private var isLoadingCardio = false
 
     private var preferredUnit: WorkoutUnits { WorkoutUnits(from: weightUnit) }
 
@@ -18,10 +25,21 @@ struct StatsView: View {
                 header
                 topControls
                 cardsRow
-                minimumStrip
-                musclesOverview
-                sections
-                alertsSection
+                if store.mode == .athletic && !cardioWorkouts.isEmpty {
+                    cardioSection
+                }
+                if statsShowMinimums {
+                    minimumStrip
+                }
+                if statsShowMuscles {
+                    musclesOverview
+                }
+                if statsShowSections {
+                    sections
+                }
+                if statsShowAlerts {
+                    alertsSection
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, AppStyle.screenTopPadding + AppStyle.headerTopPadding)
@@ -58,12 +76,19 @@ struct StatsView: View {
         .onAppear {
             store.updatePreferredUnit(preferredUnit)
             store.updateSessions(Array(allSessions))
+            loadCardioWorkouts()
         }
         .onChange(of: allSessions) { _, newValue in
             store.updateSessions(Array(newValue))
         }
         .onChange(of: weightUnit) { _, newValue in
             store.updatePreferredUnit(WorkoutUnits(from: newValue))
+        }
+        .onChange(of: store.mode) { _, _ in
+            loadCardioWorkouts()
+        }
+        .onChange(of: store.range) { _, _ in
+            loadCardioWorkouts()
         }
     }
 
@@ -175,7 +200,7 @@ struct StatsView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(store.dashboard.minimumStrip) { metric in
-                        MinimumStripView(metric: metric)
+                        MinimumStripView(metric: metric, dataPointCount: metric.weekly.count)
                     }
                 }
             }
@@ -236,6 +261,81 @@ struct StatsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            }
+        }
+    }
+
+    private var cardioSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Cardio")
+                .appFont(.section, weight: .bold)
+                .foregroundStyle(.primary)
+            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(cardioWorkouts.prefix(5)) { workout in
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(workout.activityType)
+                                    .appFont(.body, weight: .semibold)
+                                    .foregroundStyle(.primary)
+                                HStack(spacing: 8) {
+                                    if let distance = workout.distanceKm {
+                                        Text(String(format: "%.1f km", distance))
+                                            .appFont(.caption, weight: .semibold)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text("\(workout.durationMinutes) min")
+                                        .appFont(.caption, weight: .semibold)
+                                        .foregroundStyle(.secondary)
+                                    if let calories = workout.activeEnergyKcal {
+                                        Text("\(Int(calories)) cal")
+                                            .appFont(.caption, weight: .semibold)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            Spacer()
+                            Text(workout.startDate, style: .date)
+                                .appFont(.caption, weight: .semibold)
+                                .foregroundStyle(.secondary)
+                        }
+                        if workout.id != cardioWorkouts.prefix(5).last?.id {
+                            Divider().overlay(Color.white.opacity(0.08))
+                        }
+                    }
+                }
+                .padding(AppStyle.glassContentPadding)
+            }
+        }
+    }
+
+    private func loadCardioWorkouts() {
+        guard healthKitStore.isAuthorized else { return }
+        guard store.mode == .athletic else {
+            cardioWorkouts = []
+            return
+        }
+
+        isLoadingCardio = true
+        Task {
+            let interval = store.range.dateInterval()
+            do {
+                let workouts = try await healthKitStore.fetchWorkoutsWithCache(
+                    from: interval.start,
+                    to: interval.end
+                )
+                await MainActor.run {
+                    cardioWorkouts = workouts
+                    isLoadingCardio = false
+                }
+            } catch {
+                await MainActor.run {
+                    cardioWorkouts = []
+                    isLoadingCardio = false
+                }
+                #if DEBUG
+                print("[Stats] Failed to load cardio: \(error)")
+                #endif
             }
         }
     }
@@ -355,6 +455,16 @@ private struct TrendCardView: View {
 
 private struct MinimumStripView: View {
     let metric: MinimumStripMetric
+    let dataPointCount: Int
+
+    private var calculatedWidth: CGFloat {
+        // Calculate width based on data points to ensure bars are readable
+        // Minimum 140 for small ranges, scale up for larger ranges
+        let baseWidth: CGFloat = 140
+        let additionalWidthPerPoint: CGFloat = 8
+        let extraWidth = CGFloat(max(0, dataPointCount - 7)) * additionalWidthPerPoint
+        return baseWidth + extraWidth
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -369,6 +479,7 @@ private struct MinimumStripView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(width: calculatedWidth)
         .padding(10)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
     }
@@ -381,7 +492,9 @@ private struct MiniBarChart: View {
     var body: some View {
         GeometryReader { geo in
             let maxValue = max(series.map(\.value).max() ?? 1, baseline > 0 ? baseline : 1)
-            let barWidth = max(6, geo.size.width / CGFloat(max(series.count, 1)) - 4)
+            // Adaptive spacing: use smaller spacing for longer ranges
+            let spacing: CGFloat = series.count > 12 ? 2 : 4
+            let barWidth = max(4, (geo.size.width - spacing * CGFloat(max(series.count - 1, 0))) / CGFloat(max(series.count, 1)))
             ZStack(alignment: .bottomLeading) {
                 if baseline > 0 {
                     let y = geo.size.height * CGFloat(1 - baseline / maxValue)
@@ -391,10 +504,10 @@ private struct MiniBarChart: View {
                     }
                     .stroke(Color.white.opacity(0.25), lineWidth: 1)
                 }
-                HStack(alignment: .bottom, spacing: 4) {
+                HStack(alignment: .bottom, spacing: spacing) {
                     ForEach(series) { point in
                         let height = max(4, CGFloat(point.value / maxValue) * geo.size.height)
-                        RoundedRectangle(cornerRadius: 3)
+                        RoundedRectangle(cornerRadius: 2)
                             .fill(Color.white.opacity(0.32))
                             .frame(width: barWidth, height: height)
                     }
@@ -660,11 +773,13 @@ private struct KeyLiftManagerView: View {
     @Binding var pinned: [String]
     let availableExercises: [String]
     @Environment(\.dismiss) private var dismiss
-    @State private var searchText: String = ""
 
-    private var filtered: [String] {
-        guard searchText.isEmpty == false else { return availableExercises }
-        return availableExercises.filter { $0.localizedCaseInsensitiveContains(searchText) }
+    private var categorizedExercises: [MuscleGroup: [String]] {
+        ExerciseClassifier.categorize(exercises: availableExercises)
+    }
+
+    private var sortedCategories: [MuscleGroup] {
+        MuscleGroup.allCases.filter { categorizedExercises[$0]?.isEmpty == false }
     }
 
     var body: some View {
@@ -672,36 +787,51 @@ private struct KeyLiftManagerView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Manage Key Lifts")
                     .appFont(.title3, weight: .semibold)
-                TextField("Search", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                if filtered.isEmpty {
-                    Text("No exercises yet.")
+                    .padding(.bottom, 4)
+
+                if sortedCategories.isEmpty {
+                    Text("No exercises yet. Complete some workouts to track progress.")
                         .appFont(.footnote, weight: .semibold)
                         .foregroundStyle(.secondary)
+                        .padding(.top, 8)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(filtered, id: \.self) { name in
-                                HStack {
-                                    Text(name)
-                                        .appFont(.body, weight: .semibold)
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    if pinned.contains(normalize(name)) {
-                                        Image(systemName: "pin.fill")
-                                            .foregroundStyle(.primary)
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(sortedCategories) { category in
+                                NavigationLink {
+                                    CategoryExercisesView(
+                                        category: category,
+                                        exercises: categorizedExercises[category] ?? [],
+                                        pinned: $pinned
+                                    )
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(category.rawValue)
+                                                .appFont(.body, weight: .semibold)
+                                                .foregroundStyle(.primary)
+
+                                            Text("\(categorizedExercises[category]?.count ?? 0) exercises")
+                                                .appFont(.caption, weight: .medium)
+                                                .foregroundStyle(.secondary)
+                                        }
+
+                                        Spacer()
+
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(.tertiary)
                                     }
+                                    .padding(.vertical, 12)
+                                    .padding(.horizontal, 16)
+                                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
                                 }
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    Haptics.playLightTap()
-                                    toggle(name)
-                                }
-                                Divider()
+                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
+
                 Spacer()
             }
             .padding(AppStyle.contentPaddingLarge)
@@ -711,6 +841,71 @@ private struct KeyLiftManagerView: View {
                 }
             }
         }
+    }
+}
+
+private struct CategoryExercisesView: View {
+    let category: MuscleGroup
+    let exercises: [String]
+    @Binding var pinned: [String]
+    @State private var searchText: String = ""
+
+    private var filtered: [String] {
+        guard searchText.isEmpty == false else { return exercises.sorted() }
+        return exercises.filter { $0.localizedCaseInsensitiveContains(searchText) }.sorted()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("Search \(category.rawValue.lowercased())", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, AppStyle.contentPaddingLarge)
+                .padding(.top, 8)
+
+            if filtered.isEmpty {
+                Text("No matching exercises.")
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, AppStyle.contentPaddingLarge)
+                    .padding(.top, 8)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(filtered, id: \.self) { (name: String) in
+                            HStack {
+                                Text(name)
+                                    .appFont(.body, weight: .medium)
+                                    .foregroundStyle(.primary)
+
+                                Spacer()
+
+                                if pinned.contains(normalize(name)) {
+                                    Image(systemName: "pin.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, AppStyle.contentPaddingLarge)
+                            .onTapGesture {
+                                Haptics.playLightTap()
+                                toggle(name)
+                            }
+
+                            if name != filtered.last {
+                                Divider()
+                                    .padding(.leading, AppStyle.contentPaddingLarge)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .navigationTitle(category.rawValue)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func toggle(_ name: String) {
@@ -753,6 +948,8 @@ struct CoachQuickSheet: View {
     @State private var isLoading = false
     @State private var response: String = ""
     @State private var errorMessage: String?
+    @State private var customPrompt: String = ""
+    @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -785,6 +982,39 @@ struct CoachQuickSheet: View {
                         .buttonStyle(.plain)
                         .disabled(isLoading)
                     }
+                }
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                Text("Or ask anything")
+                    .appFont(.footnote, weight: .semibold)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    TextField("Type your question...", text: $customPrompt, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...4)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                        .focused($isTextFieldFocused)
+                        .disabled(isLoading)
+                        .onSubmit {
+                            sendCustomPrompt()
+                        }
+
+                    Button {
+                        sendCustomPrompt()
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 40, height: 40)
+                            .background(Color.white.opacity(0.08), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(customPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
                 }
 
                 if let errorMessage {
@@ -846,6 +1076,43 @@ struct CoachQuickSheet: View {
         }
     }
 
+    private func sendCustomPrompt() {
+        let trimmed = customPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        isLoading = true
+        response = ""
+        errorMessage = nil
+        isTextFieldFocused = false
+
+        Task {
+            let promptText = buildCustomPrompt(trimmed)
+            if OpenAIConfig.isAIAvailable == false {
+                await MainActor.run {
+                    response = "Coach unavailable offline. Try: explain my stats, recommend next workout, or form tips."
+                    isLoading = false
+                    customPrompt = ""
+                }
+                return
+            }
+            do {
+                let reply = try await OpenAIChatClient.chat(prompt: promptText)
+                await MainActor.run {
+                    response = reply
+                    isLoading = false
+                    customPrompt = ""
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = "Coach unavailable. Try again after logging."
+                    response = "Connection error. Check your internet and auth status."
+                    customPrompt = ""
+                }
+            }
+        }
+    }
+
     private func buildPrompt(for preset: Preset) -> String {
         var context: [String] = []
         if let statsContext { context.append("Stats: \(statsContext)") }
@@ -874,6 +1141,25 @@ Context:
 
 User:
 \(ask)
+"""
+    }
+
+    private func buildCustomPrompt(_ userQuestion: String) -> String {
+        var context: [String] = []
+        if let statsContext { context.append("Stats: \(statsContext)") }
+        if let exerciseName { context.append("Exercise: \(exerciseName)") }
+        if let balanceContext { context.append("Balance: \(balanceContext)") }
+        let contextBlock = context.joined(separator: "\n")
+
+        return """
+System:
+You are Titan, a concise lifting coach. Reply in 3–5 short lines. Be specific with sets/reps and keep tone calm.
+
+Context:
+\(contextBlock)
+
+User:
+\(userQuestion)
 """
     }
 

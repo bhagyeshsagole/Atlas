@@ -30,15 +30,26 @@
 //
 import SwiftUI
 import Supabase
+import HealthKit
 
 struct SettingsView: View {
     let onDismiss: () -> Void
     @AppStorage("appearanceMode") private var appearanceMode = "light" // Saved user preference for light/dark.
     @AppStorage("weightUnit") private var weightUnit: String = "lb" // Shared across screens for weight formatting.
+    @AppStorage("statsShowMinimums") private var statsShowMinimums = true
+    @AppStorage("statsShowMuscles") private var statsShowMuscles = true
+    @AppStorage("statsShowSections") private var statsShowSections = true
+    @AppStorage("statsShowAlerts") private var statsShowAlerts = true
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var healthKitStore: HealthKitStore
     @State private var activeDropdown: DropdownType? // Tracks which dropdown is open.
     @State private var showingAccount = false
+    @State private var isRequestingHealthKit = false
+    @State private var showHealthKitTest = false
+    @State private var testResult: String = ""
+    @AppStorage("healthkit_last_checked_at") private var healthKitLastChecked: Double = 0
+    @State private var showingImportHistory = false
 
     /// Builds the full-screen settings page with monochrome appearance controls.
     /// Change impact: Adjusting layout, card fills, or typography changes the calm, premium feel of the settings experience.
@@ -103,6 +114,96 @@ struct SettingsView: View {
                                 }
                             }
                         )
+                    }
+
+                    // Stats module toggles
+                    SettingsSectionLabel(text: "STATS")
+                    SettingsGroupCard {
+                        SettingsToggleRow(
+                            title: "Show Minimums",
+                            isOn: $statsShowMinimums
+                        )
+                        SettingsToggleRow(
+                            title: "Show Muscles",
+                            isOn: $statsShowMuscles
+                        )
+                        SettingsToggleRow(
+                            title: "Show Sections",
+                            isOn: $statsShowSections
+                        )
+                        SettingsToggleRow(
+                            title: "Show Alerts",
+                            isOn: $statsShowAlerts
+                        )
+                    }
+
+                    // HealthKit integration
+                    SettingsSectionLabel(text: "HEALTH")
+                    SettingsGroupCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Button {
+                                if healthKitStore.isAuthorized {
+                                    runHealthKitTest()
+                                } else if healthKitStore.authorizationStatus == .sharingDenied {
+                                    openSystemSettings()
+                                } else {
+                                    connectHealthKit()
+                                }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Apple Health")
+                                            .appFont(.body, weight: .semibold)
+                                            .foregroundStyle(.primary)
+                                        Text(healthKitStatusText)
+                                            .appFont(.caption, weight: .semibold)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if isRequestingHealthKit {
+                                        ProgressView()
+                                            .tint(.primary)
+                                    } else {
+                                        Image(systemName: healthKitStore.isAuthorized ? "checkmark.circle.fill" : "heart.fill")
+                                            .font(.footnote)
+                                            .foregroundStyle(healthKitStore.isAuthorized ? .green.opacity(0.8) : .red.opacity(0.8))
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isRequestingHealthKit)
+
+                            if healthKitLastChecked > 0 {
+                                Text("Last checked: \(formattedLastChecked)")
+                                    .appFont(.caption, weight: .semibold)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    // Import workout history
+                    SettingsGroupCard {
+                        Button {
+                            showingImportHistory = true
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Import Workout History")
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(.primary)
+                                    Text("Paste or upload past workout logs")
+                                        .appFont(.caption, weight: .semibold)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "square.and.arrow.down")
+                                    .font(.footnote)
+                                    .foregroundStyle(.primary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     // Instagram row.
@@ -171,6 +272,16 @@ struct SettingsView: View {
             AccountView()
                 .environmentObject(authStore)
         }
+        .alert("HealthKit Test", isPresented: $showHealthKitTest) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(testResult)
+        }
+        .sheet(isPresented: $showingImportHistory) {
+            NavigationStack {
+                ImportHistoryView()
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             if activeDropdown != nil {
@@ -191,6 +302,79 @@ struct SettingsView: View {
     /// Change impact: Editing this mapping changes how the unit text appears in the UI.
     private var weightUnitDisplay: String {
         weightUnit == "kg" ? "Kilograms (kg)" : "Pounds (lb)"
+    }
+
+    private var healthKitStatusText: String {
+        switch healthKitStore.authorizationStatus {
+        case .sharingAuthorized:
+            return "Connected"
+        case .sharingDenied:
+            return "Denied - Tap to open Settings"
+        case .notDetermined:
+            return "Not connected - Tap to authorize"
+        @unknown default:
+            return "Unknown status"
+        }
+    }
+
+    private var formattedLastChecked: String {
+        let date = Date(timeIntervalSince1970: healthKitLastChecked)
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func connectHealthKit() {
+        isRequestingHealthKit = true
+        Task {
+            do {
+                try await healthKitStore.requestAuthorization()
+                await MainActor.run {
+                    healthKitLastChecked = Date().timeIntervalSince1970
+                    isRequestingHealthKit = false
+                }
+            } catch {
+                await MainActor.run {
+                    isRequestingHealthKit = false
+                }
+                #if DEBUG
+                print("[HealthKit] Authorization failed: \(error)")
+                #endif
+            }
+        }
+    }
+
+    private func runHealthKitTest() {
+        isRequestingHealthKit = true
+        Task {
+            do {
+                let endDate = Date()
+                let startDate = Calendar.current.date(byAdding: .day, value: -30, to: endDate) ?? endDate
+                let workouts = try await healthKitStore.fetchWorkouts(from: startDate, to: endDate)
+
+                let latestDate = workouts.first?.startDate
+                let latestFormatted = latestDate != nil ? DateFormatter.localizedString(from: latestDate!, dateStyle: .short, timeStyle: .none) : "None"
+
+                await MainActor.run {
+                    healthKitLastChecked = Date().timeIntervalSince1970
+                    testResult = "Workouts found (last 30 days): \(workouts.count)\nLatest workout: \(latestFormatted)"
+                    showHealthKitTest = true
+                    isRequestingHealthKit = false
+                }
+            } catch {
+                await MainActor.run {
+                    testResult = "Test failed: \(error.localizedDescription)"
+                    showHealthKitTest = true
+                    isRequestingHealthKit = false
+                }
+            }
+        }
+    }
+
+    private func openSystemSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 
     /// Builds the background color tuned for the current theme.
@@ -310,6 +494,26 @@ struct SettingsRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+struct SettingsToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    /// Builds a toggle row with monochrome styling.
+    /// Change impact: Adjusting toggle tint or spacing changes visual consistency with other rows.
+    var body: some View {
+        HStack(spacing: AppStyle.rowSpacing) {
+            Text(title)
+                .appFont(.body)
+                .foregroundStyle(.primary)
+            Spacer()
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

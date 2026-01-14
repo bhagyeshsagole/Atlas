@@ -16,20 +16,20 @@ struct MuscleInfo {
 
 enum StatsMuscleMapper {
     private static let keywordMap: [(keywords: [String], primary: MuscleGroup, secondary: [MuscleGroup], balance: Set<BalanceTag>)] = [
-        (["bench", "press", "chest press"], .chest, [.shoulders, .arms], [.push]),
-        (["incline"], .chest, [.shoulders, .arms], [.push]),
-        (["ohp", "overhead press", "shoulder press"], .shoulders, [.arms], [.push]),
-        (["row", "pull"], .back, [.arms], [.pull]),
-        (["pulldown", "pull-down", "lat"], .back, [.arms], [.pull]),
+        (["bench", "press", "chest press"], .chest, [.shoulders, .triceps], [.push]),
+        (["incline"], .chest, [.shoulders, .triceps], [.push]),
+        (["ohp", "overhead press", "shoulder press"], .shoulders, [.triceps], [.push]),
+        (["row", "pull"], .back, [.biceps], [.pull]),
+        (["pulldown", "pull-down", "lat"], .back, [.biceps], [.pull]),
         (["squat", "leg press"], .legs, [.core], [.quad]),
         (["lunge", "split squat"], .legs, [.core], [.quad]),
         (["deadlift", "rdl", "hinge"], .legs, [.back, .core], [.hinge]),
         (["hip thrust", "glute"], .legs, [.core], [.hinge]),
-        (["curl"], .arms, [.back], [.pull]),
-        (["extension", "pushdown", "pressdown", "tricep"], .arms, [.chest, .shoulders], [.push]),
+        (["curl"], .biceps, [.back], [.pull]),
+        (["extension", "pushdown", "pressdown", "tricep"], .triceps, [.chest, .shoulders], [.push]),
         (["calf"], .legs, [], [.quad]),
         (["lateral raise"], .shoulders, [], [.push]),
-        (["carry", "farmer"], .core, [.arms], [.carry]),
+        (["carry", "farmer"], .core, [.biceps], [.carry]),
         (["plank", "ab", "core", "hollow", "pallof"], .core, [], [])
     ]
 
@@ -43,10 +43,10 @@ enum StatsMuscleMapper {
 
         // Fallback heuristics
         if lower.contains("row") || lower.contains("pulldown") || lower.contains("pull") {
-            return MuscleInfo(primary: .back, secondary: [.arms], balance: [.pull])
+            return MuscleInfo(primary: .back, secondary: [.biceps], balance: [.pull])
         }
         if lower.contains("press") || lower.contains("push") {
-            return MuscleInfo(primary: .chest, secondary: [.shoulders, .arms], balance: [.push])
+            return MuscleInfo(primary: .chest, secondary: [.shoulders, .triceps], balance: [.push])
         }
         if lower.contains("squat") || lower.contains("quad") || lower.contains("leg") {
             return MuscleInfo(primary: .legs, secondary: [.core], balance: [.quad])
@@ -55,7 +55,7 @@ enum StatsMuscleMapper {
             return MuscleInfo(primary: .legs, secondary: [.back, .core], balance: [.hinge])
         }
         if lower.contains("shoulder") || lower.contains("delt") {
-            return MuscleInfo(primary: .shoulders, secondary: [.arms], balance: [.push])
+            return MuscleInfo(primary: .shoulders, secondary: [.triceps], balance: [.push])
         }
         return MuscleInfo(primary: .core, secondary: [], balance: [])
     }

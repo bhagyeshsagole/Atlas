@@ -209,11 +209,12 @@ enum StatsLens: String, CaseIterable, Identifiable, Codable, Hashable {
 }
 
 enum MuscleGroup: String, CaseIterable, Identifiable, Codable, Hashable {
-    case legs = "Legs"
-    case back = "Back"
     case chest = "Chest"
+    case back = "Back"
     case shoulders = "Shoulders"
-    case arms = "Arms"
+    case biceps = "Biceps"
+    case triceps = "Triceps"
+    case legs = "Legs"
     case core = "Core"
 
     var id: String { rawValue }
@@ -236,11 +237,12 @@ typealias MuscleBucket = MuscleGroup
 extension MuscleGroup {
     var displayName: String {
         switch self {
-        case .legs: return "Legs"
-        case .back: return "Back"
         case .chest: return "Chest"
+        case .back: return "Back"
         case .shoulders: return "Shoulders"
-        case .arms: return "Arms"
+        case .biceps: return "Biceps"
+        case .triceps: return "Triceps"
+        case .legs: return "Legs"
         case .core: return "Core"
         }
     }

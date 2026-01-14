@@ -39,7 +39,8 @@ struct CreateRoutineView: View {
     @State private var isGenerating = false // Prevents duplicate AI calls.
     @State private var alertMessage: String?
     @FocusState private var focusedField: Field? // Moves the caret between title and workout text.
-    @State private var showCoachSheet = false
+    @State private var currentTipIndex: Int = 0
+    @State private var tipTimer: Timer?
 
     let onGenerate: (String, [ParsedWorkout]) -> Void
 
@@ -47,6 +48,18 @@ struct CreateRoutineView: View {
         case title
         case workoutText
     }
+
+    // Rotating tips shown during generation
+    private let generationTips: [String] = [
+        "Compound movements build the most strength",
+        "3-4 sets of 8-12 reps is optimal for muscle growth",
+        "Rest 2-3 minutes between heavy sets",
+        "Progressive overload is key to gains",
+        "Track your lifts to see progress over time",
+        "Consistency beats perfection every time",
+        "Mind-muscle connection improves results",
+        "Sleep is when your muscles actually grow"
+    ]
 
     var body: some View {
         ZStack {
@@ -70,27 +83,9 @@ struct CreateRoutineView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Workouts")
-                                .appFont(.section, weight: .bold)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Button {
-                                Haptics.playLightTap()
-                                showCoachSheet = true
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "bolt.fill")
-                                    Text("Coach")
-                                }
-                                .appFont(.footnote, weight: .semibold)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Capsule().fill(Color.white.opacity(0.08)))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(isGenerating)
-                        }
+                        Text("Workouts")
+                            .appFont(.section, weight: .bold)
+                            .foregroundStyle(.primary)
                         ZStack(alignment: .topLeading) {
                             TextEditor(text: $rawWorkouts)
                                 .frame(minHeight: 140)
@@ -111,36 +106,48 @@ struct CreateRoutineView: View {
                         }
                     }
 
-                    Button {
-                        generate()
-                    } label: {
-                        HStack(spacing: 10) {
-                            if isGenerating {
-                                ProgressView()
-                                    .tint(.primary)
-                                Text("Generating")
-                                    .appFont(.body, weight: .semibold)
-                                    .foregroundStyle(.primary)
-                            } else {
-                                Text("Generate")
-                                    .appFont(.pill, weight: .semibold)
-                                    .foregroundStyle(.primary)
+                    VStack(spacing: 12) {
+                        Button {
+                            generate()
+                        } label: {
+                            HStack(spacing: 10) {
+                                if isGenerating {
+                                    ProgressView()
+                                        .tint(.primary)
+                                    Text("Generating")
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(.primary)
+                                } else {
+                                    Text("Generate")
+                                        .appFont(.pill, weight: .semibold)
+                                        .foregroundStyle(.primary)
+                                }
                             }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, AppStyle.glassContentPadding)
+                            .background(
+                                RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                            .contentShape(Rectangle())
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, AppStyle.glassContentPadding)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppStyle.glassCardCornerRadiusLarge)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .disabled(isGenerating)
+
+                        // Rotating tips during generation
+                        if isGenerating {
+                            Text(generationTips[currentTipIndex])
+                                .appFont(.footnote, weight: .semibold)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .animation(.easeInOut(duration: 0.3), value: currentTipIndex)
+                                .transition(.opacity)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isGenerating)
                 }
                 .padding(AppStyle.contentPaddingLarge)
             }
@@ -157,32 +164,27 @@ struct CreateRoutineView: View {
         )) {
             Button("OK", role: .cancel) { }
         }
-        .sheet(isPresented: $showCoachSheet) {
-            CoachQuickSheet(
-                statsContext: routineCoachContext,
-                exerciseName: nil,
-                balanceContext: nil
-            )
+        .onChange(of: isGenerating) { _, generating in
+            if generating {
+                startTipRotation()
+            } else {
+                stopTipRotation()
+            }
         }
     }
 
-    private var routineCoachContext: String? {
-        let titleText = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let workoutsText = rawWorkouts.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if titleText.isEmpty && workoutsText.isEmpty {
-            return nil
+    private func startTipRotation() {
+        currentTipIndex = Int.random(in: 0..<generationTips.count)
+        tipTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
+            withAnimation {
+                currentTipIndex = (currentTipIndex + 1) % generationTips.count
+            }
         }
+    }
 
-        var parts: [String] = []
-        if !titleText.isEmpty {
-            parts.append("Routine: \(titleText)")
-        }
-        if !workoutsText.isEmpty {
-            parts.append("Workouts: \(workoutsText)")
-        }
-
-        return parts.joined(separator: ". ")
+    private func stopTipRotation() {
+        tipTimer?.invalidate()
+        tipTimer = nil
     }
 
     private func generate() {

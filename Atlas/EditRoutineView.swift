@@ -71,15 +71,24 @@ struct EditRoutineView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Workouts")
                                 .appFont(.section, weight: .bold)
-                            ForEach($editableWorkouts) { $workout in
+                            ForEach(Array(editableWorkouts.enumerated()), id: \.element.id) { index, workout in
                                 HStack(spacing: 12) {
                                     Image(systemName: "line.3.horizontal")
                                         .font(.system(size: 18, weight: .semibold))
                                         .padding(10)
                                         .background(Color.white.opacity(0.08), in: Circle())
                                         .foregroundStyle(.primary)
+                                        .onDrag {
+                                            draggingWorkoutId = workout.id
+                                            lastHapticIndex = index
+                                            return NSItemProvider(object: workout.id.uuidString as NSString)
+                                        }
 
-                                    TextField("Workout", text: $workout.name)
+                                    // Display exercise name (read-only - renaming disabled)
+                                    Text(workout.name)
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(AppStyle.settingsGroupPadding)
                                         .atlasGlassCard()
 
@@ -89,12 +98,6 @@ struct EditRoutineView: View {
                                         Image(systemName: "trash")
                                             .font(.system(size: 16, weight: .semibold))
                                     }
-                                }
-                                .contentShape(Rectangle())
-                                .onDrag {
-                                    draggingWorkoutId = workout.id
-                                    lastHapticIndex = editableWorkouts.firstIndex(where: { $0.id == workout.id })
-                                    return NSItemProvider(object: workout.id.uuidString as NSString)
                                 }
                                 .onDrop(of: [.text], delegate: RoutineReorderDelegate(
                                     item: workout,
@@ -192,6 +195,12 @@ private struct RoutineWorkoutDraft: Identifiable {
     var repsText: String
 }
 
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
 private struct RoutineReorderDelegate<Item: Identifiable>: DropDelegate where Item.ID == UUID {
     let item: Item
     @Binding var items: [Item]
@@ -202,10 +211,22 @@ private struct RoutineReorderDelegate<Item: Identifiable>: DropDelegate where It
         guard let draggingId, draggingId != item.id else { return }
         guard let fromIndex = items.firstIndex(where: { $0.id == draggingId }),
               let toIndex = items.firstIndex(where: { $0.id == item.id }) else { return }
+
+        // Prevent invalid moves
+        guard fromIndex != toIndex, fromIndex < items.count, toIndex < items.count else { return }
+
         if fromIndex != toIndex {
-            withAnimation(.easeInOut(duration: 0.08)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 let moved = items.remove(at: fromIndex)
                 items.insert(moved, at: toIndex)
+
+                #if DEBUG
+                // Validate no duplicates after reorder
+                let ids = Set(items.map { $0.id })
+                if ids.count != items.count {
+                    print("[REORDER ERROR] Duplicate IDs detected after reorder")
+                }
+                #endif
             }
             if lastHapticIndex != toIndex {
                 lastHapticIndex = toIndex

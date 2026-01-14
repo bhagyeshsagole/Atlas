@@ -953,7 +953,7 @@ struct StatsMetricEngine {
             return 10
         case .shoulders:
             return 8
-        case .arms, .core:
+        case .biceps, .triceps, .core:
             return 6
         }
     }

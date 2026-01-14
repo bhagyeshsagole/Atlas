@@ -47,6 +47,7 @@ struct AtlasApp: App {
     @StateObject private var friendHistoryStore: FriendHistoryStore
     @StateObject private var cloudSyncCoordinator: CloudSyncCoordinator
     @StateObject private var usernameStore: UsernameStore
+    @StateObject private var healthKitStore: HealthKitStore
     private let syncService: SyncService
     @Environment(\.scenePhase) private var scenePhase
 
@@ -89,6 +90,7 @@ struct AtlasApp: App {
         _friendHistoryStore = StateObject(wrappedValue: friendHistoryStore)
         _cloudSyncCoordinator = StateObject(wrappedValue: cloudSyncCoordinator)
         _usernameStore = StateObject(wrappedValue: usernameStore)
+        _healthKitStore = StateObject(wrappedValue: HealthKitStore(modelContext: context))
         self.syncService = syncService
     }
 
@@ -104,6 +106,7 @@ struct AtlasApp: App {
                 .environmentObject(friendHistoryStore)
                 .environmentObject(cloudSyncCoordinator)
                 .environmentObject(usernameStore)
+                .environmentObject(healthKitStore)
                 .task {
                     authStore.startIfNeeded()
                     await cloudSyncCoordinator.startIfNeeded()
@@ -134,7 +137,8 @@ enum AtlasPersistence {
         WorkoutSession.self,
         ExerciseLog.self,
         SetLog.self,
-        SyncOutboxItem.self
+        SyncOutboxItem.self,
+        HealthWorkoutCache.self
     ]
 
     static var isInMemory: Bool = false

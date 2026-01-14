@@ -283,10 +283,22 @@ private struct RoutineReorderDelegate<Item: Identifiable>: DropDelegate where It
         guard let draggingId, draggingId != item.id else { return }
         guard let fromIndex = items.firstIndex(where: { $0.id == draggingId }),
               let toIndex = items.firstIndex(where: { $0.id == item.id }) else { return }
+
+        // Prevent invalid moves
+        guard fromIndex != toIndex, fromIndex < items.count, toIndex < items.count else { return }
+
         if fromIndex != toIndex {
-            withAnimation(.easeInOut(duration: 0.08)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 let moved = items.remove(at: fromIndex)
                 items.insert(moved, at: toIndex)
+
+                #if DEBUG
+                // Validate no duplicates after reorder
+                let ids = Set(items.map { $0.id })
+                if ids.count != items.count {
+                    print("[REORDER ERROR] Duplicate IDs detected after reorder")
+                }
+                #endif
             }
             if lastHapticIndex != toIndex {
                 lastHapticIndex = toIndex

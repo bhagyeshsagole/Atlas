@@ -4,8 +4,17 @@ struct FriendsView: View {
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var friendsStore: FriendsStore
     @State private var usernameInput: String = ""
+    @State private var leaderboardMetric: LeaderboardMetric = .streak
     private let primaryColor = Color.white
     private let secondaryColor = Color.white.opacity(0.72)
+
+    enum LeaderboardMetric: String, CaseIterable, Identifiable {
+        case streak = "Streak"
+        case weeklyVolume = "Volume"
+        case sessions = "Sessions"
+
+        var id: String { rawValue }
+    }
 
     var body: some View {
         ZStack {
@@ -17,6 +26,7 @@ struct FriendsView: View {
                         addFriendCard
                         friendsCard
                         requestsCard
+                        leaderboardCard
                     } else {
                         unauthenticatedCard
                     }
@@ -245,6 +255,64 @@ struct FriendsView: View {
         return base.prefix(2).uppercased()
     }
 
+    private var leaderboardCard: some View {
+        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Leaderboard")
+                        .appFont(.body, weight: .semibold)
+                        .foregroundStyle(primaryColor)
+                    Spacer()
+                    Picker("Metric", selection: $leaderboardMetric) {
+                        ForEach(LeaderboardMetric.allCases) { metric in
+                            Text(metric.rawValue).tag(metric)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
+                    .controlSize(.mini)
+                }
+
+                if friendsStore.friends.isEmpty {
+                    Text("Add friends to see the leaderboard")
+                        .appFont(.footnote)
+                        .foregroundStyle(secondaryColor)
+                } else {
+                    VStack(spacing: 8) {
+                        // Show "You" row first
+                        LeaderboardRow(
+                            rank: 1,
+                            name: "You",
+                            value: leaderboardValueForSelf(),
+                            metric: leaderboardMetric,
+                            isCurrentUser: true
+                        )
+
+                        // Show friends (placeholder values - actual data would come from FriendDetailModel)
+                        ForEach(Array(friendsStore.friends.prefix(5).enumerated()), id: \.element.id) { index, friend in
+                            LeaderboardRow(
+                                rank: index + 2,
+                                name: friend.username ?? friend.email.prefix(10).description,
+                                value: "—",
+                                metric: leaderboardMetric,
+                                isCurrentUser: false
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func leaderboardValueForSelf() -> String {
+        // Placeholder - would integrate with user's stats
+        switch leaderboardMetric {
+        case .streak: return "—"
+        case .weeklyVolume: return "—"
+        case .sessions: return "—"
+        }
+    }
+
     private var unauthenticatedCard: some View {
         GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
             VStack(alignment: .leading, spacing: 12) {
@@ -301,5 +369,39 @@ struct FriendsView: View {
         #if canImport(UIKit)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         #endif
+    }
+}
+
+// MARK: - Leaderboard Row
+
+private struct LeaderboardRow: View {
+    let rank: Int
+    let name: String
+    let value: String
+    let metric: FriendsView.LeaderboardMetric
+    let isCurrentUser: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("#\(rank)")
+                .appFont(.footnote, weight: .bold)
+                .foregroundStyle(isCurrentUser ? .white : .secondary)
+                .frame(width: 30, alignment: .leading)
+
+            Text(name)
+                .appFont(.body, weight: isCurrentUser ? .bold : .semibold)
+                .foregroundStyle(isCurrentUser ? .white : .primary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(value)
+                .appFont(.body, weight: .semibold)
+                .foregroundStyle(isCurrentUser ? .white : .secondary)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(isCurrentUser ? Color.white.opacity(0.1) : Color.clear)
+        .cornerRadius(8)
     }
 }

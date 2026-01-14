@@ -4,7 +4,7 @@ import Combine
 
 @MainActor
 final class StatsDashboardStore: ObservableObject {
-    @Published var mode: StatsMode = .athletic {
+    @Published var mode: StatsMode = .strength {
         didSet { recomputeIfReady() }
     }
     @Published var range: StatsRange = .fourWeeks {
@@ -13,7 +13,7 @@ final class StatsDashboardStore: ObservableObject {
     @Published var filter: StatsExerciseFilter = .allExercises {
         didSet { recomputeIfReady() }
     }
-    @Published var dashboard: StatsDashboardResult = .empty(mode: .athletic, range: .fourWeeks, filter: .allExercises)
+    @Published var dashboard: StatsDashboardResult = .empty(mode: .strength, range: .fourWeeks, filter: .allExercises)
     @Published var isLoading: Bool = false
 
     @AppStorage("pinned_exercise_ids") private var pinnedJSON: String = "[]"

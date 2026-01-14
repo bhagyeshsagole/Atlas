@@ -96,74 +96,64 @@ struct MuscleCoverageScoring {
             tags.append(tag)
         }
 
-        let musclePair = ExerciseMuscleMap.muscles(for: exerciseName)
-        if musclePair.primary.lowercased().contains("chest") { add(.chest, .horizontalPress) }
-        if musclePair.primary.lowercased().contains("back") { add(.back, .horizontalRow) }
-        if musclePair.primary.lowercased().contains("lat") { add(.back, .verticalPull) }
-        if musclePair.primary.lowercased().contains("quad") || musclePair.primary.lowercased().contains("leg") { add(.legs, .kneeDominant) }
-        if musclePair.primary.lowercased().contains("ham") || musclePair.primary.lowercased().contains("hinge") { add(.legs, .hinge) }
-        if musclePair.primary.lowercased().contains("glute") { add(.legs, .gluteIso) }
-        if musclePair.primary.lowercased().contains("shoulder") || musclePair.primary.lowercased().contains("delt") { add(.shoulders, .overheadPress) }
-        if musclePair.primary.lowercased().contains("bicep") { add(.arms, .bicepsCurl) }
-        if musclePair.primary.lowercased().contains("tricep") { add(.arms, .tricepsExtension) }
-        if musclePair.primary.lowercased().contains("core") || musclePair.primary.lowercased().contains("abs") { add(.core, .antiExtension) }
+        // Use ExerciseClassifier for primary muscle (single source of truth)
+        let primaryMuscle = ExerciseClassifier.classify(exerciseName)
 
-        if lower.contains("bench") || lower.contains("press") {
+        // Add primary bucket based on classifier result
+        switch primaryMuscle {
+        case .chest:
             add(.chest, lower.contains("incline") ? .inclinePress : .horizontalPress)
+        case .back:
+            add(.back, lower.contains("pull") ? .verticalPull : .horizontalRow)
+        case .shoulders:
+            add(.shoulders, .overheadPress)
+        case .biceps:
+            add(.biceps, .bicepsCurl)
+        case .triceps:
+            add(.triceps, .tricepsExtension)
+        case .legs:
+            if lower.contains("rdl") || lower.contains("deadlift") || lower.contains("hinge") {
+                add(.legs, .hinge)
+            } else if lower.contains("calf") {
+                add(.legs, .calves)
+            } else if lower.contains("glute") || lower.contains("thrust") {
+                add(.legs, .gluteIso)
+            } else if lower.contains("split") || lower.contains("lunge") {
+                add(.legs, .singleLeg)
+            } else {
+                add(.legs, .kneeDominant)
+            }
+        case .core:
+            if lower.contains("pallof") || lower.contains("rotation") {
+                add(.core, .antiRotation)
+            } else if lower.contains("crunch") || lower.contains("situp") || lower.contains("leg raise") {
+                add(.core, .flexion)
+            } else if lower.contains("carry") || lower.contains("farmer") {
+                add(.core, .carry)
+            } else {
+                add(.core, .antiExtension)
+            }
         }
+
+        // Add specific movement tags based on exercise keywords
         if lower.contains("fly") {
             add(.chest, .flyAdduction)
         }
         if lower.contains("dip") {
             add(.chest, .dipPattern)
-            add(.arms, .tricepsExtension)
-        }
-        if lower.contains("row") || lower.contains("pulldown") || lower.contains("pull-down") || lower.contains("pull up") || lower.contains("pull-up") {
-            add(.back, lower.contains("pull") ? .verticalPull : .horizontalRow)
+            add(.triceps, .tricepsExtension)
         }
         if lower.contains("rear") || lower.contains("face pull") {
             add(.back, .rearDeltUpperBack)
             add(.shoulders, .rearDeltER)
         }
-        if lower.contains("squat") || lower.contains("lunge") || lower.contains("leg press") {
-            add(.legs, lower.contains("split") || lower.contains("lunge") ? .singleLeg : .kneeDominant)
-        }
-        if lower.contains("rdl") || lower.contains("deadlift") || lower.contains("hinge") {
-            add(.legs, .hinge)
-        }
-        if lower.contains("calf") {
-            add(.legs, .calves)
-        }
-        if lower.contains("hip thrust") || lower.contains("glute") {
-            add(.legs, .gluteIso)
-        }
-        if lower.contains("ohp") || lower.contains("overhead") || lower.contains("shoulder press") {
-            add(.shoulders, .overheadPress)
-        }
         if lower.contains("lateral raise") {
             add(.shoulders, .lateralRaise)
         }
-        if lower.contains("curl") {
-            add(.arms, .bicepsCurl)
-        }
-        if lower.contains("tricep") || lower.contains("pushdown") || lower.contains("extension") {
-            add(.arms, .tricepsExtension)
-        }
         if lower.contains("forearm") || lower.contains("grip") {
-            add(.arms, .forearmGrip)
+            add(.biceps, .forearmGrip)
         }
-        if lower.contains("plank") || lower.contains("ab wheel") {
-            add(.core, .antiExtension)
-        }
-        if lower.contains("pallof") || lower.contains("rotation") {
-            add(.core, .antiRotation)
-        }
-        if lower.contains("crunch") || lower.contains("situp") || lower.contains("sit-up") || lower.contains("leg raise") {
-            add(.core, .flexion)
-        }
-        if lower.contains("carry") || lower.contains("farmer") {
-            add(.core, .carry)
-        }
+
         if buckets.isEmpty {
             buckets.append(.core)
         }
@@ -250,8 +240,10 @@ struct MuscleCoverageScoring {
             return [.kneeDominant, .hinge, .singleLeg, .calves, .gluteIso]
         case .shoulders:
             return [.overheadPress, .lateralRaise, .rearDeltER]
-        case .arms:
-            return [.bicepsCurl, .tricepsExtension, .forearmGrip]
+        case .biceps:
+            return [.bicepsCurl, .forearmGrip]
+        case .triceps:
+            return [.tricepsExtension, .dipPattern]
         case .core:
             return [.antiExtension, .antiRotation, .flexion, .carry]
         }
@@ -261,7 +253,7 @@ struct MuscleCoverageScoring {
         switch bucket {
         case .chest, .back, .legs:
             return (8, 14)
-        case .shoulders, .arms, .core:
+        case .shoulders, .biceps, .triceps, .core:
             return (6, 12)
         }
     }

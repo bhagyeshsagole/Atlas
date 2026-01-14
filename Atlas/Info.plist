@@ -24,5 +24,11 @@
 	<!-- Your existing background modes (currently none enabled) -->
 	<key>UIBackgroundModes</key>
 	<array/>
+
+	<!-- HealthKit privacy strings -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>Atlas imports cardio workouts from Apple Health to show alongside your lifting stats and provide complete training insights.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Atlas uses Apple Health to save your workout sessions and training metrics so your fitness history stays consistent across devices and apps.</string>
 </dict>
 </plist>

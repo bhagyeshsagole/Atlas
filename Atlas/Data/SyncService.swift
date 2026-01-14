@@ -303,8 +303,11 @@ private extension SyncService {
             if contains(["ohp", "shoulder", "overhead", "lateral raise", "face pull"]) {
                 counts[.shoulders, default: 0] += 1
             }
-            if contains(["curl", "bicep", "tricep", "extension", "pushdown", "dip"]) {
-                counts[.arms, default: 0] += 1
+            if contains(["curl", "bicep"]) {
+                counts[.biceps, default: 0] += 1
+            }
+            if contains(["tricep", "extension", "pushdown", "dip"]) {
+                counts[.triceps, default: 0] += 1
             }
             if contains(["plank", "crunch", "ab", "core", "carry"]) {
                 counts[.core, default: 0] += 1

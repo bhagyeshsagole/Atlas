@@ -89,8 +89,6 @@ struct WorkoutSessionView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var didFireCompletionHaptic = false
     @State private var showEndConfirm = false
-    @State private var showTipsSheet = false
-    @State private var showPlanSheet = false
     @State private var showPickerSheet = false
     @State private var pickerWeightText: String = ""
     @State private var pickerReps: Int = 0
@@ -107,8 +105,6 @@ struct WorkoutSessionView: View {
     @State private var showJumpSheet = false
     @AppStorage("atlas_swipe_hint_shown") private var hasShownSwipeHint = false
     @State private var showSwipeHint = false
-    @State private var showFullMuscleLine = false
-    @State private var showCoachSheet = false
 
     init(routine: Routine, preloader: WorkoutSessionPreloader? = nil) {
         self.routine = routine
@@ -138,7 +134,6 @@ struct WorkoutSessionView: View {
             clearFocus()
             resetDraftForNewExercise()
             reloadForCurrentExercise()
-            showFullMuscleLine = false
             #if DEBUG
             print("[SESSION][PAGER] index=\(newIndex) exercise=\(currentExercise.name)")
             #endif
@@ -153,13 +148,6 @@ struct WorkoutSessionView: View {
         .sheet(isPresented: $showTimerSheet) { timerSheet }
         .sheet(isPresented: $showNewWorkoutSheet) { newWorkoutSheet }
         .sheet(isPresented: $showJumpSheet) { jumpSheet }
-        .sheet(isPresented: $showCoachSheet) {
-            CoachQuickSheet(
-                statsContext: nil,
-                exerciseName: currentExercise.name,
-                balanceContext: nil
-            )
-        }
         .toolbar { sessionToolbar }
         .onReceive(timer) { _ in
             guard let remaining = timerRemaining, remaining >= 0 else { return }
@@ -221,7 +209,8 @@ struct WorkoutSessionView: View {
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
-            HStack(spacing: 8) {
+            HStack(spacing: 12) {
+                // Timer display and button
                 if let remaining = timerRemaining {
                     Text(formattedTime(remaining))
                         .appFont(.footnote, weight: .semibold)
@@ -233,33 +222,75 @@ struct WorkoutSessionView: View {
                 } label: {
                     Image(systemName: "timer")
                         .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
                 }
+                .buttonStyle(.plain)
+
+                // End button as separate circle
+                Button {
+                    Haptics.playLightTap()
+                    showEndConfirm = true
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .disabled(isEnding)
             }
         }
     }
 
     @ViewBuilder private var actionBarInset: some View {
         if !isEditingSetFields {
-            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                HStack(spacing: 12) {
-                    AtlasPillButton("Add Exercise") {
-                        Haptics.playLightTap()
-                        showNewWorkoutSheet = true
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    AtlasPillButton("End") {
-                        Haptics.playLightTap()
-                        showEndConfirm = true
-                    }
-                    .tint(.red)
-                    .frame(maxWidth: .infinity)
-                    .disabled(isEnding)
+            HStack(spacing: 16) {
+                // Previous exercise button
+                Button {
+                    guard exerciseIndex > 0 else { return }
+                    Haptics.playLightTap()
+                    exerciseIndex -= 1
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(exerciseIndex > 0 ? Color.primary : Color.secondary.opacity(0.35))
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
                 }
-                .padding(AppStyle.glassContentPadding)
+                .buttonStyle(.plain)
+                .disabled(exerciseIndex == 0)
+
+                Spacer()
+
+                AtlasPillButton("Add Set") {
+                    presentPicker()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 140)
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                // Next exercise button
+                Button {
+                    guard exerciseIndex < sessionExercises.count - 1 else { return }
+                    Haptics.playLightTap()
+                    exerciseIndex += 1
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(exerciseIndex < sessionExercises.count - 1 ? Color.primary : Color.secondary.opacity(0.35))
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .disabled(exerciseIndex >= sessionExercises.count - 1)
             }
             .padding(.horizontal, AppStyle.screenHorizontalPadding)
-            .padding(.bottom, AppStyle.startButtonBottomPadding)
+            .padding(.bottom, 12)
         }
     }
 
@@ -325,38 +356,73 @@ struct WorkoutSessionView: View {
 
     @ViewBuilder private var jumpSheet: some View {
         NavigationStack {
-            List {
-                ForEach(sessionExercises) { exercise in
-                    Button {
-                        exerciseIndex = exercise.orderIndex
-                        showJumpSheet = false
-                    } label: {
+            VStack(spacing: 0) {
+                List {
+                    ForEach(sessionExercises) { exercise in
                         HStack {
-                            Text(exercise.name)
-                                .appFont(.body, weight: .semibold)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if let sets = loggedSets[exercise.id], sets.isEmpty == false {
-                                Circle()
-                                    .fill(Color.green.opacity(0.8))
-                                    .frame(width: 10, height: 10)
-                            } else {
-                                Circle()
-                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                    .frame(width: 10, height: 10)
+                            Button {
+                                exerciseIndex = exercise.orderIndex
+                                showJumpSheet = false
+                            } label: {
+                                HStack {
+                                    Text(exercise.name)
+                                        .appFont(.body, weight: .semibold)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if let sets = loggedSets[exercise.id], sets.isEmpty == false {
+                                        Circle()
+                                            .fill(Color.green.opacity(0.8))
+                                            .frame(width: 10, height: 10)
+                                    } else {
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                            .frame(width: 10, height: 10)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            // Remove button (only show if no sets logged for this exercise)
+                            if loggedSets[exercise.id]?.isEmpty ?? true {
+                                Button {
+                                    Haptics.playLightTap()
+                                    removeExerciseFromSession(exercise)
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .foregroundStyle(.red.opacity(0.8))
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.leading, 8)
                             }
                         }
                     }
-                    .buttonStyle(.plain)
                 }
+                .scrollIndicators(.hidden)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
-            .scrollIndicators(.hidden)
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
             .navigationTitle("Exercises")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { showJumpSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        Haptics.playLightTap()
+                        showJumpSheet = false
+                        showNewWorkoutSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                            Text("Add")
+                        }
+                        .appFont(.footnote, weight: .semibold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color.white.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .atlasBackground()
@@ -364,25 +430,44 @@ struct WorkoutSessionView: View {
         .presentationDetents([.medium, .large])
     }
 
+    private func removeExerciseFromSession(_ exercise: SessionExercise) {
+        // Only allow removal if no sets have been logged
+        guard loggedSets[exercise.id]?.isEmpty ?? true else { return }
+
+        // Remove from session exercises
+        sessionExercises.removeAll { $0.id == exercise.id }
+
+        // Update order indices
+        for (index, var ex) in sessionExercises.enumerated() {
+            ex.orderIndex = index
+            sessionExercises[index] = ex
+        }
+
+        // Remove from logged sets tracking
+        loggedSets.removeValue(forKey: exercise.id)
+        exerciseLogs.removeValue(forKey: exercise.id)
+
+        // Adjust exercise index if needed
+        if exerciseIndex >= sessionExercises.count {
+            exerciseIndex = max(0, sessionExercises.count - 1)
+        }
+
+        // If session already exists, remove from SwiftData model
+        if let session, let exerciseLog = session.exercises.first(where: { $0.name == exercise.name }) {
+            session.exercises.removeAll { $0.id == exerciseLog.id }
+        }
+    }
+
     private var topPager: some View {
         VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
             HStack {
+                Spacer()
                 pagerDots
                 Spacer()
-                Button {
-                    Haptics.playLightTap()
-                    showCoachSheet = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bolt.fill")
-                        Text("Coach")
-                    }
-                    .appFont(.footnote, weight: .semibold)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white.opacity(0.08)))
-                }
-                .buttonStyle(.plain)
+            }
+
+            HStack {
+                Spacer()
                 Button {
                     Haptics.playLightTap()
                     showJumpSheet = true
@@ -397,7 +482,9 @@ struct WorkoutSessionView: View {
                     .background(Capsule().fill(Color.white.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
+                Spacer()
             }
+
             if showSwipeHint {
                 Text("Tip: swipe to switch exercises")
                     .appFont(.caption, weight: .semibold)
@@ -416,30 +503,40 @@ struct WorkoutSessionView: View {
                 .appFont(.title, weight: .semibold)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .transaction { $0.animation = nil }
-            if let muscleLine = muscleLineText, !muscleLine.isEmpty {
-                Text(muscleLine)
-                    .appFont(.caption, weight: .semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .lineLimit(showFullMuscleLine ? nil : 1)
-                    .truncationMode(.tail)
-                    .transition(.opacity)
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            showFullMuscleLine.toggle()
-                        }
-                    }
+
+            VStack(spacing: 2) {
+                let muscles = ExerciseMuscleMap.detailedMuscles(for: currentExercise.name)
+                if !muscles.primary.isEmpty {
+                    Text("Primary: \(muscles.primary.joined(separator: ", "))")
+                        .appFont(.caption, weight: .medium)
+                        .foregroundStyle(.secondary.opacity(0.85))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                if !muscles.secondary.isEmpty {
+                    Text("Secondary: \(muscles.secondary.joined(separator: ", "))")
+                        .appFont(.caption, weight: .medium)
+                        .foregroundStyle(.secondary.opacity(0.85))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
             }
 
             GlassCard {
-                VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
-                    coachingSection
-                    Divider()
-                    lastSessionSection
-                    Divider()
-                    thisSessionTargetsSection
+                ScrollView {
+                    VStack(alignment: .leading, spacing: AppStyle.cardContentSpacing) {
+                        coachingSection
+                        Divider()
+                        lastSessionSection
+                        Divider()
+                        thisSessionTargetsSection
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxHeight: 400)
+                .scrollIndicators(.hidden)
             }
             .contentShape(Rectangle())
             .offset(x: dragOffset)
@@ -487,41 +584,16 @@ struct WorkoutSessionView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity)
     }
 
     private var coachingSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.subheaderSpacing) {
-            HStack {
-                Text("Technique Tips")
-                    .appFont(.section, weight: .bold)
-                Spacer()
-                Button("More") {
-                    showTipsSheet = true
-                }
-                .appFont(.footnote, weight: .semibold)
-            }
+            Text("Technique Tips")
+                .appFont(.section, weight: .bold)
             Text(currentSuggestion?.techniqueTips ?? "Tips unavailable — continue logging.")
                 .appFont(.body, weight: .regular)
                 .foregroundStyle(.primary)
-                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-        .sheet(isPresented: $showTipsSheet) {
-            NavigationStack {
-                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                    Text("Technique Tips")
-                        .appFont(.title3, weight: .semibold)
-                        .foregroundStyle(.primary)
-                    Text(currentSuggestion?.techniqueTips ?? "Tips unavailable — continue logging.")
-                        .appFont(.body, weight: .regular)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Spacer()
-                }
-                .padding(AppStyle.contentPaddingLarge)
-                .atlasBackground()
-            }
         }
     }
 
@@ -552,53 +624,19 @@ struct WorkoutSessionView: View {
 
     private var thisSessionTargetsSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.subheaderSpacing) {
-            HStack {
-                Text("This Session")
-                    .appFont(.section, weight: .bold)
-                Spacer()
-                Button("More") {
-                    showPlanSheet = true
-                }
-                .appFont(.footnote, weight: .semibold)
-            }
+            Text("This Session")
+                .appFont(.section, weight: .bold)
             Text(thisSessionPlanText)
                 .appFont(.body, weight: .regular)
                 .foregroundStyle(.primary)
-                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-        .sheet(isPresented: $showPlanSheet) {
-            NavigationStack {
-                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                    Text("This Session")
-                        .appFont(.title3, weight: .semibold)
-                        .foregroundStyle(.primary)
-                    Text(thisSessionPlanText)
-                        .appFont(.body, weight: .regular)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Spacer()
-                }
-                .padding(AppStyle.contentPaddingLarge)
-                .atlasBackground()
-            }
         }
     }
 
     private var setLogSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.rowSpacing) {
-            HStack {
-                Text("Sets")
-                    .appFont(.section, weight: .bold)
-                Spacer()
-                AtlasPillButton("Add Set") {
-                    presentPicker()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .frame(maxWidth: 120)
-                .buttonStyle(.plain)
-            }
+            Text("Sets")
+                .appFont(.section, weight: .bold)
 
             if let lastSet = loggedSetsForCurrent.last {
                 Button {
@@ -1205,7 +1243,6 @@ struct WorkoutSessionView: View {
                     .frame(height: 34)
                 }
 
-                unitToggle
                 tagSelector
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -1248,10 +1285,6 @@ struct WorkoutSessionView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                Text("Values are stored in kilograms for history.")
-                    .appFont(.footnote, weight: .regular)
-                    .foregroundStyle(.secondary)
-
                 Spacer()
             }
             .padding(AppStyle.contentPaddingLarge)
@@ -1266,36 +1299,6 @@ struct WorkoutSessionView: View {
                     .appFont(.footnote, weight: .semibold)
             }
         }
-    }
-
-    private var unitToggle: some View {
-        HStack {
-            Text("Unit")
-                .appFont(.footnote, weight: .semibold)
-                .foregroundStyle(.secondary)
-            Spacer()
-            HStack(spacing: 8) {
-                unitButton(.kg)
-                unitButton(.lb)
-            }
-        }
-    }
-
-    private func unitButton(_ target: WorkoutUnits) -> some View {
-        Button {
-            unit = target
-            onChange()
-            onUnitChange(target)
-        } label: {
-            Text(target == .kg ? "kg" : "lb")
-                .appFont(.body, weight: .semibold)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule().fill(Color.white.opacity(unit == target ? 0.16 : 0.08))
-                )
-        }
-        .buttonStyle(.plain)
     }
 
     private func logAndDismiss() {

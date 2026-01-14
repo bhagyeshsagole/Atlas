@@ -155,48 +155,88 @@ struct FriendDetailView: View {
         let myMetrics = myStatsStore.metrics(for: selectedRange)
         let friendMetrics = metricsForFriend(range: selectedRange)
         return VStack(alignment: .leading, spacing: 16) {
+            // Quick comparison cards - 2x2 grid
+            HStack(spacing: 12) {
+                CompareStatCard(
+                    title: "Sessions",
+                    myValue: "\(mySessions.count)",
+                    friendValue: "\(filterFriendSessions(for: selectedRange, sessions: model.sessions).count)",
+                    icon: "figure.strengthtraining.traditional"
+                )
+                CompareStatCard(
+                    title: "Volume",
+                    myValue: formatVolume(myMetrics.workload.volume),
+                    friendValue: formatVolume(friendMetrics.workload.volume),
+                    icon: "scalemass"
+                )
+            }
+
+            HStack(spacing: 12) {
+                CompareStatCard(
+                    title: "Sets",
+                    myValue: "\(myMetrics.workload.sets)",
+                    friendValue: "\(friendMetrics.workload.sets)",
+                    icon: "list.bullet"
+                )
+                CompareStatCard(
+                    title: "Streak",
+                    myValue: "\(myMetrics.coach.streakWeeks) wks",
+                    friendValue: "\(friendMetrics.coach.streakWeeks) wks",
+                    icon: "flame"
+                )
+            }
+
+            // Muscle coverage summary - simplified
             GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Muscle Coverage")
                         .appFont(.section, weight: .bold)
                         .foregroundStyle(.primary)
-                    ForEach(MuscleGroup.allCases) { bucket in
+                    // Show only top 4 muscle groups for cleaner UI
+                    ForEach(Array(MuscleGroup.allCases.prefix(4))) { bucket in
                         HStack(spacing: 10) {
                             Text(bucket.displayName)
                                 .appFont(.footnote, weight: .semibold)
                                 .foregroundStyle(.primary)
-                                .frame(width: 80, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 6) {
-                                coverageRow(label: "You", score: myMetrics.muscle[bucket]?.progress01 ?? 0, display: myMetrics.muscle[bucket]?.score0to10 ?? 0)
-                                coverageRow(label: "Friend", score: friendMetrics.muscle[bucket]?.progress01 ?? 0, display: friendMetrics.muscle[bucket]?.score0to10 ?? 0)
+                                .frame(width: 70, alignment: .leading)
+
+                            // Compact comparison bars
+                            VStack(spacing: 4) {
+                                coverageBar(label: "You", score: myMetrics.muscle[bucket]?.progress01 ?? 0)
+                                coverageBar(label: "Friend", score: friendMetrics.muscle[bucket]?.progress01 ?? 0)
                             }
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
 
-            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Workload")
-                        .appFont(.section, weight: .bold)
-                        .foregroundStyle(.primary)
-                    workloadRow(label: "You", metrics: myMetrics.workload)
-                    workloadRow(label: "Friend", metrics: friendMetrics.workload)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+    private func formatVolume(_ volume: Double) -> String {
+        if volume >= 1000 {
+            return String(format: "%.1fk", volume / 1000)
+        }
+        return String(format: "%.0f", volume)
+    }
 
-            GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Coach Insights")
-                        .appFont(.section, weight: .bold)
-                        .foregroundStyle(.primary)
-                    coachRow(title: "You", summary: myMetrics.coach)
-                    coachRow(title: "Friend", summary: friendMetrics.coach, isFriend: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private func coverageBar(label: String, score: Double) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .appFont(.caption, weight: .semibold)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+            GeometryReader { geo in
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.white.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.white.opacity(0.3))
+                            .frame(width: max(0, min(1, score)) * geo.size.width),
+                        alignment: .leading
+                    )
             }
+            .frame(height: 6)
         }
     }
 
@@ -351,6 +391,51 @@ struct FriendDetailView: View {
                 return session.endedAt >= start && session.endedAt <= now
             }
             return true
+        }
+    }
+}
+
+// MARK: - Compare Stat Card
+
+private struct CompareStatCard: View {
+    let title: String
+    let myValue: String
+    let friendValue: String
+    let icon: String
+
+    var body: some View {
+        GlassCard(cornerRadius: AppStyle.glassCardCornerRadiusLarge, shadowRadius: AppStyle.glassShadowRadiusPrimary) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(title)
+                        .appFont(.caption, weight: .semibold)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("You")
+                            .appFont(.caption, weight: .semibold)
+                            .foregroundStyle(.secondary)
+                        Text(myValue)
+                            .appFont(.title3, weight: .bold)
+                            .foregroundStyle(.primary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Friend")
+                            .appFont(.caption, weight: .semibold)
+                            .foregroundStyle(.secondary)
+                        Text(friendValue)
+                            .appFont(.title3, weight: .bold)
+                            .foregroundStyle(.primary.opacity(0.7))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

@@ -55,10 +55,11 @@ struct AtlasBackground: ViewModifier {
                 Color.black.opacity(0.92 * alphaDrop)
             ]
         case .stats:
+            // "Old money" green gradient - muted, luxury palette
             colors = [
-                Color(red: 18/255, green: 18/255, blue: 36/255).opacity(0.96 * alphaDrop),
-                Color(red: 20/255, green: 45/255, blue: 40/255).opacity(0.65 * alphaDrop),
-                Color.black.opacity(0.92 * alphaDrop)
+                Color(red: 11/255, green: 42/255, blue: 30/255).opacity(0.96 * alphaDrop),  // Deep forest
+                Color(red: 18/255, green: 53/255, blue: 36/255).opacity(0.65 * alphaDrop),  // Bottle green
+                Color(red: 14/255, green: 15/255, blue: 16/255).opacity(0.92 * alphaDrop)   // Warm charcoal
             ]
         case .auth:
             colors = [
