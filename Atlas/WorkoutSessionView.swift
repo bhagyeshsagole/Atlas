@@ -34,6 +34,36 @@ import SwiftUI
 import SwiftData
 import Combine
 
+// MARK: - YouTube Search Helpers
+
+/// Cleans an exercise name for use in a YouTube search query.
+/// Removes special characters that break URLs while keeping meaningful modifiers.
+private func cleanedYouTubeQuery(from exerciseName: String) -> String {
+    // Remove parentheses but keep content, replace special chars with spaces
+    var cleaned = exerciseName
+        .replacingOccurrences(of: "(", with: " ")
+        .replacingOccurrences(of: ")", with: " ")
+        .replacingOccurrences(of: "/", with: " ")
+        .replacingOccurrences(of: "&", with: "and")
+    // Collapse multiple spaces into one
+    cleaned = cleaned.components(separatedBy: .whitespaces)
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+    return cleaned.trimmingCharacters(in: .whitespaces)
+}
+
+/// Builds YouTube search URLs for an exercise name.
+/// Returns both the app deep-link URL and web fallback URL.
+private func youtubeSearchURLs(for exerciseName: String) -> (app: URL?, web: URL?) {
+    let query = cleanedYouTubeQuery(from: exerciseName) + " form"
+    guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+        return (nil, nil)
+    }
+    let appURL = URL(string: "youtube://www.youtube.com/results?search_query=\(encoded)")
+    let webURL = URL(string: "https://www.youtube.com/results?search_query=\(encoded)")
+    return (appURL, webURL)
+}
+
 struct WorkoutSessionView: View {
     struct SessionExercise: Identifiable, Hashable {
         let id: UUID
@@ -56,6 +86,7 @@ struct WorkoutSessionView: View {
     var preloader: WorkoutSessionPreloader?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var historyStore: HistoryStore
     @EnvironmentObject private var routineStore: RoutineStore
     @AppStorage("weightUnit") private var weightUnit: String = "lb"
@@ -407,23 +438,6 @@ struct WorkoutSessionView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { showJumpSheet = false }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        Haptics.playLightTap()
-                        showJumpSheet = false
-                        showNewWorkoutSheet = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus")
-                            Text("Add")
-                        }
-                        .appFont(.footnote, weight: .semibold)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(Color.white.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             .atlasBackground()
         }
@@ -466,8 +480,26 @@ struct WorkoutSessionView: View {
                 Spacer()
             }
 
-            HStack {
+            HStack(spacing: 12) {
                 Spacer()
+
+                // Form pill - opens YouTube search for exercise form
+                Button {
+                    Haptics.playLightTap()
+                    openYouTubeFormSearch()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                        Text("Form")
+                    }
+                    .appFont(.footnote, weight: .semibold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+
+                // Exercises pill - opens jump sheet
                 Button {
                     Haptics.playLightTap()
                     showJumpSheet = true
@@ -482,6 +514,24 @@ struct WorkoutSessionView: View {
                     .background(Capsule().fill(Color.white.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
+
+                // Add pill - adds new exercise to session
+                Button {
+                    Haptics.playLightTap()
+                    newWorkoutFieldFocused = true
+                    showNewWorkoutSheet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                        Text("Add")
+                    }
+                    .appFont(.footnote, weight: .semibold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+
                 Spacer()
             }
 
@@ -1199,6 +1249,20 @@ struct WorkoutSessionView: View {
         pickerUnit = preferredUnit
         pickerTag = SetTag(rawValue: setDraft.tag) ?? .W
         showPickerSheet = true
+    }
+
+    private func openYouTubeFormSearch() {
+        let urls = youtubeSearchURLs(for: currentExercise.name)
+        // Try YouTube app first, fall back to web
+        if let appURL = urls.app {
+            openURL(appURL) { accepted in
+                if !accepted, let webURL = urls.web {
+                    openURL(webURL)
+                }
+            }
+        } else if let webURL = urls.web {
+            openURL(webURL)
+        }
     }
 
     private func setLine(_ set: SetLog) -> String {
