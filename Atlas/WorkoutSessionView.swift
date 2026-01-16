@@ -94,6 +94,7 @@ struct WorkoutSessionView: View {
     @State private var exerciseIndex: Int = 0 // Tracks which exercise the user is editing.
     @State private var sessionExercises: [SessionExercise] // Ordered exercise list built from the routine.
     @State private var session: WorkoutSession? // SwiftData session persisted via HistoryStore.
+    @State private var activeSessionID: UUID? // Stored ID for refetching session from SwiftData after backgrounding.
     @State private var exerciseLogs: [UUID: ExerciseLog] = [:] // Cached SwiftData exercise rows per routine workout.
     @State private var loggedSets: [UUID: [SetLog]] = [:] // Sets already stored for each exercise ID.
     @State private var setDraft = SetLogDraft(tag: "W") // Current set entry fields.
@@ -134,6 +135,9 @@ struct WorkoutSessionView: View {
     @State private var isEnding = false
     @State private var showSetHistorySheet = false
     @State private var showJumpSheet = false
+    @State private var sheetLastSessionSets: [SetLog] = []
+    @State private var sheetLastSessionDate: Date? = nil
+    @State private var sheetBestRecentSet: SetLog? = nil
     @AppStorage("atlas_swipe_hint_shown") private var hasShownSwipeHint = false
     @State private var showSwipeHint = false
 
@@ -151,6 +155,7 @@ struct WorkoutSessionView: View {
             sessionContent
         }
         .onAppear {
+            reloadSessionFromStore()
             reloadForCurrentExercise()
             if hasShownSwipeHint == false {
                 showSwipeHint = true
@@ -203,6 +208,7 @@ struct WorkoutSessionView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                reloadSessionFromStore()
                 reloadForCurrentExercise()
             }
         }
@@ -723,12 +729,19 @@ struct WorkoutSessionView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .sheet(isPresented: $showPickerSheet) {
-            SetEntrySheetView(
+        .sheet(isPresented: $showPickerSheet, onDismiss: {
+            reloadSessionFromStore()
+        }) {
+            SetEntrySheet(
                 weightText: $pickerWeightText,
                 reps: $pickerReps,
                 unit: $pickerUnit,
                 tag: $pickerTag,
+                exerciseName: currentExercise.name,
+                thisSessionSets: loggedSetsForCurrent,
+                lastSessionSets: sheetLastSessionSets,
+                lastSessionDate: sheetLastSessionDate,
+                bestRecentSet: sheetBestRecentSet,
                 onChange: { Haptics.playLightTap() },
                 onLog: { weightKg, reps, tag in
                     setDraftWeightKg = weightKg
@@ -736,17 +749,20 @@ struct WorkoutSessionView: View {
                     setDraft.tag = tag.rawValue
                     addSet(weightKgOverride: weightKg, repsOverride: reps, tagOverride: tag, enteredUnitOverride: pickerUnit)
                 },
-                preferredUnit: preferredUnit,
-                onUnitChange: { newUnit in
-                    weightUnit = newUnit == .kg ? "kg" : "lb"
-                }
+                onDelete: { set in
+                    Haptics.playLightTap()
+                    deleteSet(set)
+                },
+                preferredUnit: preferredUnit
             )
-            .presentationDetents([.large])
+            .presentationDetents([.medium, .large])
             .atlasBackgroundTheme(.workout)
             .atlasBackground()
             .presentationBackground(.clear)
         }
-        .sheet(isPresented: $showSetHistorySheet) {
+        .sheet(isPresented: $showSetHistorySheet, onDismiss: {
+            reloadSessionFromStore()
+        }) {
             SetHistorySheet(
                 sets: loggedSetsForCurrent.sorted { ($0.createdAt ?? Date.distantPast) > ($1.createdAt ?? Date.distantPast) },
                 weightText: weightText(for:),
@@ -926,6 +942,7 @@ struct WorkoutSessionView: View {
             routineTemplateId: routine.id
         )
         session = started
+        activeSessionID = started.id
         for exerciseLog in started.exercises {
             if let match = sessionExercises.first(where: { $0.orderIndex == exerciseLog.orderIndex }) {
                 exerciseLogs[match.id] = exerciseLog
@@ -1062,6 +1079,45 @@ struct WorkoutSessionView: View {
                 }
             }
         }
+    }
+
+    /// Refetches the active session from SwiftData by ID and rebuilds local caches.
+    /// Call this on return from background to ensure UI reflects persisted data.
+    private func reloadSessionFromStore() {
+        guard let sessionID = activeSessionID else {
+            #if DEBUG
+            print("[SESSION][RELOAD] no activeSessionID, skipping refetch")
+            #endif
+            return
+        }
+
+        guard let freshSession = historyStore.fetchSession(by: sessionID) else {
+            #if DEBUG
+            print("[SESSION][RELOAD] session not found for id=\(sessionID)")
+            #endif
+            return
+        }
+
+        session = freshSession
+
+        // Rebuild caches from fresh data
+        var newExerciseLogs: [UUID: ExerciseLog] = [:]
+        var newLoggedSets: [UUID: [SetLog]] = [:]
+
+        for exerciseLog in freshSession.exercises {
+            if let match = sessionExercises.first(where: { $0.orderIndex == exerciseLog.orderIndex }) {
+                newExerciseLogs[match.id] = exerciseLog
+                newLoggedSets[match.id] = exerciseLog.sets.sorted(by: { $0.createdAt < $1.createdAt })
+            }
+        }
+
+        exerciseLogs = newExerciseLogs
+        loggedSets = newLoggedSets
+
+        #if DEBUG
+        let totalSets = newLoggedSets.values.reduce(0) { $0 + $1.count }
+        print("[SESSION][RELOAD] refetched session id=\(sessionID) exercises=\(freshSession.exercises.count) totalSets=\(totalSets)")
+        #endif
     }
 
     private func cleanExerciseName(_ raw: String) async -> String {
@@ -1244,10 +1300,52 @@ struct WorkoutSessionView: View {
     }
 
     private func presentPicker() {
-        pickerWeightText = setDraft.weight
-        pickerReps = Int(setDraft.reps) ?? 0
+        // Prefill logic: last set this session → last session → defaults
+        if let lastSet = loggedSetsForCurrent.last {
+            // Prefill from this session's last set
+            let displayWeight = lastSet.weightKg.map { kg in
+                preferredUnit == .kg ? kg : kg * WorkoutSessionFormatter.kgToLb
+            }
+            pickerWeightText = displayWeight.map { String(format: "%.1f", $0) } ?? ""
+            pickerReps = lastSet.reps
+            pickerTag = SetTag(rawValue: lastSet.tag) ?? .W
+        } else {
+            // Try to prefill from last session
+            let (lastSets, _) = historyStore.fetchLastSessionSets(
+                exerciseName: currentExercise.name,
+                excludingSessionId: session?.id,
+                limit: 1
+            )
+            if let firstSet = lastSets.first {
+                let displayWeight = firstSet.weightKg.map { kg in
+                    preferredUnit == .kg ? kg : kg * WorkoutSessionFormatter.kgToLb
+                }
+                pickerWeightText = displayWeight.map { String(format: "%.1f", $0) } ?? ""
+                pickerReps = firstSet.reps
+                pickerTag = SetTag(rawValue: firstSet.tag) ?? .S
+            } else {
+                // Defaults
+                pickerWeightText = ""
+                pickerReps = 8
+                pickerTag = .S
+            }
+        }
+
         pickerUnit = preferredUnit
-        pickerTag = SetTag(rawValue: setDraft.tag) ?? .W
+
+        // Fetch history for sheet
+        let (lastSets, lastDate) = historyStore.fetchLastSessionSets(
+            exerciseName: currentExercise.name,
+            excludingSessionId: session?.id,
+            limit: 6
+        )
+        sheetLastSessionSets = lastSets
+        sheetLastSessionDate = lastDate
+        sheetBestRecentSet = historyStore.fetchBestRecentSet(
+            exerciseName: currentExercise.name,
+            excludingSessionId: session?.id
+        )
+
         showPickerSheet = true
     }
 
@@ -1273,132 +1371,6 @@ struct WorkoutSessionView: View {
         guard let weightKg = set.weightKg else { return "--" }
         return WeightFormatter.format(weightKg, unit: preferredUnit)
     }
-
-    private struct SetEntrySheetView: View {
-        @Binding var weightText: String
-        @Binding var reps: Int
-        @Binding var unit: WorkoutUnits
-        @Binding var tag: SetTag
-        let onChange: () -> Void
-        let onLog: (Double?, Int, SetTag) -> Void
-        let preferredUnit: WorkoutUnits
-        let onUnitChange: (WorkoutUnits) -> Void
-
-        @Environment(\.dismiss) private var dismiss
-        @FocusState private var weightFieldFocused: Bool
-
-        var body: some View {
-            NavigationStack {
-                VStack(spacing: 24) {
-                Capsule()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 40, height: 4)
-                    .padding(.top, 4)
-
-                HStack {
-                    Spacer()
-                    Text("Set Entry")
-                        .appFont(.title3, weight: .bold)
-                    Spacer()
-                    AtlasPillButton("Log") {
-                        logAndDismiss()
-                    }
-                    .tint(.primary)
-                    .frame(height: 34)
-                }
-
-                tagSelector
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Weight")
-                        .appFont(.footnote, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 10) {
-                        TextField("0", text: $weightText)
-                            .keyboardType(.decimalPad)
-                            .focused($weightFieldFocused)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white.opacity(0.08))
-                            )
-                        Text(unit == .kg ? "kg" : "lb")
-                            .appFont(.body, weight: .semibold)
-                            .monospacedDigit()
-                            .padding(.trailing, 4)
-                    }
-                }
-
-                VStack(alignment: .center, spacing: 8) {
-                    Text("Reps")
-                        .appFont(.footnote, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: Binding(
-                        get: { reps },
-                        set: { reps = $0; onChange() }
-                    )) {
-                        ForEach(0...50, id: \.self) { num in
-                            Text("\(num)")
-                                .tag(num)
-                                .appFont(.title, weight: .bold)
-                        }
-                    }
-                    .pickerStyle(.wheel)
-                }
-                .frame(maxWidth: .infinity)
-
-                Spacer()
-            }
-            .padding(AppStyle.contentPaddingLarge)
-            .atlasBackground()
-            .atlasBackgroundTheme(.workout)
-        }
-        .presentationDragIndicator(.visible)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { weightFieldFocused = false }
-                    .appFont(.footnote, weight: .semibold)
-            }
-        }
-    }
-
-    private func logAndDismiss() {
-        let trimmed = weightText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parsed = Double(trimmed) ?? 0
-        let clamped = max(0, min(parsed, unit == .kg ? 900 : 2000))
-        let kgValue = unit == .kg ? clamped : clamped / WorkoutSessionFormatter.kgToLb
-        Haptics.playMediumImpact()
-        onLog(kgValue.isNaN ? nil : kgValue, reps, tag)
-        dismiss()
-    }
-
-    private var tagSelector: some View {
-        HStack(spacing: 10) {
-            tagButton(.W, label: "Warmup")
-            tagButton(.S, label: "Standard")
-            tagButton(.DS, label: "Drop")
-        }
-    }
-
-    private func tagButton(_ value: SetTag, label: String) -> some View {
-        Button {
-            tag = value
-            onChange()
-        } label: {
-            Text(label)
-                .appFont(.footnote, weight: .semibold)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule().fill(Color.white.opacity(tag == value ? 0.18 : 0.08))
-                )
-        }
-        .buttonStyle(.plain)
-    }
-}
 }
 
 private struct SetLogSheetView: View {

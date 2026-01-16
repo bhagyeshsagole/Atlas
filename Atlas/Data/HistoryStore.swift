@@ -442,6 +442,86 @@ final class HistoryStore: ObservableObject {
         return sessions.first { $0.id == id }
     }
 
+    /// Fetches a session by ID from SwiftData, returning a fresh reference.
+    /// Use this to refresh stale session objects after backgrounding.
+    func fetchSession(by id: UUID) -> WorkoutSession? {
+        let descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+        return sessions.first { $0.id == id }
+    }
+
+    // MARK: - History Fetching for SetEntrySheet
+
+    /// Fetches sets from the most recent completed session for an exercise.
+    /// Used for "Last Session" prefill in SetEntrySheet.
+    func fetchLastSessionSets(
+        exerciseName: String,
+        excludingSessionId: UUID?,
+        limit: Int = 6
+    ) -> (sets: [SetLog], sessionDate: Date?) {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 50
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+
+        for session in sessions {
+            guard session.id != excludingSessionId else { continue }
+            guard session.isHidden == false else { continue }
+            guard session.endedAt != nil else { continue }
+            guard session.totalSets > 0 else { continue }
+
+            if let exerciseLog = session.exercises.first(where: {
+                $0.name.lowercased() == exerciseName.lowercased()
+            }) {
+                let sets = exerciseLog.sets
+                    .sorted { $0.createdAt < $1.createdAt }
+                    .prefix(limit)
+                return (Array(sets), session.endedAt)
+            }
+        }
+        return ([], nil)
+    }
+
+    /// Fetches the highest-volume set from the last 4 weeks for an exercise.
+    /// Used for "Best Recent" quick-fill in SetEntrySheet.
+    func fetchBestRecentSet(
+        exerciseName: String,
+        excludingSessionId: UUID?
+    ) -> SetLog? {
+        let fourWeeksAgo = Calendar.current.date(byAdding: .weekOfYear, value: -4, to: Date()) ?? Date()
+
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+
+        var bestSet: SetLog?
+        var bestVolume: Double = 0
+
+        for session in sessions {
+            guard session.id != excludingSessionId else { continue }
+            guard session.isHidden == false else { continue }
+            guard let ended = session.endedAt, ended >= fourWeeksAgo else { continue }
+            guard session.totalSets > 0 else { continue }
+
+            if let exerciseLog = session.exercises.first(where: {
+                $0.name.lowercased() == exerciseName.lowercased()
+            }) {
+                for set in exerciseLog.sets {
+                    let volume = (set.weightKg ?? 0) * Double(set.reps)
+                    if volume > bestVolume {
+                        bestVolume = volume
+                        bestSet = set
+                    }
+                }
+            }
+        }
+        return bestSet
+    }
+
     func flush() {
         guard modelContext.hasChanges else { return }
         do {
