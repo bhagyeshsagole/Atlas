@@ -561,6 +561,9 @@ struct SetEntrySheet: View {
     }
 
     private func logSet() {
+        // Dismiss keyboard first
+        weightFieldFocused = false
+
         let trimmed = weightText.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed = Double(trimmed) ?? 0
         let clamped = max(0, min(parsed, unit == .kg ? 900 : 2000))
