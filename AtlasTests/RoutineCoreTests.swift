@@ -69,7 +69,8 @@ final class RoutineCoreTests: XCTestCase {
         XCTAssertEqual(reloadedStore.routines.count, 0)
     }
 
-    func testRoutineStoreLoadCorruptedFileDoesNotCrash() {
+    @MainActor
+    func testRoutineStoreLoadCorruptedFileDoesNotCrash() async throws {
         let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("RoutineStoreCorrupted-\(UUID().uuidString).json")
         try? "not-json".data(using: .utf8)?.write(to: tempURL)
         let store = RoutineStore(storageURL: tempURL)

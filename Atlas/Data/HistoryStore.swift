@@ -522,6 +522,102 @@ final class HistoryStore: ObservableObject {
         return bestSet
     }
 
+    /// Fetches working sets from the last 8 weeks for an exercise (for auto-detect tag heuristics).
+    func fetchHistoricalWorkingSets(
+        exerciseName: String,
+        excludingSessionId: UUID?,
+        weeksBack: Int = 8
+    ) -> [SetLog] {
+        let cutoff = Calendar.current.date(byAdding: .weekOfYear, value: -weeksBack, to: Date()) ?? Date()
+
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+
+        var workingSets: [SetLog] = []
+
+        for session in sessions {
+            guard session.id != excludingSessionId else { continue }
+            guard session.isHidden == false else { continue }
+            guard let ended = session.endedAt, ended >= cutoff else { continue }
+            guard session.totalSets > 0 else { continue }
+
+            if let exerciseLog = session.exercises.first(where: {
+                $0.name.lowercased() == exerciseName.lowercased()
+            }) {
+                let working = exerciseLog.sets.filter { $0.tag == "S" }
+                workingSets.append(contentsOf: working)
+            }
+        }
+        return workingSets
+    }
+
+    /// Fetches the best weight achieved at 5+ reps for an exercise (for PR detection).
+    func fetchBestWeightAt5PlusReps(
+        exerciseName: String,
+        excludingSessionId: UUID?
+    ) -> Double? {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+
+        var bestWeight: Double = 0
+
+        for session in sessions {
+            guard session.id != excludingSessionId else { continue }
+            guard session.isHidden == false else { continue }
+            guard session.endedAt != nil else { continue }
+            guard session.totalSets > 0 else { continue }
+
+            if let exerciseLog = session.exercises.first(where: {
+                $0.name.lowercased() == exerciseName.lowercased()
+            }) {
+                for set in exerciseLog.sets where set.reps >= 5 && set.tag == "S" {
+                    if let weight = set.weightKg, weight > bestWeight {
+                        bestWeight = weight
+                    }
+                }
+            }
+        }
+        return bestWeight > 0 ? bestWeight : nil
+    }
+
+    /// Fetches the best volume (weight × reps) for an exercise (for PR detection).
+    func fetchBestVolume(
+        exerciseName: String,
+        excludingSessionId: UUID?
+    ) -> Double? {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+        )
+        let sessions = (try? modelContext.fetch(descriptor)) ?? []
+
+        var bestVolume: Double = 0
+
+        for session in sessions {
+            guard session.id != excludingSessionId else { continue }
+            guard session.isHidden == false else { continue }
+            guard session.endedAt != nil else { continue }
+            guard session.totalSets > 0 else { continue }
+
+            if let exerciseLog = session.exercises.first(where: {
+                $0.name.lowercased() == exerciseName.lowercased()
+            }) {
+                for set in exerciseLog.sets where set.tag == "S" {
+                    if let weight = set.weightKg {
+                        let volume = weight * Double(set.reps)
+                        if volume > bestVolume {
+                            bestVolume = volume
+                        }
+                    }
+                }
+            }
+        }
+        return bestVolume > 0 ? bestVolume : nil
+    }
+
     func flush() {
         guard modelContext.hasChanges else { return }
         do {

@@ -54,4 +54,10 @@ enum Haptics {
         let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.impactOccurred()
     }
+
+    /// Success notification for PR achievements and milestones.
+    static func playSuccessHaptic() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
 }

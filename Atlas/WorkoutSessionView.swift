@@ -138,6 +138,9 @@ struct WorkoutSessionView: View {
     @State private var sheetLastSessionSets: [SetLog] = []
     @State private var sheetLastSessionDate: Date? = nil
     @State private var sheetBestRecentSet: SetLog? = nil
+    @State private var sheetHistoricalWorkingSets: [SetLog] = []
+    @State private var sheetBestWeightAt5Plus: Double? = nil
+    @State private var sheetBestVolume: Double? = nil
     @AppStorage("atlas_swipe_hint_shown") private var hasShownSwipeHint = false
     @State private var showSwipeHint = false
 
@@ -741,7 +744,10 @@ struct WorkoutSessionView: View {
                 thisSessionSets: loggedSetsForCurrent,
                 lastSessionSets: sheetLastSessionSets,
                 lastSessionDate: sheetLastSessionDate,
-                bestRecentSet: sheetBestRecentSet,
+                planText: thisSessionPlanText,
+                historicalWorkingSets: sheetHistoricalWorkingSets,
+                historicalBestWeightAt5Plus: sheetBestWeightAt5Plus,
+                historicalBestVolume: sheetBestVolume,
                 onChange: { Haptics.playLightTap() },
                 onLog: { weightKg, reps, tag in
                     setDraftWeightKg = weightKg
@@ -755,7 +761,7 @@ struct WorkoutSessionView: View {
                 },
                 preferredUnit: preferredUnit
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
             .atlasBackgroundTheme(.workout)
             .atlasBackground()
             .presentationBackground(.clear)
@@ -1342,6 +1348,21 @@ struct WorkoutSessionView: View {
         sheetLastSessionSets = lastSets
         sheetLastSessionDate = lastDate
         sheetBestRecentSet = historyStore.fetchBestRecentSet(
+            exerciseName: currentExercise.name,
+            excludingSessionId: session?.id
+        )
+
+        // Fetch additional data for smart features
+        sheetHistoricalWorkingSets = historyStore.fetchHistoricalWorkingSets(
+            exerciseName: currentExercise.name,
+            excludingSessionId: session?.id,
+            weeksBack: 8
+        )
+        sheetBestWeightAt5Plus = historyStore.fetchBestWeightAt5PlusReps(
+            exerciseName: currentExercise.name,
+            excludingSessionId: session?.id
+        )
+        sheetBestVolume = historyStore.fetchBestVolume(
             exerciseName: currentExercise.name,
             excludingSessionId: session?.id
         )

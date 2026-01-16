@@ -2,7 +2,13 @@
 //  SetEntrySheet.swift
 //  Atlas
 //
-//  Redesigned Add Set sheet with embedded history, quick-fill, and iOS 26 glass styling.
+//  Full-screen Add Set sheet with smart features:
+//  - Auto-detect tag (warmup/working/drop)
+//  - Auto progression suggestion
+//  - PR detection and nudge
+//  - Fatigue guardrail
+//  - Target remaining display
+//  - Numbered sets with meaningful notes
 //
 
 import SwiftUI
@@ -20,7 +26,10 @@ struct SetEntrySheet: View {
     let thisSessionSets: [SetLog]
     let lastSessionSets: [SetLog]
     let lastSessionDate: Date?
-    let bestRecentSet: SetLog?
+    let planText: String
+    let historicalWorkingSets: [SetLog] // Working sets from last 8 weeks for this exercise
+    let historicalBestWeightAt5Plus: Double?
+    let historicalBestVolume: Double?
 
     // MARK: - Callbacks
     let onChange: () -> Void
@@ -33,7 +42,77 @@ struct SetEntrySheet: View {
     @FocusState private var weightFieldFocused: Bool
 
     // MARK: - Layout Constants
-    private let closeButtonSize: CGFloat = 32
+    private let closeButtonSize: CGFloat = 36
+
+    // MARK: - Computed Properties
+
+    private var sortedThisSessionSets: [SetLog] {
+        thisSessionSets.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var workingSetsLogged: Int {
+        thisSessionSets.filter { $0.tag == "S" }.count
+    }
+
+    private var targetRemaining: SetAdvisor.TargetRemaining {
+        SetAdvisor.calculateTargetRemaining(
+            planText: planText,
+            workingSetsLogged: workingSetsLogged
+        )
+    }
+
+    private var enteredWeightKg: Double? {
+        let trimmed = weightText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = Double(trimmed), parsed > 0 else { return nil }
+        return preferredUnit == .kg ? parsed : parsed / WorkoutSessionFormatter.kgToLb
+    }
+
+    private var progressionSuggestion: SetAdvisor.ProgressionSuggestion? {
+        let lastBest = lastSessionSets
+            .filter { $0.tag == "S" }
+            .max { a, b in
+                let aWeight = a.weightKg ?? 0
+                let bWeight = b.weightKg ?? 0
+                if aWeight == bWeight { return a.reps < b.reps }
+                return aWeight < bWeight
+            }
+
+        guard let best = lastBest else { return nil }
+
+        let setData = SetAdvisor.SetData(
+            weightKg: best.weightKg,
+            reps: best.reps,
+            tag: best.tag,
+            createdAt: best.createdAt
+        )
+
+        return SetAdvisor.suggestProgression(
+            lastSessionBestWorkingSet: setData,
+            targetRepRangeUpper: targetRemaining.repRangeUpper,
+            isMetricUnit: preferredUnit == .kg
+        )
+    }
+
+    private var fatigue: (isFatigued: Bool, message: String?) {
+        let setDataArray = thisSessionSets.map {
+            SetAdvisor.SetData(weightKg: $0.weightKg, reps: $0.reps, tag: $0.tag, createdAt: $0.createdAt)
+        }
+        return SetAdvisor.detectFatigue(
+            thisSessionSets: setDataArray,
+            targetRepRangeLower: targetRemaining.repRangeLower
+        )
+    }
+
+    private var prStatus: (isPR: Bool, isCloseToPR: Bool) {
+        SetAdvisor.checkPRStatus(
+            weightKg: enteredWeightKg,
+            reps: reps,
+            historicalBestWeightAt5Plus: historicalBestWeightAt5Plus,
+            historicalBestVolume: historicalBestVolume
+        )
+    }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -43,12 +122,9 @@ struct SetEntrySheet: View {
                     tagChipsSection
                     weightInputSection
                     repsSection
+                    smartStripSection
 
-                    if hasQuickFillOptions {
-                        quickFillSection
-                    }
-
-                    if !thisSessionSets.isEmpty {
+                    if !sortedThisSessionSets.isEmpty {
                         thisSessionSection
                     }
 
@@ -56,19 +132,19 @@ struct SetEntrySheet: View {
                         lastSessionSection
                     }
 
-                    Spacer().frame(height: 100)
+                    Spacer().frame(height: 120)
                 }
                 .padding(.horizontal, AppStyle.contentPaddingLarge)
                 .padding(.top, AppStyle.contentPaddingLarge)
             }
             .scrollIndicators(.hidden)
             .safeAreaInset(edge: .bottom) {
-                footerCTA
+                footerSection
             }
             .atlasBackground()
             .atlasBackgroundTheme(.workout)
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -76,6 +152,9 @@ struct SetEntrySheet: View {
                 Button("Done") { weightFieldFocused = false }
                     .appFont(.footnote, weight: .semibold)
             }
+        }
+        .onAppear {
+            applyAutoDetectTag()
         }
     }
 
@@ -160,6 +239,9 @@ struct SetEntrySheet: View {
                         RoundedRectangle(cornerRadius: 14)
                             .fill(Color.white.opacity(0.08))
                     )
+                    .onChange(of: weightText) { _, _ in
+                        applyAutoDetectTag()
+                    }
 
                 Text(preferredUnit.label)
                     .appFont(.body, weight: .semibold)
@@ -176,7 +258,7 @@ struct SetEntrySheet: View {
     // MARK: - Reps Section
 
     private var repsSection: some View {
-        VStack(alignment: .center, spacing: 8) {
+        VStack(alignment: .center, spacing: 4) {
             Text("Reps")
                 .appFont(.footnote, weight: .semibold)
                 .foregroundStyle(.secondary)
@@ -197,77 +279,76 @@ struct SetEntrySheet: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Quick Fill Section
+    // MARK: - Smart Strip Section
 
-    private var hasQuickFillOptions: Bool {
-        !thisSessionSets.isEmpty || bestRecentSet != nil
-    }
-
-    private var quickFillSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Quick Fill")
-                .appFont(.footnote, weight: .semibold)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 10) {
-                if let lastSet = thisSessionSets.last {
-                    quickFillChip(
-                        label: "Last set",
-                        weight: lastSet.weightKg,
-                        reps: lastSet.reps,
-                        tag: SetTag(rawValue: lastSet.tag) ?? .S
-                    )
-                }
-
-                if let bestSet = bestRecentSet {
-                    quickFillChip(
-                        label: "Best recent",
-                        weight: bestSet.weightKg,
-                        reps: bestSet.reps,
-                        tag: SetTag(rawValue: bestSet.tag) ?? .S
-                    )
+    private var smartStripSection: some View {
+        HStack(spacing: 10) {
+            // Chip A: Auto Progression
+            if let suggestion = progressionSuggestion {
+                smartChip(
+                    icon: "arrow.up.right",
+                    label: "Auto: \(suggestion.reason)",
+                    isHighlighted: false
+                ) {
+                    applyProgression(suggestion)
                 }
             }
+
+            // Chip B: PR Nudge OR Fatigue Guardrail (only one shows)
+            if prStatus.isPR {
+                smartChip(
+                    icon: "trophy.fill",
+                    label: "PR attempt",
+                    isHighlighted: true
+                ) {
+                    // Already entered, just acknowledge
+                    Haptics.playLightTap()
+                }
+            } else if prStatus.isCloseToPR {
+                smartChip(
+                    icon: "trophy",
+                    label: "Close to PR",
+                    isHighlighted: false
+                ) {
+                    Haptics.playLightTap()
+                }
+            } else if fatigue.isFatigued {
+                smartChip(
+                    icon: "exclamationmark.triangle",
+                    label: "Fatigue detected",
+                    isHighlighted: false
+                ) {
+                    // Could show alert, for now just haptic
+                    Haptics.playLightTap()
+                }
+            }
+
+            Spacer()
         }
+        .frame(minHeight: 36)
     }
 
-    private func quickFillChip(label: String, weight: Double?, reps: Int, tag: SetTag) -> some View {
-        Button {
-            Haptics.playLightTap()
-            prefill(weight: weight, reps: reps, tag: tag)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
+    private func smartChip(
+        icon: String,
+        label: String,
+        isHighlighted: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
                 Text(label)
                     .appFont(.caption, weight: .semibold)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 4) {
-                    Text(WeightFormatter.format(weight, unit: preferredUnit))
-                        .appFont(.footnote, weight: .semibold)
-                    Text("× \(reps)")
-                        .appFont(.footnote, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .foregroundStyle(isHighlighted ? .yellow : .primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white.opacity(0.08))
+                Capsule().fill(Color.white.opacity(isHighlighted ? 0.15 : 0.08))
             )
         }
         .buttonStyle(.plain)
-    }
-
-    private func prefill(weight: Double?, reps: Int, tag: SetTag) {
-        if let weight {
-            let displayValue = preferredUnit == .kg ? weight : weight * WorkoutSessionFormatter.kgToLb
-            weightText = String(format: "%.1f", displayValue)
-        } else {
-            weightText = ""
-        }
-        self.reps = reps
-        self.tag = tag
-        onChange()
     }
 
     // MARK: - This Session Section
@@ -278,15 +359,39 @@ struct SetEntrySheet: View {
                 .appFont(.section, weight: .bold)
 
             LazyVStack(spacing: 8) {
-                ForEach(thisSessionSets.sorted { $0.createdAt < $1.createdAt }, id: \.id) { set in
-                    thisSessionSetRow(set)
+                ForEach(Array(sortedThisSessionSets.enumerated()), id: \.element.id) { index, set in
+                    thisSessionSetRow(set, index: index)
                 }
             }
         }
     }
 
-    private func thisSessionSetRow(_ set: SetLog) -> some View {
-        HStack(spacing: 12) {
+    private func thisSessionSetRow(_ set: SetLog, index: Int) -> some View {
+        let setData = sortedThisSessionSets.map {
+            SetAdvisor.SetData(weightKg: $0.weightKg, reps: $0.reps, tag: $0.tag, createdAt: $0.createdAt)
+        }
+        let currentSetData = SetAdvisor.SetData(
+            weightKg: set.weightKg,
+            reps: set.reps,
+            tag: set.tag,
+            createdAt: set.createdAt
+        )
+        let note = SetAdvisor.generateSetNote(
+            set: currentSetData,
+            setIndex: index,
+            allSessionSets: setData,
+            historicalBestWeightAt5Plus: historicalBestWeightAt5Plus,
+            historicalBestVolume: historicalBestVolume
+        )
+
+        return HStack(spacing: 12) {
+            // Set number
+            Text("Set \(index + 1)")
+                .appFont(.caption, weight: .bold)
+                .foregroundStyle(.secondary)
+                .frame(width: 44, alignment: .leading)
+
+            // Tag pill
             if let setTag = SetTag(rawValue: set.tag) {
                 Text(tagDisplayName(setTag))
                     .appFont(.caption, weight: .bold)
@@ -295,12 +400,21 @@ struct SetEntrySheet: View {
                     .background(Capsule().fill(Color.white.opacity(0.08)))
             }
 
+            // Weight × Reps
             Text("\(WeightFormatter.format(set.weightKg, unit: preferredUnit)) × \(set.reps)")
                 .appFont(.body, weight: .semibold)
                 .monospacedDigit()
 
+            // Note (if any)
+            if let note {
+                Text(note.text)
+                    .appFont(.caption, weight: .semibold)
+                    .foregroundStyle(note.isPR ? .yellow : .secondary)
+            }
+
             Spacer()
 
+            // Remove button
             Button(role: .destructive) {
                 Haptics.playLightTap()
                 onDelete(set)
@@ -369,17 +483,29 @@ struct SetEntrySheet: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Footer CTA
+    // MARK: - Footer Section
 
-    private var footerCTA: some View {
-        VStack(spacing: 0) {
+    private var footerSection: some View {
+        VStack(spacing: 8) {
+            // Target remaining
+            if targetRemaining.workingSetsRemaining > 0 {
+                Text("Target remaining: \(targetRemaining.workingSetsRemaining) working sets (min)")
+                    .appFont(.caption, weight: .semibold)
+                    .foregroundStyle(.secondary)
+            } else if workingSetsLogged > 0 {
+                Text("Target complete")
+                    .appFont(.caption, weight: .semibold)
+                    .foregroundStyle(.green.opacity(0.8))
+            }
+
+            // Log Set button
             AtlasPillButton("Log Set") {
                 logSet()
             }
             .padding(.horizontal, AppStyle.contentPaddingLarge)
-            .padding(.top, 12)
-            .padding(.bottom, 34)
         }
+        .padding(.top, 12)
+        .padding(.bottom, 34)
         .background(
             Rectangle()
                 .fill(.ultraThinMaterial)
@@ -388,13 +514,72 @@ struct SetEntrySheet: View {
         )
     }
 
+    // MARK: - Actions
+
+    private func applyAutoDetectTag() {
+        let setDataArray = thisSessionSets.map {
+            SetAdvisor.SetData(weightKg: $0.weightKg, reps: $0.reps, tag: $0.tag, createdAt: $0.createdAt)
+        }
+        let historicalSetData = historicalWorkingSets.map {
+            SetAdvisor.SetData(weightKg: $0.weightKg, reps: $0.reps, tag: $0.tag, createdAt: $0.createdAt)
+        }
+
+        let suggestedTag = SetAdvisor.suggestTag(
+            enteredWeightKg: enteredWeightKg,
+            thisSessionSets: setDataArray,
+            historicalWorkingSets: historicalSetData,
+            lastUsedTag: thisSessionSets.last?.tag
+        )
+
+        if let newTag = SetTag(rawValue: suggestedTag), newTag != tag {
+            tag = newTag
+        }
+    }
+
+    private func applyProgression(_ suggestion: SetAdvisor.ProgressionSuggestion) {
+        Haptics.playLightTap()
+
+        if let weightKg = suggestion.weightKg {
+            let displayValue = preferredUnit == .kg ? weightKg : weightKg * WorkoutSessionFormatter.kgToLb
+            weightText = String(format: "%.1f", displayValue)
+        }
+        reps = suggestion.reps
+        tag = .S // Progression is always for working sets
+        onChange()
+    }
+
+    private func prefill(weight: Double?, reps: Int, tag: SetTag) {
+        if let weight {
+            let displayValue = preferredUnit == .kg ? weight : weight * WorkoutSessionFormatter.kgToLb
+            weightText = String(format: "%.1f", displayValue)
+        } else {
+            weightText = ""
+        }
+        self.reps = reps
+        self.tag = tag
+        onChange()
+    }
+
     private func logSet() {
         let trimmed = weightText.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed = Double(trimmed) ?? 0
         let clamped = max(0, min(parsed, unit == .kg ? 900 : 2000))
         let kgValue = unit == .kg ? clamped : clamped / WorkoutSessionFormatter.kgToLb
 
-        Haptics.playMediumImpact()
+        // Check if this is a PR
+        let isPR = SetAdvisor.checkPRStatus(
+            weightKg: kgValue.isNaN || kgValue == 0 ? nil : kgValue,
+            reps: reps,
+            historicalBestWeightAt5Plus: historicalBestWeightAt5Plus,
+            historicalBestVolume: historicalBestVolume
+        ).isPR
+
+        if isPR {
+            Haptics.playSuccessHaptic()
+        } else {
+            Haptics.playMediumImpact()
+        }
+
         onLog(kgValue.isNaN || kgValue == 0 ? nil : kgValue, reps, tag)
     }
 
